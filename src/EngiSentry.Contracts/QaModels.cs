@@ -55,6 +55,31 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 12)] public string? ExpectedTargetIdentity { get; set; }
         [DataMember(Order = 13)] public string? Reason { get; set; }
         [DataMember(Order = 14)] public List<string> CandidateEntityIds { get; set; } = new List<string>();
+        [DataMember(Order = 15)] public int? OccurrenceCount { get; set; }
+        [DataMember(Order = 16)] public int? DistinctSourceRowCount { get; set; }
+        [DataMember(Order = 17)] public List<string> ConflictFields { get; set; } = new List<string>();
+        [DataMember(Order = 18)] public List<QaEquipmentListSourceRow> SourceRows { get; set; } = new List<QaEquipmentListSourceRow>();
+        [DataMember(Order = 19)] public List<QaOccurrenceEvidence> Occurrences { get; set; } = new List<QaOccurrenceEvidence>();
+    }
+
+    [DataContract]
+    public sealed class QaEquipmentListSourceRow
+    {
+        [DataMember(Order = 1)] public string SourceTag { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string? Description { get; set; }
+        [DataMember(Order = 3)] public string? Installation { get; set; }
+        [DataMember(Order = 4)] public List<string> SourceHandles { get; set; } = new List<string>();
+        [DataMember(Order = 5)] public string LinkMethod { get; set; } = string.Empty;
+    }
+
+    [DataContract]
+    public sealed class QaOccurrenceEvidence
+    {
+        [DataMember(Order = 1)] public string SourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string? SourceLayer { get; set; }
+        [DataMember(Order = 3)] public double PositionX { get; set; }
+        [DataMember(Order = 4)] public double PositionY { get; set; }
+        [DataMember(Order = 5)] public double PositionZ { get; set; }
     }
 
     [DataContract]

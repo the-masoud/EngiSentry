@@ -24,7 +24,7 @@ namespace EngiSentry.Rules
 
     public static class BuiltInQaRules
     {
-        public static IReadOnlyList<IQaRule> All { get; } = new IQaRule[] { new EquipmentListOnlyRule(), new DrawingOnlyRule(), new UnresolvedLinkRule(), new AmbiguousLinkRule() }.OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();
+        public static IReadOnlyList<IQaRule> All { get; } = new IQaRule[] { new EquipmentListOnlyRule(), new DrawingOnlyRule(), new MultipleDrawingTagRule(), new MultipleEquipmentListRowsRule(), new ConflictingEquipmentListValuesRule(), new UnresolvedLinkRule(), new AmbiguousLinkRule(), new MultipleStructureTagRule() }.OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();
     }
 
     public static class QaEngine
@@ -48,6 +48,9 @@ namespace EngiSentry.Rules
                 finding.Evidence.DrawingTagSourceHandles = Sorted(finding.Evidence.DrawingTagSourceHandles);
                 finding.Evidence.EquipmentListSourceHandles = Sorted(finding.Evidence.EquipmentListSourceHandles);
                 finding.Evidence.CandidateEntityIds = Sorted(finding.Evidence.CandidateEntityIds);
+                finding.Evidence.ConflictFields = Sorted(finding.Evidence.ConflictFields);
+                finding.Evidence.SourceRows = finding.Evidence.SourceRows.OrderBy(x => EquipmentListRowIdentity.Key(x.SourceHandles), StringComparer.Ordinal).ToList();
+                finding.Evidence.Occurrences = finding.Evidence.Occurrences.OrderBy(x => x.SourceHandle, StringComparer.Ordinal).ToList();
             }
             report.OverallStatus = report.Findings.Count == 0 ? "PASS" : report.Findings.Any(x => x.Severity == "Error") ? "FAIL" : "REVIEW_REQUIRED";
             report.Statistics = new QaStatistics { RuleCount = report.RuleResults.Count, RulesPassed = report.RuleResults.Count(x => x.Status == "PASS"), RulesWithFindings = report.RuleResults.Count(x => x.Status == "FINDINGS"), TotalFindings = report.Findings.Count, InfoFindings = report.Findings.Count(x => x.Severity == "Info"), WarningFindings = report.Findings.Count(x => x.Severity == "Warning"), ErrorFindings = report.Findings.Count(x => x.Severity == "Error") };
@@ -87,6 +90,51 @@ namespace EngiSentry.Rules
     {
         public override string RuleId => "ENGI-IDX-002"; public override string Title => "Ambiguous Entity Link"; public override string Category => "EntityIndexIntegrity"; public override string Severity => "Error"; public override string Description => Title;
         public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index) => Finish(index.AmbiguousLinks.Count, index.AmbiguousLinks.Select(x => { string key = StableIdentity.StableKey(x.SourceType, x.SourceValue, x.SourceHandles); return Finding(RuleId + ":" + key, "EntityLink", key, "Entity link has multiple deterministic candidates.", new QaEvidence { SourceType = x.SourceType, SourceValue = x.SourceValue, Reason = x.Reason, CandidateEntityIds = x.CandidateEntityIds.ToList() }, x.SourceHandles); }));
+    }
+
+    internal sealed class MultipleDrawingTagRule : QaRuleBase
+    {
+        public override string RuleId => "ENGI-EQ-003"; public override string Title => "Multiple DrawingTag Evidence"; public override string Category => "EquipmentEvidence"; public override string Severity => "Info"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index)
+        {
+            var findings = new List<QaFinding>();
+            foreach (EquipmentEntity entity in index.EquipmentEntities)
+            {
+                List<EquipmentOccurrence> occurrences = DrawingOccurrences(entity);
+                if (occurrences.Count <= 1) continue;
+                findings.Add(Finding(RuleId + ":" + entity.CanonicalId, "Equipment", entity.CanonicalId, "Equipment identity has multiple DrawingTag evidence occurrences.", new QaEvidence { CanonicalId = entity.CanonicalId, NormalizedTag = entity.NormalizedTag, OccurrenceCount = occurrences.Count, DrawingTagSourceHandles = occurrences.Select(o => o.SourceHandle!).ToList(), Occurrences = occurrences.Select(o => new QaOccurrenceEvidence { SourceHandle = o.SourceHandle!, SourceLayer = o.SourceLayer, PositionX = o.PositionX, PositionY = o.PositionY, PositionZ = o.PositionZ }).ToList() }, occurrences.Select(o => o.SourceHandle!)));
+            }
+            return Finish(index.EquipmentEntities.Count, findings);
+        }
+        private static List<EquipmentOccurrence> DrawingOccurrences(EquipmentEntity entity) => entity.Occurrences.Where(x => x.Role == "DrawingTag" && !string.IsNullOrEmpty(x.SourceHandle)).GroupBy(x => x.SourceHandle, StringComparer.Ordinal).Select(x => x.OrderBy(y => y.SourceLayer, StringComparer.Ordinal).First()).OrderBy(x => x.SourceHandle, StringComparer.Ordinal).ToList();
+    }
+
+    internal sealed class MultipleEquipmentListRowsRule : QaRuleBase
+    {
+        public override string RuleId => "ENGI-EQ-004"; public override string Title => "Multiple Equipment List Source Rows"; public override string Category => "EquipmentEvidence"; public override string Severity => "Info"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index) => Finish(index.EquipmentEntities.Count, index.EquipmentEntities.Select(x => new { Entity = x, Rows = EquipmentListRowIdentity.DistinctRows(x.EquipmentListLinks) }).Where(x => x.Rows.Count > 1).Select(x => Finding(RuleId + ":" + x.Entity.CanonicalId, "Equipment", x.Entity.CanonicalId, "Equipment identity is referenced by multiple distinct Equipment List source rows.", new QaEvidence { CanonicalId = x.Entity.CanonicalId, NormalizedTag = x.Entity.NormalizedTag, DistinctSourceRowCount = x.Rows.Count, SourceRows = x.Rows.Select(EquipmentListRowIdentity.ToEvidence).ToList() }, x.Rows.SelectMany(r => r.SourceHandles))));
+    }
+
+    internal sealed class ConflictingEquipmentListValuesRule : QaRuleBase
+    {
+        public override string RuleId => "ENGI-EQ-005"; public override string Title => "Conflicting Equipment List Values"; public override string Category => "EquipmentConsistency"; public override string Severity => "Warning"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index) => Finish(index.EquipmentEntities.Count, index.EquipmentEntities.Select(x => new { Entity = x, Rows = EquipmentListRowIdentity.DistinctRows(x.EquipmentListLinks) }).Select(x => new { x.Entity, x.Rows, Fields = ConflictFields(x.Rows) }).Where(x => x.Fields.Count > 0).Select(x => Finding(RuleId + ":" + x.Entity.CanonicalId, "Equipment", x.Entity.CanonicalId, "Equipment identity has conflicting values across Equipment List source rows.", new QaEvidence { CanonicalId = x.Entity.CanonicalId, NormalizedTag = x.Entity.NormalizedTag, ConflictFields = x.Fields, SourceRows = x.Rows.Select(EquipmentListRowIdentity.ToEvidence).ToList() }, x.Rows.SelectMany(r => r.SourceHandles))));
+        private static List<string> ConflictFields(List<EquipmentListLink> rows) { var fields = new List<string>(); if (rows.Count > 1 && Values(rows.Select(x => x.Description)).Count > 1) fields.Add("Description"); if (rows.Count > 1 && Values(rows.Select(x => x.Installation)).Count > 1) fields.Add("Installation"); return fields.OrderBy(x => x, StringComparer.Ordinal).ToList(); }
+        private static List<string> Values(IEnumerable<string?> values) => values.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    internal sealed class MultipleStructureTagRule : QaRuleBase
+    {
+        public override string RuleId => "ENGI-STR-001"; public override string Title => "Multiple StructureTag Evidence"; public override string Category => "StructureEvidence"; public override string Severity => "Info"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index) => Finish(index.StructureEntities.Count, index.StructureEntities.Select(x => new { Entity = x, Occurrences = x.Occurrences.Where(o => !string.IsNullOrEmpty(o.SourceHandle)).GroupBy(o => o.SourceHandle, StringComparer.Ordinal).Select(o => o.OrderBy(y => y.SourceLayer, StringComparer.Ordinal).First()).OrderBy(o => o.SourceHandle, StringComparer.Ordinal).ToList() }).Where(x => x.Occurrences.Count > 1).Select(x => Finding(RuleId + ":" + x.Entity.CanonicalId, "Structure", x.Entity.CanonicalId, "Structure identity has multiple source evidence occurrences.", new QaEvidence { CanonicalId = x.Entity.CanonicalId, NormalizedTag = x.Entity.NormalizedTag, OccurrenceCount = x.Occurrences.Count, Occurrences = x.Occurrences.Select(o => new QaOccurrenceEvidence { SourceHandle = o.SourceHandle ?? string.Empty, SourceLayer = o.SourceLayer, PositionX = o.PositionX, PositionY = o.PositionY, PositionZ = o.PositionZ }).ToList() }, x.Occurrences.Select(o => o.SourceHandle ?? string.Empty))));
+    }
+
+    internal static class EquipmentListRowIdentity
+    {
+        internal static List<EquipmentListLink> DistinctRows(IEnumerable<EquipmentListLink> links) => links.Where(x => Usable(x.SourceHandles)).GroupBy(x => Key(x.SourceHandles), StringComparer.Ordinal).Select(x => x.OrderBy(y => y.SourceTag, StringComparer.Ordinal).ThenBy(y => y.Description, StringComparer.Ordinal).ThenBy(y => y.Installation, StringComparer.Ordinal).First()).OrderBy(x => Key(x.SourceHandles), StringComparer.Ordinal).ToList();
+        internal static string Key(IEnumerable<string> handles) => string.Join(",", handles.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal));
+        internal static bool Usable(IEnumerable<string> handles) => handles.Any(x => !string.IsNullOrWhiteSpace(x));
+        internal static QaEquipmentListSourceRow ToEvidence(EquipmentListLink link) => new QaEquipmentListSourceRow { SourceTag = link.SourceTag, Description = link.Description, Installation = link.Installation, SourceHandles = link.SourceHandles.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList(), LinkMethod = link.LinkMethod };
     }
 
     internal static class StableIdentity
