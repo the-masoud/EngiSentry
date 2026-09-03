@@ -136,22 +136,29 @@ namespace EngiSentry.AutoCAD2021
         {
             try
             {
+                WriteToActiveEditor("\n[ES_PLOTQA] START\n");
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
                 if (document == null) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
                 DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                WriteToActiveEditor("[ES_PLOTQA] Snapshot built\n");
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                WriteToActiveEditor("[ES_PLOTQA] Semantic model built\n");
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                WriteToActiveEditor("[ES_PLOTQA] Entity index built\n");
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
                 QaReport qa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
+                WriteToActiveEditor("[ES_PLOTQA] QA complete\n");
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during plot-plan QA processing.");
                 string path = SnapshotFileWriter.WritePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
+                WriteToActiveEditor("[ES_PLOTQA] Artifact written\n");
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during plot-plan QA artifact creation.");
                 PlotPlanStatistics s = plotPlan.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M2.0 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nResolved Easting: {5}\nResolved Northing: {6}\nRules executed: {7}\nFindings: {8}\nPlot Plan QA report: {9}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, s.ResolvedEastingCount, s.ResolvedNorthingCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
 
         private static void WriteToActiveEditor(string message, params object[] arguments)
