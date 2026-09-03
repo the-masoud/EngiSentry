@@ -87,28 +87,29 @@ namespace EngiSentry.Semantics
             }
             foreach (List<TextSnapshot> row in rows)
             {
-                List<TextSnapshot> tagTexts = row.Where(x => ParseEquipment(x) != null && ClosestColumn(x.PositionX, name.PositionX, description.PositionX, installation.PositionX) == 0).OrderBy(x => x.Handle, StringComparer.Ordinal).ToList();
-                if (tagTexts.Count == 0) continue;
-                EquipmentTag tag = ParseEquipment(tagTexts[0])!;
+                List<TextSnapshot> tagTexts = row.Where(x => ParseEquipment(x) != null).OrderBy(x => x.PositionX).ThenBy(x => x.Handle, StringComparer.Ordinal).ToList();
+                if (tagTexts.Count != 1) continue;
+                TextSnapshot tagText = tagTexts[0];
+                List<TextSnapshot> cells = row.Where(x => x != tagText).OrderBy(x => x.PositionX).ThenBy(x => x.Handle, StringComparer.Ordinal).ToList();
+                if (cells.Count == 0 || cells.Any(x => x.PositionX <= tagText.PositionX)) continue;
+                EquipmentTag tag = ParseEquipment(tagText)!;
                 var entry = new EquipmentListEntry { Tag = tag.NormalizedTag, ParseStatus = "Parsed" };
+                if (cells.Count > 2) entry.ParseStatus = "Partial";
+                bool horizontalAmbiguity = cells.Zip(cells.Skip(1), (left, right) => left.PositionX == right.PositionX).Any(x => x);
+                if (horizontalAmbiguity) entry.ParseStatus = "Partial";
                 foreach (TextSnapshot text in row.OrderBy(x => x.Handle, StringComparer.Ordinal))
                 {
                     string handle = text.Handle ?? string.Empty;
-                    if (tagTexts.Contains(text)) { if (handle.Length != 0) entry.SourceHandles.Add(handle); continue; }
-                    int column = ClosestColumn(text.PositionX, name.PositionX, description.PositionX, installation.PositionX);
-                    if (column == 1) entry.Description = Join(entry.Description, text.Text);
-                    else if (column == 2) entry.Installation = Join(entry.Installation, text.Text);
-                    else entry.ParseStatus = "Partial";
+                    if (text == tagText) { if (handle.Length != 0) entry.SourceHandles.Add(handle); continue; }
+                    if (horizontalAmbiguity) { if (handle.Length != 0) entry.SourceHandles.Add(handle); continue; }
+                    int cellIndex = cells.IndexOf(text);
+                    if (cellIndex == 0) entry.Description = text.Text == null ? null : text.Text.Trim();
+                    else if (cellIndex == 1) entry.Installation = text.Text == null ? null : text.Text.Trim();
                     if (handle.Length != 0) entry.SourceHandles.Add(handle);
                 }
                 model.EquipmentListEntries.Add(entry);
             }
         }
-        private static int ClosestColumn(double x, double name, double description, double installation)
-        {
-            double[] distances = { Math.Abs(x-name), Math.Abs(x-description), Math.Abs(x-installation) }; double min = distances.Min(); if (distances.Count(d => d == min) != 1) return -1; return Array.IndexOf(distances, min);
-        }
-        private static string? Join(string? current, string? value) => current == null ? value : current + " " + value;
         private static void Sort(EngineeringDrawingModel model)
         {
             model.EquipmentTags = model.EquipmentTags.OrderBy(x=>x.NormalizedTag,StringComparer.Ordinal).ThenBy(x=>x.SourceHandle,StringComparer.Ordinal).ToList();
