@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using EngiSentry.Contracts;
+using EngiSentry.AutoCAD2021.Scanning;
 
 namespace EngiSentry.Tests
 {
@@ -32,6 +33,20 @@ namespace EngiSentry.Tests
                 Assert(json.StartsWith("{", StringComparison.Ordinal), "Serialization did not produce JSON.");
                 using (var input = new MemoryStream(Encoding.UTF8.GetBytes(json))) Assert(serializer.ReadObject(input) is DrawingSnapshot, "Serialized JSON could not be read.");
             }
+            string existing = Path.GetTempFileName();
+            try
+            {
+                ExternalDependencySnapshot found = DependencyClassifier.Classify("Font", "existing", existing);
+                Assert(found.Status == "Found" && found.ExistsOnDisk == true && found.ResolvedPath == existing, "Resolved existing dependency classification failed.");
+                string missing = Path.Combine(Path.GetDirectoryName(existing)!, "engi-sentry-missing-font.shx");
+                ExternalDependencySnapshot absent = DependencyClassifier.Classify("Font", "missing", missing);
+                Assert(absent.Status == "Missing" && absent.ExistsOnDisk == false && absent.ResolvedPath == missing, "Resolved missing dependency classification failed.");
+                ExternalDependencySnapshot unresolved = DependencyClassifier.Classify("Font", "romans.shx", "romans.shx");
+                Assert(unresolved.Status == "Unknown" && unresolved.ExistsOnDisk == null && unresolved.ResolvedPath == null, "Unresolved dependency classification failed.");
+                ExternalDependencySnapshot absoluteMissing = DependencyClassifier.Classify("Font", "absolute-missing", missing);
+                Assert(absoluteMissing.Status == "Missing" && absoluteMissing.ExistsOnDisk == false, "Absolute missing dependency classification failed.");
+            }
+            finally { File.Delete(existing); }
             Console.WriteLine("All EngiSentry M0.2 tests passed.");
             return 0;
         }

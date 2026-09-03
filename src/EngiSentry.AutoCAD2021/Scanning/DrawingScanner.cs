@@ -173,9 +173,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         private static void AddDependency(DrawingSnapshot snapshot, string kind, string name, string path)
         {
-            if (string.IsNullOrEmpty(path)) return;
-            string? resolved = Path.IsPathRooted(path) ? path : null;
-            snapshot.ExternalDependencies.Add(new ExternalDependencySnapshot { Kind = kind, Name = name, RawPath = path, ResolvedPath = resolved, Status = File.Exists(resolved ?? path) ? "Available" : "Missing", ExistsOnDisk = File.Exists(resolved ?? path) });
+            snapshot.ExternalDependencies.Add(DependencyClassifier.Classify(kind, name, path));
         }
 
         private static void ReadRasterImages(Database database, Transaction transaction, DrawingSnapshot snapshot)
