@@ -19,6 +19,7 @@
     <ProjectReference Include="..\src\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
     <ProjectReference Include="..\src\EngiSentry.AutoCAD2021\EngiSentry.AutoCAD2021.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Semantics\EngiSentry.Semantics.csproj" />
+    <ProjectReference Include="..\src\EngiSentry.Core\EngiSentry.Core.csproj" />
   </ItemGroup>
   <ItemGroup><Compile Include="UnitTests.cs" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

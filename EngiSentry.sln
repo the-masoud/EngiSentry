@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Tests", "tests\E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Semantics", "src\EngiSentry.Semantics\EngiSentry.Semantics.csproj", "{B1C9D9C1-9A7A-45CF-92A7-22F1C0C0A4C4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Core", "src\EngiSentry.Core\EngiSentry.Core.csproj", "{C4E7E1D7-7A11-4E84-9B7B-0A6C2E2B4D91}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -32,6 +34,10 @@ Global
 		{B1C9D9C1-9A7A-45CF-92A7-22F1C0C0A4C4}.Debug|x64.Build.0 = Debug|Any CPU
 		{B1C9D9C1-9A7A-45CF-92A7-22F1C0C0A4C4}.Release|x64.ActiveCfg = Release|Any CPU
 		{B1C9D9C1-9A7A-45CF-92A7-22F1C0C0A4C4}.Release|x64.Build.0 = Release|Any CPU
+		{C4E7E1D7-7A11-4E84-9B7B-0A6C2E2B4D91}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C4E7E1D7-7A11-4E84-9B7B-0A6C2E2B4D91}.Debug|x64.Build.0 = Debug|Any CPU
+		{C4E7E1D7-7A11-4E84-9B7B-0A6C2E2B4D91}.Release|x64.ActiveCfg = Release|Any CPU
+		{C4E7E1D7-7A11-4E84-9B7B-0A6C2E2B4D91}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

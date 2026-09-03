@@ -6,6 +6,7 @@ using System.Text;
 using EngiSentry.Contracts;
 using EngiSentry.AutoCAD2021.Scanning;
 using EngiSentry.Semantics;
+using EngiSentry.Core;
 
 namespace EngiSentry.Tests
 {
@@ -79,8 +80,37 @@ namespace EngiSentry.Tests
             listSnapshot.TextEntities.Add(new TextSnapshot { Text="LP STEAM DESUPER HEATER", Layer="EQ-LIST", Handle="E", PositionX=100, PositionY=60 });
             var listModel = SemanticExtractor.Extract(listSnapshot); Assert(listModel.EquipmentListEntries.Count == 4, "Equipment list row grouping failed."); Assert(listModel.EquipmentListEntries.Any(x => x.Tag == "P-200-101A/B" && x.Description == "Pump" && x.Installation == "EL+10"), "Grouped equipment list assignment failed."); Assert(listModel.EquipmentListEntries.Any(x => x.Tag == "E-200-104" && x.Description == "AMINE REGENERATOR COLUMN REBOILER" && x.Installation == "T.O.S. 18.100" && x.ParseStatus == "Parsed"), "Real equipment list description assignment failed."); Assert(listModel.EquipmentListEntries.Any(x => x.Tag == "X-200-101" && x.Description == "LP STEAM DESUPER HEATER" && x.Installation == null && x.ParseStatus == "Parsed"), "Equipment list missing installation handling failed."); Assert(listModel.EquipmentListEntries.Any(x => x.Tag == "E-200-104" && x.ParseStatus == "Partial"), "Equipment list ambiguity handling failed.");
             using (var semanticStream = new MemoryStream()) { var semanticSerializer = new DataContractJsonSerializer(typeof(EngineeringDrawingModel)); semanticSerializer.WriteObject(semanticStream, semantic); Assert(Encoding.UTF8.GetString(semanticStream.ToArray()).StartsWith("{", StringComparison.Ordinal), "Semantic model serialization failed."); }
+
+            var indexModel = new EngineeringDrawingModel();
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101A", RawTag="P-200-101A", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="A", SourceHandle="D1" });
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101A", RawTag="P-200-101A", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="A", SourceHandle="D2" });
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101B", RawTag="P-200-101B", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="B", SourceHandle="D3" });
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="E-200-104", RawTag="E-200-104", EquipmentPrefix="E", UnitNumber="200", SequenceNumber="104", SourceHandle="L1" });
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101A/B", RawTag="P-200-101A/B", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="A/B", SourceHandle="G1" });
+            indexModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="X-200-101", RawTag="X-200-101", EquipmentPrefix="X", UnitNumber="200", SequenceNumber="101", SourceHandle="X1" });
+            indexModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="E-200-104", Description="AMINE REGENERATOR COLUMN REBOILER", Installation="T.O.S. 18.100", SourceHandles=new System.Collections.Generic.List<string>{"L1","L2"} });
+            indexModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="P-200-101A/B", SourceHandles=new System.Collections.Generic.List<string>{"G1"} });
+            indexModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="X-200-101", Description="LP STEAM DESUPER HEATER", SourceHandles=new System.Collections.Generic.List<string>{"X1"} });
+            var indexed = EntityIndexer.Build(indexModel);
+            Assert(indexed.Statistics.EquipmentEntityCount == 4, "Equipment entity grouping failed.");
+            Assert(indexed.EquipmentEntities.Single(x => x.CanonicalId == "equipment:P-200-101A").Occurrences.Count == 2, "Duplicate drawing occurrences were not preserved.");
+            Assert(indexed.EquipmentEntities.Single(x => x.CanonicalId == "equipment:E-200-104").EquipmentListLinks.Single().LinkMethod == "ExactNormalizedTag", "Exact list link failed.");
+            var grouped = indexed.GroupedTagLinks.Single(); Assert(grouped.SourceGroupedTag == "P-200-101A/B" && grouped.MemberNormalizedTags.SequenceEqual(new[]{"P-200-101A","P-200-101B"}) && grouped.ResolvedEntityIds.Count == 2, "Grouped member derivation failed.");
+            var listOnly = indexed.EquipmentEntities.Single(x => x.CanonicalId == "equipment:X-200-101"); Assert(!listOnly.HasDrawingEvidence && listOnly.HasEquipmentListEvidence, "List-only entity handling failed.");
+            Assert(indexed.EquipmentEntities.Single(x => x.CanonicalId == "equipment:P-200-101A").Occurrences.All(x => x.Role == "DrawingTag"), "Drawing role classification failed.");
+
+            var unresolvedModel = new EngineeringDrawingModel(); unresolvedModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="V-200-105", SourceHandles=new System.Collections.Generic.List<string>{"missing"} }); var idxUnresolved = EntityIndexer.Build(unresolvedModel); Assert(idxUnresolved.UnresolvedLinks.Count == 1 && idxUnresolved.UnresolvedLinks[0].Reason == "EquipmentListTagSourceNotFound", "Unresolved list source handling failed.");
+            var ambiguousModel = new EngineeringDrawingModel(); ambiguousModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="E-200-104", SourceHandle="A" }); ambiguousModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="E-200-104", SourceHandle="B" }); ambiguousModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="E-200-104", SourceHandles=new System.Collections.Generic.List<string>{"A","B"} }); var ambiguous = EntityIndexer.Build(ambiguousModel); Assert(ambiguous.AmbiguousLinks.Count == 1 && ambiguous.AmbiguousLinks[0].Reason == "MultipleEquipmentListTagSources", "Ambiguous list source handling failed.");
+            var structures = new EngineeringDrawingModel(); structures.StructureTags.Add(new StructureTag { NormalizedTag="1200-ST-101", SourceHandle="1" }); structures.StructureTags.Add(new StructureTag { NormalizedTag="1200-ST-101", SourceHandle="2" }); structures.StructureTags.Add(new StructureTag { NormalizedTag="1200-ST-102", SourceHandle="3" }); Assert(EntityIndexer.Build(structures).Statistics.StructureEntityCount == 2, "Structure grouping failed.");
+            var groupedMissingModel = new EngineeringDrawingModel(); groupedMissingModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101A", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="A", SourceHandle="A" }); groupedMissingModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag="P-200-101A/B", EquipmentPrefix="P", UnitNumber="200", SequenceNumber="101", Suffix="A/B", SourceHandle="G" }); groupedMissingModel.EquipmentListEntries.Add(new EquipmentListEntry { Tag="P-200-101A/B", SourceHandles=new System.Collections.Generic.List<string>{"G"} }); var groupedMissing = EntityIndexer.Build(groupedMissingModel); Assert(groupedMissing.EquipmentEntities.Any(x => x.CanonicalId == "equipment:P-200-101B" && !x.HasDrawingEvidence && x.HasEquipmentListEvidence) && groupedMissing.UnresolvedLinks.Count == 0 && groupedMissing.EquipmentEntities.SelectMany(x => x.Occurrences).All(x => x.NormalizedTag != "P-200-101B"), "Grouped list-only member handling failed.");
+            var reversed = new EngineeringDrawingModel { EquipmentTags = indexModel.EquipmentTags.AsEnumerable().Reverse().ToList(), EquipmentListEntries = indexModel.EquipmentListEntries.AsEnumerable().Reverse().ToList() }; var firstJson = SerializeIndex(indexed); var secondJson = SerializeIndex(EntityIndexer.Build(reversed)); Assert(firstJson == secondJson, "Entity index determinism failed.");
             Console.WriteLine("All EngiSentry M0.3 tests passed.");
             return 0;
+        }
+
+        private static string SerializeIndex(EngineeringEntityIndex index)
+        {
+            var serializer = new DataContractJsonSerializer(typeof(EngineeringEntityIndex)); using (var stream = new MemoryStream()) { serializer.WriteObject(stream, index); return Encoding.UTF8.GetString(stream.ToArray()); }
         }
     }
 }
