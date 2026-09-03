@@ -1,0 +1,24 @@
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProjectGuid>{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EngiSentry.Tests</RootNamespace>
+    <AssemblyName>EngiSentry.Tests</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <OutputPath>bin\x64\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Xml" />
+    <ProjectReference Include="..\src\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
+    <ProjectReference Include="..\src\EngiSentry.AutoCAD2021\EngiSentry.AutoCAD2021.csproj" />
+  </ItemGroup>
+  <ItemGroup><Compile Include="UnitTests.cs" /></ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

@@ -26,8 +26,11 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Xml" />
     <Reference Include="AcCoreMgd">
       <HintPath>C:\Program Files\Autodesk\AutoCAD 2021\accoremgd.dll</HintPath>
       <Private>False</Private>
@@ -43,6 +46,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Commands.cs" />
+    <Compile Include="Scanning\SnapshotFileWriter.cs" />
+    <Compile Include="Scanning\DrawingScanner.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

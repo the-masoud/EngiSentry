@@ -9,3 +9,5 @@ obj/
 *.exe
 packages/
 TestResults/
+artifacts/scans/
+artifacts/build/

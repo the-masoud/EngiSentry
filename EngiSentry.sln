@@ -4,6 +4,10 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.AutoCAD2021", "src\EngiSentry.AutoCAD2021\EngiSentry.AutoCAD2021.csproj", "{4F2C6E14-8E7F-4B91-9F95-6BCB8F7F1B01}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Contracts", "src\EngiSentry.Contracts\EngiSentry.Contracts.csproj", "{E3D1B4A2-4B3F-4B87-8F17-3A9D9CB7F5B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Tests", "tests\EngiSentry.Tests.csproj", "{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -14,6 +18,14 @@ Global
 		{4F2C6E14-8E7F-4B91-9F95-6BCB8F7F1B01}.Debug|x64.Build.0 = Debug|x64
 		{4F2C6E14-8E7F-4B91-9F95-6BCB8F7F1B01}.Release|x64.ActiveCfg = Release|x64
 		{4F2C6E14-8E7F-4B91-9F95-6BCB8F7F1B01}.Release|x64.Build.0 = Release|x64
+		{E3D1B4A2-4B3F-4B87-8F17-3A9D9CB7F5B2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E3D1B4A2-4B3F-4B87-8F17-3A9D9CB7F5B2}.Debug|x64.Build.0 = Debug|Any CPU
+		{E3D1B4A2-4B3F-4B87-8F17-3A9D9CB7F5B2}.Release|x64.ActiveCfg = Release|Any CPU
+		{E3D1B4A2-4B3F-4B87-8F17-3A9D9CB7F5B2}.Release|x64.Build.0 = Release|Any CPU
+		{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}.Debug|x64.ActiveCfg = Debug|x64
+		{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}.Debug|x64.Build.0 = Debug|x64
+		{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}.Release|x64.ActiveCfg = Release|x64
+		{E9B97E9F-9B5A-4E00-8F8F-A2A2FD6E6B8A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
