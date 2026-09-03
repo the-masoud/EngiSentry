@@ -43,5 +43,17 @@ namespace EngiSentry.AutoCAD2021.Scanning
             }
             return path;
         }
+
+        internal static string WriteSemantic(EngineeringDrawingModel model, string? drawingName, DateTime timestampUtc)
+        {
+            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "semantics");
+            Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(drawingName ?? "unnamed");
+            string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".semantic.json");
+            var serializer = new DataContractJsonSerializer(typeof(EngineeringDrawingModel));
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, model);
+            return path;
+        }
     }
 }

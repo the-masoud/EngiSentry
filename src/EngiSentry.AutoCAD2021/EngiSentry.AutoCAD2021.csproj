@@ -27,6 +27,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
+    <ProjectReference Include="..\EngiSentry.Semantics\EngiSentry.Semantics.csproj" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />

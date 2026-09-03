@@ -11,3 +11,4 @@ packages/
 TestResults/
 artifacts/scans/
 artifacts/build/
+artifacts/semantics/
