@@ -30,6 +30,7 @@
     <ProjectReference Include="..\EngiSentry.Semantics\EngiSentry.Semantics.csproj" />
     <ProjectReference Include="..\EngiSentry.Core\EngiSentry.Core.csproj" />
     <ProjectReference Include="..\EngiSentry.Rules\EngiSentry.Rules.csproj" />
+    <ProjectReference Include="..\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />

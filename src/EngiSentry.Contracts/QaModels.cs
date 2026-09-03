@@ -60,6 +60,11 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 17)] public List<string> ConflictFields { get; set; } = new List<string>();
         [DataMember(Order = 18)] public List<QaEquipmentListSourceRow> SourceRows { get; set; } = new List<QaEquipmentListSourceRow>();
         [DataMember(Order = 19)] public List<QaOccurrenceEvidence> Occurrences { get; set; } = new List<QaOccurrenceEvidence>();
+        [DataMember(Order = 20)] public string? PlacementId { get; set; }
+        [DataMember(Order = 21)] public string? EquipmentEntityId { get; set; }
+        [DataMember(Order = 22)] public string? TagSourceHandle { get; set; }
+        [DataMember(Order = 23)] public List<CoordinateAssociation> CoordinateAssociations { get; set; } = new List<CoordinateAssociation>();
+        [DataMember(Order = 24)] public List<ResolvedCoordinatePairEvidence> ResolvedCoordinatePairs { get; set; } = new List<ResolvedCoordinatePairEvidence>();
     }
 
     [DataContract]
@@ -80,6 +85,17 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 3)] public double PositionX { get; set; }
         [DataMember(Order = 4)] public double PositionY { get; set; }
         [DataMember(Order = 5)] public double PositionZ { get; set; }
+    }
+
+    [DataContract]
+    public sealed class ResolvedCoordinatePairEvidence
+    {
+        [DataMember(Order = 1)] public string PlacementId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string TagSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public decimal EastingValue { get; set; }
+        [DataMember(Order = 4)] public string EastingSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public decimal NorthingValue { get; set; }
+        [DataMember(Order = 6)] public string NorthingSourceHandle { get; set; } = string.Empty;
     }
 
     [DataContract]

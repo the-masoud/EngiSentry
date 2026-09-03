@@ -33,10 +33,23 @@ namespace EngiSentry.Rules
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
+            return Finalize(index, rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index)));
+        }
+
+        public static QaReport Evaluate(EngineeringEntityIndex index, IEnumerable<IQaRule> rules, PlotPlanModel plotPlan, IEnumerable<IPlotPlanQaRule> plotPlanRules)
+        {
+            if (index == null) throw new ArgumentNullException(nameof(index));
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
+            if (plotPlanRules == null) throw new ArgumentNullException(nameof(plotPlanRules));
+            return Finalize(index, rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index)).Concat(plotPlanRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index, plotPlan))));
+        }
+
+        private static QaReport Finalize(EngineeringEntityIndex index, IEnumerable<QaRuleEvaluation> evaluations)
+        {
             var report = new QaReport { Drawing = index.Drawing, ExecutionStatus = "Complete" };
-            foreach (IQaRule rule in rules.OrderBy(x => x.RuleId, StringComparer.Ordinal))
+            foreach (QaRuleEvaluation evaluation in evaluations)
             {
-                QaRuleEvaluation evaluation = rule.Evaluate(index);
                 report.RuleResults.Add(evaluation.Result);
                 report.Findings.AddRange(evaluation.Findings);
             }

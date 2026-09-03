@@ -7,6 +7,7 @@ using EngiSentry.Rules;
 using EngiSentry.AutoCAD2021.Scanning;
 using EngiSentry.Contracts;
 using EngiSentry.Semantics;
+using EngiSentry.PlotPlan;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -128,6 +129,29 @@ namespace EngiSentry.AutoCAD2021
                 document.Editor.WriteMessage("\nEngiSentry M1.0 QA Complete\nDrawing: {0}\nRules executed: {1}\nFindings: {2}\nWarnings: {3}\nErrors: {4}\nOverall status: {5}\nQA report: {6}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.RuleCount, s.TotalFindings, s.WarningFindings, s.ErrorFindings, report.OverallStatus, path);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M1.0 QA Failed\nReason: {0}\n", exception.Message); }
+        }
+
+        [CommandMethod("ES_PLOTQA")]
+        public void PlotPlanQa()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
+                DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                QaReport qa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during plot-plan QA processing.");
+                string path = SnapshotFileWriter.WritePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during plot-plan QA artifact creation.");
+                PlotPlanStatistics s = plotPlan.Statistics;
+                document.Editor.WriteMessage("\nEngiSentry M2.0 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nResolved Easting: {5}\nResolved Northing: {6}\nRules executed: {7}\nFindings: {8}\nPlot Plan QA report: {9}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, s.ResolvedEastingCount, s.ResolvedNorthingCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, path);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: {0}\n", exception.Message); }
         }
 
         private static void WriteToActiveEditor(string message, params object[] arguments)

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>EngiSentry.PlotPlan</AssemblyName>
+    <RootNamespace>EngiSentry.PlotPlan</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
+    <PackageReference Include="NETStandard.Library" Version="2.0.3" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

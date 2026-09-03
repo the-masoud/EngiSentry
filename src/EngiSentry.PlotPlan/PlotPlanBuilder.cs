@@ -1,0 +1,62 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using EngiSentry.Contracts;
+
+namespace EngiSentry.PlotPlan
+{
+    public static class PlotPlanBuilder
+    {
+        public const double MaxAssociationDistanceFactor = 30.0;
+        public const double AmbiguityMarginFactor = 2.0;
+
+        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot)
+        {
+            if (index == null) throw new ArgumentNullException(nameof(index));
+            if (model == null) throw new ArgumentNullException(nameof(model));
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+
+            var textByHandle = snapshot.TextEntities.Where(x => !string.IsNullOrEmpty(x.Handle)).GroupBy(x => x.Handle!, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.ToList(), StringComparer.Ordinal);
+            var sources = new List<Tuple<EquipmentEntity, EquipmentOccurrence, TextSnapshot>>();
+            foreach (EquipmentEntity entity in index.EquipmentEntities.OrderBy(x => x.CanonicalId, StringComparer.Ordinal))
+            foreach (EquipmentOccurrence occurrence in entity.Occurrences.Where(x => string.Equals(x.Role, "DrawingTag", StringComparison.Ordinal) && !string.IsNullOrEmpty(x.SourceHandle)).OrderBy(x => x.SourceHandle, StringComparer.Ordinal))
+            {
+                List<TextSnapshot> matches;
+                if (!textByHandle.TryGetValue(occurrence.SourceHandle!, out matches) || matches.Count != 1) throw new InvalidOperationException("DrawingTag source handle must map to exactly one text record: " + occurrence.SourceHandle);
+                sources.Add(Tuple.Create(entity, occurrence, matches[0]));
+            }
+
+            List<double> positiveHeights = sources.Select(x => x.Item3.Height).Where(IsPositiveFinite).Distinct().OrderBy(x => x).ToList();
+            if (sources.Any(x => !IsPositiveFinite(x.Item3.Height)) && positiveHeights.Count == 0) throw new InvalidOperationException("No positive finite DrawingTag text height is available for association scale.");
+            double fallback = Median(positiveHeights);
+            var coordinates = model.Coordinates.Where(x => string.Equals(x.ParseStatus, "Parsed", StringComparison.Ordinal) && (x.Axis == "E" || x.Axis == "N")).ToList();
+            var placements = new List<EquipmentPlacement>();
+            foreach (var source in sources)
+            {
+                TextSnapshot text = source.Item3;
+                double scale = IsPositiveFinite(text.Height) ? text.Height : fallback;
+                string handle = source.Item2.SourceHandle!;
+                var placement = new EquipmentPlacement { PlacementId = source.Item1.CanonicalId + ":" + handle, EquipmentEntityId = source.Item1.CanonicalId, NormalizedTag = source.Item2.NormalizedTag ?? source.Item1.NormalizedTag, TagSourceHandle = handle, TagSourceLayer = source.Item2.SourceLayer ?? text.Layer, TagPositionX = text.PositionX, TagPositionY = text.PositionY, TagPositionZ = text.PositionZ, TagTextHeight = text.Height, TagRotation = text.Rotation, AssociationScale = scale, Easting = Associate("E", text.PositionX, text.PositionY, scale, coordinates), Northing = Associate("N", text.PositionX, text.PositionY, scale, coordinates) };
+                placement.PlacementStatus = placement.Easting.Status == "Ambiguous" || placement.Northing.Status == "Ambiguous" ? "Ambiguous" : placement.Easting.Status == "Resolved" && placement.Northing.Status == "Resolved" ? "Complete" : "Incomplete";
+                placements.Add(placement);
+            }
+            placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
+            return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
+        }
+
+        private static CoordinateAssociation Associate(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all)
+        {
+            double max = scale * MaxAssociationDistanceFactor;
+            List<CoordinateCandidate> candidates = all.Where(c => c.Axis == axis && !string.IsNullOrEmpty(c.SourceHandle)).Select(c => new CoordinateCandidate { SourceHandle = c.SourceHandle!, RawText = c.RawText, SourceLayer = c.SourceLayer, Value = c.Value, PositionX = c.PositionX, PositionY = c.PositionY, PositionZ = c.PositionZ, Distance = Distance(x, y, c.PositionX, c.PositionY) }).Where(c => !double.IsNaN(c.Distance) && !double.IsInfinity(c.Distance) && c.Distance <= max).OrderBy(c => c.Distance).ThenBy(c => c.SourceHandle, StringComparer.Ordinal).ToList();
+            var result = new CoordinateAssociation { Axis = axis, Candidates = candidates };
+            if (candidates.Count == 0) { result.Status = "Missing"; return result; }
+            if (candidates.Count == 1) { result.Status = "Resolved"; Select(result, candidates[0]); return result; }
+            if (candidates[1].Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor) { result.Status = "Ambiguous"; result.Candidates = candidates.Where(c => c.Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor).ToList(); return result; }
+            result.Status = "Resolved"; result.Candidates = new List<CoordinateCandidate> { candidates[0] }; Select(result, candidates[0]); return result;
+        }
+        private static void Select(CoordinateAssociation association, CoordinateCandidate candidate) { association.SelectedSourceHandle = candidate.SourceHandle; association.SelectedValue = candidate.Value; association.SelectedRawText = candidate.RawText; association.SelectedSourceLayer = candidate.SourceLayer; association.SelectedDistance = candidate.Distance; }
+        private static double Distance(double x1, double y1, double x2, double y2) { double dx = x1 - x2, dy = y1 - y2; return Math.Sqrt(dx * dx + dy * dy); }
+        private static bool IsPositiveFinite(double value) { return value > 0 && !double.IsNaN(value) && !double.IsInfinity(value); }
+        private static double Median(List<double> values) { if (values.Count == 0) return 0; int middle = values.Count / 2; return values.Count % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2.0; }
+    }
+}

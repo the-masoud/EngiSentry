@@ -8,6 +8,7 @@ using EngiSentry.AutoCAD2021.Scanning;
 using EngiSentry.Semantics;
 using EngiSentry.Core;
 using EngiSentry.Rules;
+using EngiSentry.PlotPlan;
 
 namespace EngiSentry.Tests
 {
@@ -122,6 +123,22 @@ namespace EngiSentry.Tests
             var sameRow = new EngineeringEntityIndex(); sameRow.EquipmentEntities.Add(new EquipmentEntity { CanonicalId="equipment:E-200-105", NormalizedTag="E-200-105", HasEquipmentListEvidence=true, EquipmentListLinks=new System.Collections.Generic.List<EquipmentListLink>{Link(new[]{"A1","A2","A3"},"ABC","TOG 6.300"),Link(new[]{"A3","A1","A2"},"  ABC  ","TOG 6.300")} }); Assert(QaEngine.Evaluate(sameRow, BuiltInQaRules.All).Findings.All(x => x.RuleId != "ENGI-EQ-004" && x.RuleId != "ENGI-EQ-005"), "Equivalent Equipment List row keys were treated as distinct.");
             var noHandles = new EngineeringEntityIndex(); noHandles.EquipmentEntities.Add(new EquipmentEntity { CanonicalId="equipment:E-200-106", NormalizedTag="E-200-106", HasEquipmentListEvidence=true, EquipmentListLinks=new System.Collections.Generic.List<EquipmentListLink>{Link(new string[0],"ABC","I1"),Link(new string[0],"ABC","I2")} }); Assert(QaEngine.Evaluate(noHandles, BuiltInQaRules.All).Findings.All(x => x.RuleId != "ENGI-EQ-004" && x.RuleId != "ENGI-EQ-005"), "Handle-less list links were not excluded.");
             var whitespace = new EngineeringEntityIndex(); whitespace.EquipmentEntities.Add(new EquipmentEntity { CanonicalId="equipment:E-200-107", NormalizedTag="E-200-107", HasEquipmentListEvidence=true, EquipmentListLinks=new System.Collections.Generic.List<EquipmentListLink>{Link(new[]{"W1"},"ABC",""),Link(new[]{"W2"},"  ABC  ","TOG 6.300")} }); Assert(QaEngine.Evaluate(whitespace, BuiltInQaRules.All).Findings.All(x => x.RuleId != "ENGI-EQ-005"), "Null/empty or surrounding whitespace values created a false conflict.");
+            var plotSnapshot = new DrawingSnapshot();
+            plotSnapshot.TextEntities.Add(new TextSnapshot { Handle = "1C1136", Text = "P-200-101A", Height = 400, PositionX = 1000, PositionY = 2000, ObjectType = "TEXT", Layer = "EQ-TAG" });
+            plotSnapshot.TextEntities.Add(new TextSnapshot { Handle = "1C10F2", Text = "P-200-101B", Height = 400, PositionX = 3000, PositionY = 2000, ObjectType = "TEXT", Layer = "EQ-TAG" });
+            var plotModel = new EngineeringDrawingModel { Drawing = new SemanticDrawing { FileName = "plot.dwg" } };
+            plotModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag = "P-200-101A", SourceHandle = "1C1136" });
+            plotModel.EquipmentTags.Add(new EquipmentTag { NormalizedTag = "P-200-101B", SourceHandle = "1C10F2" });
+            plotModel.Coordinates.Add(new CoordinateEvidence { Axis = "E", Value = 1472500m, RawText = "E. 1472500", SourceHandle = "1C287B", PositionX = 1000, PositionY = 2000, ParseStatus = "Parsed" });
+            plotModel.Coordinates.Add(new CoordinateEvidence { Axis = "N", Value = 1469000m, RawText = "N. 1469000", SourceHandle = "1C20B9", PositionX = 1000, PositionY = 2000, ParseStatus = "Parsed" });
+            plotModel.Coordinates.Add(new CoordinateEvidence { Axis = "E", Value = 1469500m, RawText = "E. 1469500", SourceHandle = "1C1F02", PositionX = 3000, PositionY = 2000, ParseStatus = "Parsed" });
+            var plotIndex = EntityIndexer.Build(plotModel);
+            PlotPlanModel plot = PlotPlanBuilder.Build(plotIndex, plotModel, plotSnapshot);
+            Assert(plot.Statistics.EquipmentPlacementCount == 2 && plot.EquipmentPlacements.All(x => x.PlacementStatus == "Complete"), "Plot-plan placement construction failed.");
+            EquipmentPlacement pa = plot.EquipmentPlacements.Single(x => x.TagSourceHandle == "1C1136"); Assert(pa.Easting.SelectedSourceHandle == "1C287B" && pa.Northing.SelectedSourceHandle == "1C20B9" && pa.Easting.SelectedValue == 1472500m, "P-200-101A coordinate association failed.");
+            EquipmentPlacement pb = plot.EquipmentPlacements.Single(x => x.TagSourceHandle == "1C10F2"); Assert(pb.Easting.SelectedSourceHandle == "1C1F02" && pb.Northing.SelectedSourceHandle == "1C20B9" && pb.Northing.SelectedValue == 1469000m, "P-200-101B coordinate association failed.");
+            var combined = QaEngine.Evaluate(plotIndex, BuiltInQaRules.All, plot, BuiltInPlotPlanQaRules.All); Assert(combined.RuleResults.Count == 11, "Combined plot-plan QA rule count failed.");
+            using (var plotStream = new MemoryStream()) { var plotSerializer = new DataContractJsonSerializer(typeof(PlotPlanQaReport)); plotSerializer.WriteObject(plotStream, new PlotPlanQaReport { PlotPlan = plot, Qa = combined }); Assert(Encoding.UTF8.GetString(plotStream.ToArray()).StartsWith("{", StringComparison.Ordinal), "Plot-plan QA serialization failed."); }
             Console.WriteLine("All EngiSentry M1.1 tests passed.");
             return 0;
         }
