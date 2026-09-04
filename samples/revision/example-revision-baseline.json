@@ -6,7 +6,7 @@
     "DwgVersion": null,
     "InsertionUnits": null,
     "CurrentLayout": "Model",
-    "ScanTimestampUtc": "2026-09-04T12:13:26.178Z"
+    "ScanTimestampUtc": "\/Date(1788524006178)\/"
   },
   "Equipment": [
     {
@@ -37,7 +37,7 @@
       "DescriptionValues": [
         "AMINE REGENERATOR COLUMN CONDENSER"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:E-200-103",
@@ -341,7 +341,7 @@
       "DescriptionValues": [
         "AMINE CONTACTOR COLUMN"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:T-200-102",
@@ -355,7 +355,7 @@
       "DescriptionValues": [
         "AMINE REGENERATOR COLUMN"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:T-200-103",
@@ -412,7 +412,7 @@
       "DescriptionValues": [
         "RICH AMINE FLASH DRUM"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:V-200-104",
@@ -446,7 +446,7 @@
       "DescriptionValues": [
         "STEAM CONDENSATE FLASH DRUM"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:V-200-106",
@@ -460,7 +460,7 @@
       "DescriptionValues": [
         "AMINE SUMP"
       ],
-      "InstallationValues": null
+      "InstallationValues": []
     },
     {
       "EquipmentCanonicalId": "equipment:V-200-107",

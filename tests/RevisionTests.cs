@@ -10,6 +10,8 @@ namespace EngiSentry.Tests
         private static void Assert(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         public static void Run()
         {
+            string samplePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "samples", "revision", "example-revision-baseline.json");
+            string sampleSha; RevisionSnapshotFile.Read(System.IO.Path.GetFullPath(samplePath), out sampleSha);
             var index = new EngineeringEntityIndex { EquipmentEntities = { new EquipmentEntity { CanonicalId = "equipment:p-1-1", NormalizedTag = "p-1-1", HasDrawingEvidence = true, EquipmentListLinks = { new EquipmentListLink { Description = " Desc ", Installation = "INST" } } }, new EquipmentEntity { CanonicalId = "equipment:LIST-1", NormalizedTag = "LIST-1", HasEquipmentListEvidence = true } } };
             var plot = new PlotPlanModel { EquipmentPlacements = { new EquipmentPlacement { EquipmentEntityId = "equipment:p-1-1", PlacementStatus = "Complete", Easting = new CoordinateAssociation { Axis = "E", Status = "Resolved", SelectedValue = 10m }, Northing = new CoordinateAssociation { Axis = "N", Status = "Resolved", SelectedValue = 20m } } } };
             var snapshot = new DrawingSnapshot { FileName = "a.dwg", InsertionUnits = "Unitless" };
