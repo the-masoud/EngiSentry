@@ -138,7 +138,7 @@ namespace EngiSentry.AutoCAD2021
             {
                 WriteToActiveEditor("\n[ES_PLOTQA] START\n");
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.1 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] Snapshot built\n");
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
@@ -159,7 +159,7 @@ namespace EngiSentry.AutoCAD2021
                 PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M2.1 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nGeometry primitives: {5}\nGeometry associations: {6}\nResolved geometry associations: {7}\nMissing geometry associations: {8}\nAmbiguous geometry associations: {9}\nRules executed: {10}\nFindings: {11}\nInfo: {12}\nWarnings: {13}\nErrors: {14}\nOverall status: {15}\nQA report: {16}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, g.SupportedPrimitiveCount, g.GeometryAssociationCount, g.ResolvedAssociationCount, g.MissingAssociationCount, g.AmbiguousAssociationCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.1 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
 
         private static void WriteToActiveEditor(string message, params object[] arguments)
