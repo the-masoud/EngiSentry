@@ -88,7 +88,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
             string path = Path.Combine(directory, drawing + "." + timestamp + ".plotplan.qa.json");
             var serializer = new DataContractJsonSerializer(typeof(PlotPlanQaReport));
-            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, report);
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, PlotPlanReportCompactor.Create(report));
             return path;
         }
 
@@ -100,7 +100,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
             string path = Path.Combine(directory, drawing + "." + timestamp + ".profile.plotplan.qa.json");
             var serializer = new DataContractJsonSerializer(typeof(PlotPlanQaReport));
-            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, report);
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, PlotPlanReportCompactor.Create(report));
             return path;
         }
     }

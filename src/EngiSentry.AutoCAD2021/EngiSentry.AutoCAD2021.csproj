@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="Commands.cs" />
     <Compile Include="Scanning\SnapshotFileWriter.cs" />
+    <Compile Include="Scanning\PlotPlanReportCompactor.cs" />
     <Compile Include="Scanning\DrawingScanner.cs" />
     <Compile Include="Scanning\DependencyClassifier.cs" />
   </ItemGroup>

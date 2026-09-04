@@ -10,6 +10,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 2)] public List<EquipmentPlacement> EquipmentPlacements { get; set; } = new List<EquipmentPlacement>();
         [DataMember(Order = 3)] public PlotPlanStatistics Statistics { get; set; } = new PlotPlanStatistics();
         [DataMember(Order = 4)] public PlotGeometryModel Geometry { get; set; } = new PlotGeometryModel();
+        [DataMember(Order = 5)] public PlotSpatialMeasurementModel Measurements { get; set; } = new PlotSpatialMeasurementModel();
     }
 
     [DataContract]
@@ -195,5 +196,68 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 10)] public double SegmentEndZ { get; set; }
         [DataMember(Order = 11)] public double Distance { get; set; }
         [DataMember(Order = 12)] public double CoordinateDeviation { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PlotSpatialMeasurementModel
+    {
+        [DataMember(Order = 1)] public List<EquipmentPairMeasurement> EquipmentPairMeasurements { get; set; } = new List<EquipmentPairMeasurement>();
+        [DataMember(Order = 2)] public List<EquipmentSpatialMeasurement> EquipmentSpatialMeasurements { get; set; } = new List<EquipmentSpatialMeasurement>();
+        [DataMember(Order = 3)] public PlotSpatialMeasurementStatistics Statistics { get; set; } = new PlotSpatialMeasurementStatistics();
+    }
+
+    [DataContract]
+    public sealed class EquipmentPairMeasurement
+    {
+        [DataMember(Order = 1)] public string MeasurementId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string PlacementIdA { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public string EquipmentEntityIdA { get; set; } = string.Empty;
+        [DataMember(Order = 4)] public string NormalizedTagA { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public decimal EastingA { get; set; }
+        [DataMember(Order = 6)] public decimal NorthingA { get; set; }
+        [DataMember(Order = 7)] public string PlacementIdB { get; set; } = string.Empty;
+        [DataMember(Order = 8)] public string EquipmentEntityIdB { get; set; } = string.Empty;
+        [DataMember(Order = 9)] public string NormalizedTagB { get; set; } = string.Empty;
+        [DataMember(Order = 10)] public decimal EastingB { get; set; }
+        [DataMember(Order = 11)] public decimal NorthingB { get; set; }
+        [DataMember(Order = 12)] public double Distance2D { get; set; }
+    }
+
+    [DataContract]
+    public sealed class EquipmentSpatialMeasurement
+    {
+        [DataMember(Order = 1)] public string MeasurementId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string PlacementId { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public string EquipmentEntityId { get; set; } = string.Empty;
+        [DataMember(Order = 4)] public string NormalizedTag { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public decimal EquipmentEasting { get; set; }
+        [DataMember(Order = 6)] public decimal EquipmentNorthing { get; set; }
+        [DataMember(Order = 7)] public string ConstraintId { get; set; } = string.Empty;
+        [DataMember(Order = 8)] public string SubjectKind { get; set; } = string.Empty;
+        [DataMember(Order = 9)] public string Axis { get; set; } = string.Empty;
+        [DataMember(Order = 10)] public decimal CoordinateValue { get; set; }
+        [DataMember(Order = 11)] public string LabelSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 12)] public string GeometrySourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 13)] public string GeometrySourceLayer { get; set; } = string.Empty;
+        [DataMember(Order = 14)] public string GeometryKind { get; set; } = string.Empty;
+        [DataMember(Order = 15)] public int SegmentIndex { get; set; }
+        [DataMember(Order = 16)] public double SegmentStartX { get; set; }
+        [DataMember(Order = 17)] public double SegmentStartY { get; set; }
+        [DataMember(Order = 18)] public double SegmentEndX { get; set; }
+        [DataMember(Order = 19)] public double SegmentEndY { get; set; }
+        [DataMember(Order = 20)] public double ClosestPointX { get; set; }
+        [DataMember(Order = 21)] public double ClosestPointY { get; set; }
+        [DataMember(Order = 22)] public double Distance2D { get; set; }
+    }
+
+    [DataContract]
+    public sealed class PlotSpatialMeasurementStatistics
+    {
+        [DataMember(Order = 1)] public int EligibleEquipmentPlacementCount { get; set; }
+        [DataMember(Order = 2)] public int EquipmentPairMeasurementCount { get; set; }
+        [DataMember(Order = 3)] public int ResolvedSpatialConstraintSourceCount { get; set; }
+        [DataMember(Order = 4)] public int EquipmentSpatialMeasurementCount { get; set; }
+        [DataMember(Order = 5)] public int RoadMeasurementCount { get; set; }
+        [DataMember(Order = 6)] public int BoundaryMeasurementCount { get; set; }
     }
 }

@@ -53,7 +53,8 @@ namespace EngiSentry.PlotPlan
                 geometry.Statistics.MissingSpatialConstraintCount = constraints.Count(x => x.Status == "Missing");
                 geometry.Statistics.AmbiguousSpatialConstraintCount = constraints.Count(x => x.Status == "Ambiguous");
             }
-            return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
+            PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(placements, geometry.SpatialConstraints);
+            return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
         }
 
         private static CoordinateAssociation Associate(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all)
