@@ -26,6 +26,7 @@ namespace EngiSentry.Tests
         public static int Main()
         {
             CrossDocumentTests.Run();
+            RevisionTests.Run();
             var snapshot = new DrawingSnapshot { FileName = "drawing.dwg", ScanTimestampUtc = new DateTime(2026, 9, 3, 12, 34, 56, 123, DateTimeKind.Utc) };
             Assert(snapshot.Layers != null && snapshot.BlockReferences != null, "Snapshot collections were not initialized.");
             Assert(Sanitize("A:B< C>") == "A_B_ C_", "Filename sanitization failed.");

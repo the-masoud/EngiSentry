@@ -1,0 +1,508 @@
+{
+  "SchemaVersion": "1.0",
+  "Drawing": {
+    "FileName": "m60-manual-acceptance.dwg",
+    "FullPath": "C:\\Users\\M.Zeynali\\Documents\\EngiSentry\\artifacts\\runtime-validation\\m60\\m60-manual-acceptance.dwg",
+    "DwgVersion": null,
+    "InsertionUnits": null,
+    "CurrentLayout": "Model",
+    "ScanTimestampUtc": "2026-09-04T12:13:26.178Z"
+  },
+  "Equipment": [
+    {
+      "EquipmentCanonicalId": "equipment:E-200-101",
+      "NormalizedTag": "E-200-101",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1483950.0,
+          "Northing": 1498364.0
+        }
+      ],
+      "DescriptionValues": [
+        "M7 TEST FIXTURE OLD DESCRIPTION"
+      ],
+      "InstallationValues": [
+        "TOG 6.500"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:E-200-102",
+      "NormalizedTag": "E-200-102",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1491075.0,
+          "Northing": 1490250.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN CONDENSER"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:E-200-103",
+      "NormalizedTag": "E-200-103",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1454000.0,
+          "Northing": 1471000.0
+        }
+      ],
+      "DescriptionValues": [
+        "LEAN AMINE AIR COOLER"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:E-200-104",
+      "NormalizedTag": "E-200-104",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1482400.0,
+          "Northing": 1465000.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN REBOILER"
+      ],
+      "InstallationValues": [
+        "T.O.S. 18.100"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:F-200-101",
+      "NormalizedTag": "F-200-101",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1436000.0,
+          "Northing": 1498500.0
+        }
+      ],
+      "DescriptionValues": [
+        "FEED GAS COALESCER"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-101A",
+      "NormalizedTag": "P-200-101A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1471500.0,
+          "Northing": 1469000.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN CONDENSER PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-101B",
+      "NormalizedTag": "P-200-101B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1469500.0,
+          "Northing": 1469000.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN CONDENSER PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-102A",
+      "NormalizedTag": "P-200-102A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1423450.0,
+          "Northing": 1467000.0
+        }
+      ],
+      "DescriptionValues": [
+        "LEAN AMINE PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-102B",
+      "NormalizedTag": "P-200-102B",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "LEAN AMINE PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-103A",
+      "NormalizedTag": "P-200-103A",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "AMINE SUMP PUMP"
+      ],
+      "InstallationValues": [
+        "-"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-105A",
+      "NormalizedTag": "P-200-105A",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "WATER WASH PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-105B",
+      "NormalizedTag": "P-200-105B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1447600.0,
+          "Northing": 1486350.0
+        }
+      ],
+      "DescriptionValues": [
+        "WATER WASH PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-106A",
+      "NormalizedTag": "P-200-106A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1444850.0,
+          "Northing": 1474800.0
+        }
+      ],
+      "DescriptionValues": [
+        "WATER MAKE-UP PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.500"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-106B",
+      "NormalizedTag": "P-200-106B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1442050.0,
+          "Northing": 1474800.0
+        }
+      ],
+      "DescriptionValues": [
+        "WATER MAKE-UP PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.500"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-107A",
+      "NormalizedTag": "P-200-107A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1438400.0,
+          "Northing": 1474800.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE FILTRATION PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-107B",
+      "NormalizedTag": "P-200-107B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1435600.0,
+          "Northing": 1466600.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE FILTRATION PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-108A",
+      "NormalizedTag": "P-200-108A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1472750.0,
+          "Northing": 1493300.0
+        }
+      ],
+      "DescriptionValues": [
+        "LEAN AMINE BOOSTER PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-108B",
+      "NormalizedTag": "P-200-108B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1469250.0,
+          "Northing": 1493300.0
+        }
+      ],
+      "DescriptionValues": [
+        "LEAN AMINE BOOSTER PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-112A",
+      "NormalizedTag": "P-200-112A",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1490400.0,
+          "Northing": 1475000.0
+        }
+      ],
+      "DescriptionValues": [
+        "STEAM CONDENSATE PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:P-200-112B",
+      "NormalizedTag": "P-200-112B",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1487600.0,
+          "Northing": 1475000.0
+        }
+      ],
+      "DescriptionValues": [
+        "STEAM CONDENSATE PUMPS"
+      ],
+      "InstallationValues": [
+        "TOG 6.400"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:PK-200-102",
+      "NormalizedTag": "PK-200-102",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "AMINE FILTER PACKAGE"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:PK-200-103",
+      "NormalizedTag": "PK-200-103",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "ANTIFOAM INJECTION PACKAGE"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:T-200-101",
+      "NormalizedTag": "T-200-101",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "AMINE CONTACTOR COLUMN"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:T-200-102",
+      "NormalizedTag": "T-200-102",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1475000.0,
+          "Northing": 1460000.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:T-200-103",
+      "NormalizedTag": "T-200-103",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [
+        "FLASH GAS ABSORBER COLUMN"
+      ],
+      "InstallationValues": [
+        "11.575"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:T-200-104",
+      "NormalizedTag": "T-200-104",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1449000.0,
+          "Northing": 1496350.0
+        }
+      ],
+      "DescriptionValues": [
+        "TREATED GAS WATER WASH COLUMN"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:TK-200-101",
+      "NormalizedTag": "TK-200-101",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1438500.0,
+          "Northing": 1461500.0
+        }
+      ],
+      "DescriptionValues": [
+        "LEAN AMINE SURGE TANK"
+      ],
+      "InstallationValues": [
+        "TOG 8.700"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-103",
+      "NormalizedTag": "V-200-103",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1458000.0,
+          "Northing": 1490500.0
+        }
+      ],
+      "DescriptionValues": [
+        "RICH AMINE FLASH DRUM"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-104",
+      "NormalizedTag": "V-200-104",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1469000.0,
+          "Northing": 1460000.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE REGENERATOR COLUMN CONDENSER FLASH DRUM"
+      ],
+      "InstallationValues": [
+        "TOG 6.300"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-105",
+      "NormalizedTag": "V-200-105",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1482400.0,
+          "Northing": 1468000.0
+        },
+        {
+          "Easting": 1490400.0,
+          "Northing": 1468000.0
+        }
+      ],
+      "DescriptionValues": [
+        "STEAM CONDENSATE FLASH DRUM"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-106",
+      "NormalizedTag": "V-200-106",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1498500.0,
+          "Northing": 1458750.0
+        }
+      ],
+      "DescriptionValues": [
+        "AMINE SUMP"
+      ],
+      "InstallationValues": null
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-107",
+      "NormalizedTag": "V-200-107",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1465000.0,
+          "Northing": 1494100.0
+        }
+      ],
+      "DescriptionValues": [
+        "HYDROCARBON SKIM DRUM"
+      ],
+      "InstallationValues": [
+        "TOG 7.500"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:V-200-108",
+      "NormalizedTag": "V-200-108",
+      "CompleteCoordinatePairs": [
+        {
+          "Easting": 1500000.0,
+          "Northing": 1494490.0
+        }
+      ],
+      "DescriptionValues": [
+        "HC CLOSED DRAIN DRUM"
+      ],
+      "InstallationValues": [
+        "TOG 3.100"
+      ]
+    },
+    {
+      "EquipmentCanonicalId": "equipment:ZZ-999-998",
+      "NormalizedTag": "ZZ-999-998",
+      "CompleteCoordinatePairs": [],
+      "DescriptionValues": [],
+      "InstallationValues": []
+    }
+  ],
+  "Statistics": {
+    "EquipmentCount": 34
+  }
+}

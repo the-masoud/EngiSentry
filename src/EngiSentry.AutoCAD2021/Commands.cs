@@ -11,6 +11,7 @@ using EngiSentry.Semantics;
 using EngiSentry.PlotPlan;
 using EngiSentry.Standards;
 using EngiSentry.CrossDocument;
+using EngiSentry.Revision;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -216,6 +217,44 @@ namespace EngiSentry.AutoCAD2021
             }
             catch (ExternalRegisterValidationException exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}\n", exception.Message); }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        [CommandMethod("ES_REVBASELINE")]
+        public void RevisionBaseline()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: no active drawing\n"); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture);
+                RevisionSnapshot revision = RevisionSnapshotBuilder.Build(snapshot, index, plot);
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision baseline processing.");
+                string path = SnapshotFileWriter.WriteRevisionBaseline(revision); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision baseline artifact creation.");
+                document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Baseline Complete\nEquipment count: {0}\nBaseline: {1}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", revision.Statistics.EquipmentCount, path);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        [CommandMethod("ES_REVISION")]
+        public void Revision()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: no active drawing\n"); return; }
+                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nRevision baseline JSON path: ") { AllowSpaces = true });
+                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Cancelled\n"); return; }
+                string sha256; RevisionSnapshot baseline = RevisionSnapshotFile.Read(prompt.StringResult, out sha256);
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture); RevisionSnapshot current = RevisionSnapshotBuilder.Build(snapshot, index, plot);
+                RevisionComparisonReport report = RevisionComparer.Compare(baseline, current, System.IO.Path.GetFileName(prompt.StringResult), prompt.StringResult, sha256);
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision processing.");
+                string path = SnapshotFileWriter.WriteRevisionComparison(report, snapshot.FileName, snapshot.ScanTimestampUtc); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision artifact creation.");
+                RevisionComparisonStatistics s = report.Statistics; document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Complete\nBaseline file: {0}\nBaseline SHA256: {1}\nBaseline equipment: {2}\nCurrent equipment: {3}\nAdded: {4}\nRemoved: {5}\nCoordinate changed: {6}\nAttribute changed: {7}\nChanged equipment: {8}\nUnchanged equipment: {9}\nTotal changes: {10}\nReport: {11}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", prompt.StringResult, sha256, s.BaselineEquipmentCount, s.CurrentEquipmentCount, s.AddedEquipmentCount, s.RemovedEquipmentCount, s.CoordinateChangedEquipmentCount, s.AttributeChangedEquipmentCount, s.ChangedEquipmentCount, s.UnchangedEquipmentCount, s.TotalChangeCount, path);
+            }
+            catch (RevisionValidationException exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()

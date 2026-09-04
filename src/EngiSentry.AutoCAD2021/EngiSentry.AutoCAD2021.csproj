@@ -33,6 +33,7 @@
     <ProjectReference Include="..\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj" />
     <ProjectReference Include="..\EngiSentry.Standards\EngiSentry.Standards.csproj" />
     <ProjectReference Include="..\EngiSentry.CrossDocument\EngiSentry.CrossDocument.csproj" />
+    <ProjectReference Include="..\EngiSentry.Revision\EngiSentry.Revision.csproj" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />

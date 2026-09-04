@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using EngiSentry.Contracts;
+using EngiSentry.Revision;
 
 namespace EngiSentry.AutoCAD2021.Scanning
 {
@@ -116,6 +117,22 @@ namespace EngiSentry.AutoCAD2021.Scanning
             var output = new CrossDocumentQaReport { PlotPlan = compact.PlotPlan, Qa = compact.Qa, ExternalEquipmentRegister = report.ExternalEquipmentRegister };
             using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, output);
             return path;
+        }
+
+        internal static string WriteRevisionBaseline(RevisionSnapshot snapshot)
+        {
+            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "revision"); Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(snapshot.Drawing.FileName ?? "unnamed"); string timestamp = snapshot.Drawing.ScanTimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".revision.baseline.json");
+            var serializer = new DataContractJsonSerializer(typeof(RevisionSnapshot)); using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, snapshot); return path;
+        }
+
+        internal static string WriteRevisionComparison(RevisionComparisonReport report, string? drawingName, DateTime timestampUtc)
+        {
+            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "revision"); Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(drawingName ?? "unnamed"); string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".revision.compare.json");
+            var serializer = new DataContractJsonSerializer(typeof(RevisionComparisonReport)); using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, report); return path;
         }
     }
 }
