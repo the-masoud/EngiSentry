@@ -23,7 +23,8 @@
     <ProjectReference Include="..\src\EngiSentry.Rules\EngiSentry.Rules.csproj" />
     <ProjectReference Include="..\src\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Standards\EngiSentry.Standards.csproj" />
+    <ProjectReference Include="..\src\EngiSentry.CrossDocument\EngiSentry.CrossDocument.csproj" />
   </ItemGroup>
-  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /><Compile Include="CrossDocumentTests.cs" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

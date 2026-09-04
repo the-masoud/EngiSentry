@@ -103,5 +103,19 @@ namespace EngiSentry.AutoCAD2021.Scanning
             using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, PlotPlanReportCompactor.Create(report));
             return path;
         }
+
+        internal static string WriteCrossDocumentQaReport(CrossDocumentQaReport report, string? drawingName, DateTime timestampUtc)
+        {
+            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "qa", "plotplan");
+            Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(drawingName ?? "unnamed");
+            string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".cross.plotplan.qa.json");
+            var serializer = new DataContractJsonSerializer(typeof(CrossDocumentQaReport));
+            var compact = PlotPlanReportCompactor.Create(new PlotPlanQaReport { PlotPlan = report.PlotPlan, Qa = report.Qa });
+            var output = new CrossDocumentQaReport { PlotPlan = compact.PlotPlan, Qa = compact.Qa, ExternalEquipmentRegister = report.ExternalEquipmentRegister };
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, output);
+            return path;
+        }
     }
 }

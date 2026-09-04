@@ -69,6 +69,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 25)] public GeometryAssociation? GeometryAssociation { get; set; }
         [DataMember(Order = 26)] public SpatialCoordinateConstraint? SpatialCoordinateConstraint { get; set; }
         [DataMember(Order = 27, EmitDefaultValue = false)] public ClearanceEvidence? ClearanceEvidence { get; set; }
+        [DataMember(Order = 28, EmitDefaultValue = false)] public CrossDocumentEvidence? CrossDocumentEvidence { get; set; }
     }
 
     [DataContract]

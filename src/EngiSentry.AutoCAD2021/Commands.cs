@@ -10,6 +10,7 @@ using EngiSentry.Contracts;
 using EngiSentry.Semantics;
 using EngiSentry.PlotPlan;
 using EngiSentry.Standards;
+using EngiSentry.CrossDocument;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -188,6 +189,33 @@ namespace EngiSentry.AutoCAD2021
             }
             catch (ProfileValidationException exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}\n", exception.Message); }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        [CommandMethod("ES_CROSSQA")]
+        public void CrossQa()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: no active drawing\n"); return; }
+                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nExternal Equipment Register CSV path: ") { AllowSpaces = true });
+                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M6.0 Cross-Document QA Cancelled\n"); return; }
+                ExternalEquipmentRegister register = ExternalEquipmentRegisterParser.ReadFile(prompt.StringResult);
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
+                QaReport qa = QaEngine.EvaluateWithExternalRegister(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All, register, BuiltInCrossDocumentQaRules.All);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during cross-document QA processing.");
+                string path = SnapshotFileWriter.WriteCrossDocumentQaReport(new CrossDocumentQaReport { PlotPlan = plotPlan, ExternalEquipmentRegister = register, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during cross-document QA artifact creation.");
+                QaStatistics s = qa.Statistics;
+                document.Editor.WriteMessage("\nEngiSentry M6.0 Cross-Document QA Complete\nExternal file: {0}\nExternal SHA256: {1}\nSource rows: {2}\nExpanded equipment identities: {3}\nRules executed: {4}\nFindings: {5}\nInfo: {6}\nWarnings: {7}\nErrors: {8}\nOverall status: {9}\nReport: {10}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", register.SourceFullPath, register.SourceSha256, register.Statistics.SourceRowCount, register.Statistics.ExpandedEquipmentCount, s.RuleCount, s.TotalFindings, s.InfoFindings, s.WarningFindings, s.ErrorFindings, qa.OverallStatus, path);
+            }
+            catch (ExternalRegisterValidationException exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()

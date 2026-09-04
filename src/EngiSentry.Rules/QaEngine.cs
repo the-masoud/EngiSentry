@@ -45,6 +45,13 @@ namespace EngiSentry.Rules
             return Finalize(index, rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index)).Concat(plotPlanRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index, plotPlan))));
         }
 
+        public static QaReport EvaluateWithExternalRegister(EngineeringEntityIndex index, IEnumerable<IQaRule> rules, PlotPlanModel plotPlan, IEnumerable<IPlotPlanQaRule> plotPlanRules, ExternalEquipmentRegister register, IEnumerable<ICrossDocumentQaRule> crossRules)
+        {
+            if (register == null) throw new ArgumentNullException(nameof(register));
+            if (crossRules == null) throw new ArgumentNullException(nameof(crossRules));
+            return Finalize(index, rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index)).Concat(plotPlanRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index, plotPlan))).Concat(crossRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index, register))));
+        }
+
         public static QaReport EvaluateWithProfile(EngineeringEntityIndex index, IEnumerable<IQaRule> rules, PlotPlanModel plotPlan, IEnumerable<IPlotPlanQaRule> plotPlanRules, ProfileResolution resolution)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
