@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ApplicationPackage SchemaVersion="1.0" Name="EngiSentry" AppVersion="1.0.0" ProductCode="{5D77D81D-8A76-4F4B-9E42-4D1A0A6E3D11}" UpgradeCode="{A2B8B3E0-6F4A-4C76-9F29-3B7F1F28C2D4}" Description="Engineering QA &amp; Drawing Intelligence">
+  <Components>
+    <ComponentEntry AppName="EngiSentry" ModuleName="./Contents/Win64/EngiSentry.AutoCAD2021.dll" LoadReasons="LoadOnCommandInvocation" OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R24.0">
+      <Commands GroupName="EngiSentry">
+        <Command Global="ENGISENTRY" Local="ENGISENTRY" />
+        <Command Global="ES_HELLO" Local="ES_HELLO" />
+        <Command Global="ES_SCAN" Local="ES_SCAN" />
+        <Command Global="ES_SEMANTIC" Local="ES_SEMANTIC" />
+        <Command Global="ES_INDEX" Local="ES_INDEX" />
+        <Command Global="ES_QA" Local="ES_QA" />
+        <Command Global="ES_PLOTQA" Local="ES_PLOTQA" />
+        <Command Global="ES_PROFILEQA" Local="ES_PROFILEQA" />
+        <Command Global="ES_CROSSQA" Local="ES_CROSSQA" />
+        <Command Global="ES_REVBASELINE" Local="ES_REVBASELINE" />
+        <Command Global="ES_REVISION" Local="ES_REVISION" />
+      </Commands>
+    </ComponentEntry>
+  </Components>
+</ApplicationPackage>
