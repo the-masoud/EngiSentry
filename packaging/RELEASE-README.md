@@ -21,7 +21,9 @@ If AutoCAD displays its normal security prompt, review and approve it normally.
 
 `ES_PROFILEQA` accepts an Engineering Standard Profile JSON file. `ES_CROSSQA` accepts an External Equipment Register CSV file. `ES_REVISION` accepts an EngiSentry revision baseline JSON file. `ES_REVBASELINE` creates a revision baseline JSON file.
 
-Generated reports use EngiSentry's repository/artifact output structure.
+Development/repository execution writes reports under `<repo>\artifacts\...`.
+
+Installed packaged execution writes reports under `%LOCALAPPDATA%\EngiSentry\artifacts\...`.
 
 ## Validated v1.0 scope
 

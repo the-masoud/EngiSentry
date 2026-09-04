@@ -11,15 +11,15 @@ namespace EngiSentry.AutoCAD2021.Scanning
 {
     internal static class SnapshotFileWriter
     {
-        internal static string FindRepositoryRoot()
+        internal static string ResolveArtifactsRoot()
         {
             DirectoryInfo? directory = new DirectoryInfo(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? string.Empty);
             while (directory != null)
             {
-                if (File.Exists(Path.Combine(directory.FullName, "EngiSentry.sln"))) return directory.FullName;
+                if (File.Exists(Path.Combine(directory.FullName, "EngiSentry.sln"))) return Path.Combine(directory.FullName, "artifacts");
                 directory = directory.Parent;
             }
-            throw new InvalidOperationException("EngiSentry.sln was not found above the executing assembly.");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "artifacts");
         }
 
         internal static string SanitizeFileName(string name)
@@ -32,7 +32,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string Write(DrawingSnapshot snapshot)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "scans");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "scans");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(snapshot.FileName ?? "unnamed");
             string timestamp = snapshot.ScanTimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -47,7 +47,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteSemantic(EngineeringDrawingModel model, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "semantics");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "semantics");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -59,7 +59,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteEntityIndex(EngineeringEntityIndex index, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "entities");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "entities");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -71,7 +71,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteQaReport(QaReport report, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "qa");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -83,7 +83,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WritePlotPlanQaReport(PlotPlanQaReport report, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "qa", "plotplan");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -95,7 +95,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteProfilePlotPlanQaReport(PlotPlanQaReport report, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "qa", "plotplan");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -107,7 +107,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteCrossDocumentQaReport(CrossDocumentQaReport report, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "qa", "plotplan");
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan");
             Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed");
             string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
@@ -121,7 +121,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteRevisionBaseline(RevisionSnapshot snapshot)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "revision"); Directory.CreateDirectory(directory);
+            string directory = Path.Combine(ResolveArtifactsRoot(), "revision"); Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(snapshot.Drawing.FileName ?? "unnamed"); string timestamp = snapshot.Drawing.ScanTimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
             string path = Path.Combine(directory, drawing + "." + timestamp + ".revision.baseline.json");
             var serializer = new DataContractJsonSerializer(typeof(RevisionSnapshot)); using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, snapshot); return path;
@@ -129,7 +129,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         internal static string WriteRevisionComparison(RevisionComparisonReport report, string? drawingName, DateTime timestampUtc)
         {
-            string directory = Path.Combine(FindRepositoryRoot(), "artifacts", "revision"); Directory.CreateDirectory(directory);
+            string directory = Path.Combine(ResolveArtifactsRoot(), "revision"); Directory.CreateDirectory(directory);
             string drawing = SanitizeFileName(drawingName ?? "unnamed"); string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
             string path = Path.Combine(directory, drawing + "." + timestamp + ".revision.compare.json");
             var serializer = new DataContractJsonSerializer(typeof(RevisionComparisonReport)); using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, report); return path;
