@@ -183,7 +183,8 @@ namespace EngiSentry.Tests
             var missingQa = QaEngine.Evaluate(plotIndex, BuiltInQaRules.All, new PlotPlanModel { Geometry = new PlotGeometryModel { SpatialConstraints = missingSpatial } }, BuiltInPlotPlanQaRules.All); Assert(missingQa.RuleResults.Single(x=>x.RuleId=="PP-SPAT-001").FindingCount==1 && missingQa.RuleResults.Single(x=>x.RuleId=="PP-SPAT-002").FindingCount==0, "Missing spatial QA rule failed.");
             ProfileTests.Run();
             MeasurementTests.Run();
-            Console.WriteLine("All EngiSentry M2.2 through M4.0 tests passed.");
+            ClearanceTests.Run();
+            Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }
 

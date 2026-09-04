@@ -20,6 +20,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 1)] public string? RuleId { get; set; }
         [DataMember(Order = 2)] public bool? Enabled { get; set; }
         [DataMember(Order = 3)] public string? SeverityOverride { get; set; }
+        [DataMember(Order = 4)] public decimal? MinimumDistanceDrawingUnits { get; set; }
     }
 
     [DataContract]
@@ -27,6 +28,7 @@ namespace EngiSentry.Contracts
     {
         [DataMember(Order = 1)] public string RuleId { get; set; } = string.Empty;
         [DataMember(Order = 2)] public string Severity { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public bool DefaultEnabled { get; set; } = true;
     }
 
     [DataContract]
@@ -45,5 +47,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 3)] public string EffectiveSeverity { get; set; } = string.Empty;
         [DataMember(Order = 4)] public string EnabledSourceProfileId { get; set; } = string.Empty;
         [DataMember(Order = 5)] public string SeveritySourceProfileId { get; set; } = string.Empty;
+        [DataMember(Order = 6, EmitDefaultValue = false)] public decimal? EffectiveMinimumDistanceDrawingUnits { get; set; }
+        [DataMember(Order = 7, EmitDefaultValue = false)] public string? MinimumDistanceSourceProfileId { get; set; }
     }
 }

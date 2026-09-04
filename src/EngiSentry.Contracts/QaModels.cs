@@ -68,6 +68,24 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 24)] public List<ResolvedCoordinatePairEvidence> ResolvedCoordinatePairs { get; set; } = new List<ResolvedCoordinatePairEvidence>();
         [DataMember(Order = 25)] public GeometryAssociation? GeometryAssociation { get; set; }
         [DataMember(Order = 26)] public SpatialCoordinateConstraint? SpatialCoordinateConstraint { get; set; }
+        [DataMember(Order = 27, EmitDefaultValue = false)] public ClearanceEvidence? ClearanceEvidence { get; set; }
+    }
+
+    [DataContract]
+    public sealed class ClearanceEvidence
+    {
+        [DataMember(Order = 1)] public string MeasurementId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string PlacementId { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public string EquipmentEntityId { get; set; } = string.Empty;
+        [DataMember(Order = 4)] public string NormalizedTag { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public string SubjectKind { get; set; } = string.Empty;
+        [DataMember(Order = 6)] public string ConstraintId { get; set; } = string.Empty;
+        [DataMember(Order = 7)] public decimal MinimumDistanceDrawingUnits { get; set; }
+        [DataMember(Order = 8)] public double ActualDistance2D { get; set; }
+        [DataMember(Order = 9)] public string LabelSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 10)] public string GeometrySourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 11)] public double ClosestPointX { get; set; }
+        [DataMember(Order = 12)] public double ClosestPointY { get; set; }
     }
 
     [DataContract]

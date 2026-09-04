@@ -178,7 +178,7 @@ namespace EngiSentry.AutoCAD2021
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
-                QaReport qa = QaEngine.EvaluateWithProfile(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All, resolution);
+                QaReport qa = QaEngine.EvaluateWithProfile(index, BuiltInQaRules.All, plotPlan, ProfilePlotPlanQaRules.Create(resolution), resolution);
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during profile QA processing.");
                 string path = SnapshotFileWriter.WriteProfilePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
@@ -192,7 +192,11 @@ namespace EngiSentry.AutoCAD2021
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()
         {
-            return BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).OrderBy(x => x.RuleId, System.StringComparer.Ordinal).ToList();
+            return BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).Concat(new[]
+            {
+                new KnownQaRule { RuleId = "PP-CLEAR-001", Severity = "Warning", DefaultEnabled = false },
+                new KnownQaRule { RuleId = "PP-CLEAR-002", Severity = "Warning", DefaultEnabled = false }
+            }).OrderBy(x => x.RuleId, System.StringComparer.Ordinal).ToList();
         }
 
         private static void WriteToActiveEditor(string message, params object[] arguments)

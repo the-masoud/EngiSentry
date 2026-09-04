@@ -38,6 +38,7 @@ namespace EngiSentry.Standards
         public const string BuiltInProfileId = "engisentry.builtin.default";
         private static readonly string[] ExternalLevels = { "Company", "Client", "Project" };
         private static readonly HashSet<string> Severities = new HashSet<string>(new[] { "Info", "Warning", "Error" }, StringComparer.Ordinal);
+        private static readonly HashSet<string> ClearanceRules = new HashSet<string>(new[] { "PP-CLEAR-001", "PP-CLEAR-002" }, StringComparer.Ordinal);
 
         public static ProfileResolution Resolve(IEnumerable<KnownQaRule> knownRules, IEnumerable<EngineeringStandardProfile>? externalProfiles)
         {
@@ -46,7 +47,7 @@ namespace EngiSentry.Standards
             ValidateKnownRules(known);
             List<EngineeringStandardProfile> external = (externalProfiles ?? Enumerable.Empty<EngineeringStandardProfile>()).ToList();
             ValidateExternalProfiles(external, known);
-            var effective = known.ToDictionary(x => x.RuleId, x => new EffectiveRuleSetting { EffectiveRuleId = x.RuleId, Enabled = true, EffectiveSeverity = x.Severity, EnabledSourceProfileId = BuiltInProfileId, SeveritySourceProfileId = BuiltInProfileId }, StringComparer.Ordinal);
+            var effective = known.ToDictionary(x => x.RuleId, x => new EffectiveRuleSetting { EffectiveRuleId = x.RuleId, Enabled = x.DefaultEnabled, EffectiveSeverity = x.Severity, EnabledSourceProfileId = BuiltInProfileId, SeveritySourceProfileId = BuiltInProfileId }, StringComparer.Ordinal);
             var applied = new List<string> { BuiltInProfileId };
             foreach (string level in ExternalLevels)
             {
@@ -58,8 +59,11 @@ namespace EngiSentry.Standards
                     EffectiveRuleSetting target = effective[setting.RuleId!];
                     if (setting.Enabled.HasValue) { target.Enabled = setting.Enabled.Value; target.EnabledSourceProfileId = profile.ProfileId!; }
                     if (setting.SeverityOverride != null) { target.EffectiveSeverity = setting.SeverityOverride; target.SeveritySourceProfileId = profile.ProfileId!; }
+                    if (setting.MinimumDistanceDrawingUnits.HasValue) { target.EffectiveMinimumDistanceDrawingUnits = setting.MinimumDistanceDrawingUnits.Value; target.MinimumDistanceSourceProfileId = profile.ProfileId!; }
                 }
             }
+            foreach (EffectiveRuleSetting setting in effective.Values.Where(x => ClearanceRules.Contains(x.EffectiveRuleId) && x.Enabled && !x.EffectiveMinimumDistanceDrawingUnits.HasValue))
+                throw new ProfileValidationException("Enabled clearance rule requires MinimumDistanceDrawingUnits: " + setting.EffectiveRuleId + ".");
             return new ProfileResolution { ValidationStatus = "VALID", AppliedProfileIds = applied, EffectiveRuleSettings = effective.Values.OrderBy(x => x.EffectiveRuleId, StringComparer.Ordinal).ToList() };
         }
 
@@ -90,7 +94,9 @@ namespace EngiSentry.Standards
                 if (settings.GroupBy(x => x.RuleId!, StringComparer.Ordinal).Any(x => x.Count() != 1)) throw new ProfileValidationException("Duplicate RuleId inside profile " + profile.ProfileId + ".");
                 if (settings.Any(x => !knownIds.Contains(x.RuleId!))) throw new ProfileValidationException("Unknown RuleId.");
                 if (settings.Any(x => x.SeverityOverride != null && !Severities.Contains(x.SeverityOverride))) throw new ProfileValidationException("Invalid SeverityOverride.");
-                if (settings.Any(x => !x.Enabled.HasValue && x.SeverityOverride == null)) throw new ProfileValidationException("RuleSetting must set Enabled or SeverityOverride.");
+                if (settings.Any(x => x.MinimumDistanceDrawingUnits.HasValue && !ClearanceRules.Contains(x.RuleId!))) throw new ProfileValidationException("MinimumDistanceDrawingUnits is supported only for clearance rules.");
+                if (settings.Any(x => x.MinimumDistanceDrawingUnits.HasValue && x.MinimumDistanceDrawingUnits.Value <= 0)) throw new ProfileValidationException("MinimumDistanceDrawingUnits must be greater than zero.");
+                if (settings.Any(x => !x.Enabled.HasValue && x.SeverityOverride == null && !x.MinimumDistanceDrawingUnits.HasValue)) throw new ProfileValidationException("RuleSetting must set Enabled, SeverityOverride, or MinimumDistanceDrawingUnits.");
             }
         }
     }

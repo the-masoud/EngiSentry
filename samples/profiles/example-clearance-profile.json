@@ -1,0 +1,21 @@
+[
+  {
+    "ProfileId": "example.clearance.profile",
+    "Name": "Example Clearance Profile",
+    "Level": "Company",
+    "Source": "M5.0 test fixture only",
+    "Version": "1.0",
+    "RuleSettings": [
+      {
+        "RuleId": "PP-CLEAR-001",
+        "Enabled": true,
+        "MinimumDistanceDrawingUnits": 6000
+      },
+      {
+        "RuleId": "PP-CLEAR-002",
+        "Enabled": true,
+        "MinimumDistanceDrawingUnits": 15000
+      }
+    ]
+  }
+]

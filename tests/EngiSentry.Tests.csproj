@@ -24,6 +24,6 @@
     <ProjectReference Include="..\src\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Standards\EngiSentry.Standards.csproj" />
   </ItemGroup>
-  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
