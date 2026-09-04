@@ -139,13 +139,13 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("\n[ES_PLOTQA] START\n");
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
                 if (document == null) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
-                DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] Snapshot built\n");
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 WriteToActiveEditor("[ES_PLOTQA] Semantic model built\n");
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 WriteToActiveEditor("[ES_PLOTQA] Entity index built\n");
-                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
                 QaReport qa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
                 WriteToActiveEditor("[ES_PLOTQA] QA complete\n");
@@ -156,7 +156,8 @@ namespace EngiSentry.AutoCAD2021
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during plot-plan QA artifact creation.");
                 PlotPlanStatistics s = plotPlan.Statistics;
-                document.Editor.WriteMessage("\nEngiSentry M2.0 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nResolved Easting: {5}\nResolved Northing: {6}\nRules executed: {7}\nFindings: {8}\nPlot Plan QA report: {9}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, s.ResolvedEastingCount, s.ResolvedNorthingCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, path);
+                PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
+                document.Editor.WriteMessage("\nEngiSentry M2.1 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nGeometry primitives: {5}\nGeometry associations: {6}\nResolved geometry associations: {7}\nMissing geometry associations: {8}\nAmbiguous geometry associations: {9}\nRules executed: {10}\nFindings: {11}\nInfo: {12}\nWarnings: {13}\nErrors: {14}\nOverall status: {15}\nQA report: {16}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, g.SupportedPrimitiveCount, g.GeometryAssociationCount, g.ResolvedAssociationCount, g.MissingAssociationCount, g.AmbiguousAssociationCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.0 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }

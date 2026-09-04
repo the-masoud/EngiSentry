@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -13,6 +14,12 @@ namespace EngiSentry.AutoCAD2021.Scanning
     {
         internal static void Scan(Document document, out DrawingSnapshot snapshot)
         {
+            Scan(document, false, out snapshot, out _);
+        }
+
+        internal static void Scan(Document document, bool capturePlotGeometry, out DrawingSnapshot snapshot, out PlotGeometryCapture geometry)
+        {
+            geometry = new PlotGeometryCapture();
             int before = ReadDbMod();
             var stopwatch = Stopwatch.StartNew();
             snapshot = new DrawingSnapshot
@@ -33,7 +40,7 @@ namespace EngiSentry.AutoCAD2021.Scanning
                     ReadLayouts(database, transaction, snapshot);
                     ReadLayers(database, transaction, snapshot);
                     ReadBlocks(database, transaction, snapshot);
-                    ReadSpaces(database, transaction, snapshot);
+                    ReadSpaces(database, transaction, snapshot, capturePlotGeometry ? geometry : null);
                     ReadTextStyles(database, transaction, snapshot);
                     ReadRasterImages(database, transaction, snapshot);
                     transaction.Commit();
@@ -116,20 +123,20 @@ namespace EngiSentry.AutoCAD2021.Scanning
             }
         }
 
-        private static void ReadSpaces(Database database, Transaction transaction, DrawingSnapshot snapshot)
+        private static void ReadSpaces(Database database, Transaction transaction, DrawingSnapshot snapshot, PlotGeometryCapture? geometry)
         {
             BlockTable blocks = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
-            ReadSpace((BlockTableRecord)transaction.GetObject(blocks[BlockTableRecord.ModelSpace], OpenMode.ForRead), transaction, snapshot, true);
+            ReadSpace((BlockTableRecord)transaction.GetObject(blocks[BlockTableRecord.ModelSpace], OpenMode.ForRead), transaction, snapshot, true, geometry);
             DBDictionary layouts = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId, OpenMode.ForRead);
             foreach (DBDictionaryEntry entry in layouts)
             {
                 Layout layout = (Layout)transaction.GetObject(entry.Value, OpenMode.ForRead);
                 if (!layout.ModelType)
-                    ReadSpace((BlockTableRecord)transaction.GetObject(layout.BlockTableRecordId, OpenMode.ForRead), transaction, snapshot, false);
+                    ReadSpace((BlockTableRecord)transaction.GetObject(layout.BlockTableRecordId, OpenMode.ForRead), transaction, snapshot, false, null);
             }
         }
 
-        private static void ReadSpace(BlockTableRecord space, Transaction transaction, DrawingSnapshot snapshot, bool model)
+        private static void ReadSpace(BlockTableRecord space, Transaction transaction, DrawingSnapshot snapshot, bool model, PlotGeometryCapture? geometry)
         {
             foreach (ObjectId id in space)
             {
@@ -137,9 +144,10 @@ namespace EngiSentry.AutoCAD2021.Scanning
                 if (!(raw is Entity entity)) continue;
                 if (model) snapshot.ModelSpaceEntityCount++; else snapshot.PaperSpaceEntityCount++;
                 if (entity is BlockReference reference) ReadBlockReference(reference, transaction, snapshot);
-                else if (entity is DBText text) { snapshot.TextCount++; snapshot.TextEntities.Add(Text(text, "TEXT")); }
-                else if (entity is MText mtext) { snapshot.MTextCount++; snapshot.TextEntities.Add(Text(mtext, "MTEXT")); }
+                else if (entity is DBText text) { snapshot.TextCount++; snapshot.TextEntities.Add(Text(text, "TEXT")); if (model && geometry != null) geometry.ModelSpaceTextSources.Add(TextSource(text)); }
+                else if (entity is MText mtext) { snapshot.MTextCount++; snapshot.TextEntities.Add(Text(mtext, "MTEXT")); if (model && geometry != null) geometry.ModelSpaceTextSources.Add(TextSource(mtext)); }
                 else if (entity is Dimension dimension) { snapshot.DimensionCount++; snapshot.Dimensions.Add(new DimensionSnapshot { Handle = Handle(dimension), ObjectType = dimension.GetRXClass().DxfName, Layer = dimension.Layer, DimensionStyle = dimension.DimensionStyleName, Measurement = SafeMeasurement(dimension) }); }
+                if (model && geometry != null) { PlotGeometryPrimitive? primitive = Geometry(entity, transaction); if (primitive != null) geometry.Primitives.Add(primitive); }
             }
         }
 
@@ -157,6 +165,18 @@ namespace EngiSentry.AutoCAD2021.Scanning
 
         private static TextSnapshot Text(DBText text, string type) => new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.TextString, PositionX = text.Position.X, PositionY = text.Position.Y, PositionZ = text.Position.Z, Height = text.Height, Rotation = text.Rotation, Style = text.TextStyleName };
         private static TextSnapshot Text(MText text, string type) => new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.Contents, PositionX = text.Location.X, PositionY = text.Location.Y, PositionZ = text.Location.Z, Height = text.TextHeight, Rotation = text.Rotation, Style = text.TextStyleName };
+        private static PlotTextSourceRecord TextSource(DBText text) => new PlotTextSourceRecord { SourceHandle = Handle(text), SourceLayer = text.Layer, PositionX = text.Position.X, PositionY = text.Position.Y, PositionZ = text.Position.Z, Height = text.Height };
+        private static PlotTextSourceRecord TextSource(MText text) => new PlotTextSourceRecord { SourceHandle = Handle(text), SourceLayer = text.Layer, PositionX = text.Location.X, PositionY = text.Location.Y, PositionZ = text.Location.Z, Height = text.TextHeight };
+        private static PlotGeometryPrimitive? Geometry(Entity entity, Transaction transaction)
+        {
+            var result = new PlotGeometryPrimitive { SourceHandle = Handle(entity), SourceLayer = entity.Layer };
+            if (entity is Line line) { result.GeometryKind = "Line"; Add(result, line.StartPoint); Add(result, line.EndPoint); return result; }
+            if (entity is Polyline polyline) { if (Enumerable.Range(0, polyline.NumberOfVertices).Any(i => polyline.GetBulgeAt(i) != 0)) return null; result.GeometryKind="Polyline"; result.Closed=polyline.Closed; for(int i=0;i<polyline.NumberOfVertices;i++){Point2d p=polyline.GetPoint2dAt(i); result.Vertices.Add(new PlotGeometryVertex{X=p.X,Y=p.Y,Z=polyline.Elevation});} return result; }
+            if (entity is Polyline2d polyline2d) { result.GeometryKind="Polyline2d"; result.Closed=polyline2d.Closed; foreach(ObjectId id in polyline2d){Vertex2d v=(Vertex2d)transaction.GetObject(id,OpenMode.ForRead); if(v.Bulge!=0)return null; Add(result,v.Position);} return result; }
+            if (entity is Polyline3d polyline3d) { result.GeometryKind="Polyline3d"; result.Closed=polyline3d.Closed; foreach(ObjectId id in polyline3d){PolylineVertex3d v=(PolylineVertex3d)transaction.GetObject(id,OpenMode.ForRead);Add(result,v.Position);} return result; }
+            return null;
+        }
+        private static void Add(PlotGeometryPrimitive primitive, Point3d point) { primitive.Vertices.Add(new PlotGeometryVertex { X = point.X, Y = point.Y, Z = point.Z }); }
         private static string Handle(DBObject obj) => obj.Handle.ToString();
         private static double? SafeMeasurement(Dimension dimension) { try { return dimension.Measurement; } catch { return null; } }
 

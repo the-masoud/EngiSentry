@@ -65,6 +65,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 22)] public string? TagSourceHandle { get; set; }
         [DataMember(Order = 23)] public List<CoordinateAssociation> CoordinateAssociations { get; set; } = new List<CoordinateAssociation>();
         [DataMember(Order = 24)] public List<ResolvedCoordinatePairEvidence> ResolvedCoordinatePairs { get; set; } = new List<ResolvedCoordinatePairEvidence>();
+        [DataMember(Order = 25)] public GeometryAssociation? GeometryAssociation { get; set; }
     }
 
     [DataContract]

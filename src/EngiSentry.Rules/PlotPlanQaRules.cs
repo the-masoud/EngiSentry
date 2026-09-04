@@ -12,7 +12,7 @@ namespace EngiSentry.Rules
     }
     public static class BuiltInPlotPlanQaRules
     {
-        public static IReadOnlyList<IPlotPlanQaRule> All { get; } = new IPlotPlanQaRule[] { new IncompletePlacementRule(), new AmbiguousPlacementRule(), new ConflictingPlacementRule() }.OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();
+        public static IReadOnlyList<IPlotPlanQaRule> All { get; } = new IPlotPlanQaRule[] { new IncompletePlacementRule(), new AmbiguousPlacementRule(), new ConflictingPlacementRule(), new MissingGeometryRule(), new AmbiguousGeometryRule() }.OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();
     }
     internal abstract class PlotPlanRuleBase : IPlotPlanQaRule
     {
@@ -49,5 +49,15 @@ namespace EngiSentry.Rules
             }
             return Finish(index.EquipmentEntities.Count, findings);
         }
+    }
+    internal sealed class MissingGeometryRule : PlotPlanRuleBase
+    {
+        public override string RuleId => "PP-GEO-001"; public override string Title => "Missing Plot Geometry Association"; public override string Category => "PlotPlanGeometry"; public override string Severity => "Warning"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Missing").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has no resolved supported geometry association under the M2.1 association rules.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle })));
+    }
+    internal sealed class AmbiguousGeometryRule : PlotPlanRuleBase
+    {
+        public override string RuleId => "PP-GEO-002"; public override string Title => "Ambiguous Plot Geometry Association"; public override string Category => "PlotPlanGeometry"; public override string Severity => "Warning"; public override string Description => Title;
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Ambiguous").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has ambiguous supported geometry association evidence.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle }.Concat(x.Candidates.Select(c => c.SourceHandle)))));
     }
 }

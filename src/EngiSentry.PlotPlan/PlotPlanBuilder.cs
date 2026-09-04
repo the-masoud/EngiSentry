@@ -10,7 +10,7 @@ namespace EngiSentry.PlotPlan
         public const double MaxAssociationDistanceFactor = 30.0;
         public const double AmbiguityMarginFactor = 2.0;
 
-        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot)
+        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
             if (model == null) throw new ArgumentNullException(nameof(model));
@@ -41,7 +41,7 @@ namespace EngiSentry.PlotPlan
                 placements.Add(placement);
             }
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
-            return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
+            return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture), Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
         }
 
         private static CoordinateAssociation Associate(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all)
