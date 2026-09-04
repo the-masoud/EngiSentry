@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -8,6 +9,7 @@ using EngiSentry.AutoCAD2021.Scanning;
 using EngiSentry.Contracts;
 using EngiSentry.Semantics;
 using EngiSentry.PlotPlan;
+using EngiSentry.Standards;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -160,6 +162,37 @@ namespace EngiSentry.AutoCAD2021
                 document.Editor.WriteMessage("\nEngiSentry M2.2 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nGeometry primitives: {5}\nGeometry associations: {6}\nResolved geometry associations: {7}\nMissing geometry associations: {8}\nAmbiguous geometry associations: {9}\nSpatial constraints: {10}\nResolved spatial constraints: {11}\nMissing spatial constraints: {12}\nAmbiguous spatial constraints: {13}\nRules executed: {14}\nFindings: {15}\nInfo: {16}\nWarnings: {17}\nErrors: {18}\nOverall status: {19}\nQA report: {20}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, g.SupportedPrimitiveCount, g.GeometryAssociationCount, g.ResolvedAssociationCount, g.MissingAssociationCount, g.AmbiguousAssociationCount, g.SpatialConstraintCount, g.ResolvedSpatialConstraintCount, g.MissingSpatialConstraintCount, g.AmbiguousSpatialConstraintCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        [CommandMethod("ES_PROFILEQA")]
+        public void ProfileQa()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: no active drawing\n"); return; }
+                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nProfile JSON path: ") { AllowSpaces = true });
+                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M3.0 Profile QA Cancelled\n"); return; }
+                ProfileResolution resolution = ProfileResolver.Resolve(KnownPlotPlanRules(), ProfileJson.ReadFile(prompt.StringResult));
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
+                QaReport qa = QaEngine.EvaluateWithProfile(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All, resolution);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during profile QA processing.");
+                string path = SnapshotFileWriter.WriteProfilePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during profile QA artifact creation.");
+                document.Editor.WriteMessage("\nEngiSentry M3.0 Profile QA Complete\nDrawing: {0}\nEffective profiles: {1}\nRules executed: {2}\nFindings: {3}\nInfo: {4}\nWarnings: {5}\nErrors: {6}\nOverall status: {7}\nQA report: {8}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", string.Join(" -> ", resolution.AppliedProfileIds), qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
+            }
+            catch (ProfileValidationException exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()
+        {
+            return BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).OrderBy(x => x.RuleId, System.StringComparer.Ordinal).ToList();
         }
 
         private static void WriteToActiveEditor(string message, params object[] arguments)

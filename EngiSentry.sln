@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Rules", "src\Eng
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.PlotPlan", "src\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj", "{A7B5E2D0-6D3C-4E4A-9C0B-22A8F7B9C1D4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Standards", "src\EngiSentry.Standards\EngiSentry.Standards.csproj", "{8E3405B8-94E8-4B3E-8EB4-4B05738DB9CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -50,6 +52,10 @@ Global
 		{A7B5E2D0-6D3C-4E4A-9C0B-22A8F7B9C1D4}.Debug|x64.Build.0 = Debug|Any CPU
 		{A7B5E2D0-6D3C-4E4A-9C0B-22A8F7B9C1D4}.Release|x64.ActiveCfg = Release|Any CPU
 		{A7B5E2D0-6D3C-4E4A-9C0B-22A8F7B9C1D4}.Release|x64.Build.0 = Release|Any CPU
+		{8E3405B8-94E8-4B3E-8EB4-4B05738DB9CC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8E3405B8-94E8-4B3E-8EB4-4B05738DB9CC}.Debug|x64.Build.0 = Debug|Any CPU
+		{8E3405B8-94E8-4B3E-8EB4-4B05738DB9CC}.Release|x64.ActiveCfg = Release|Any CPU
+		{8E3405B8-94E8-4B3E-8EB4-4B05738DB9CC}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

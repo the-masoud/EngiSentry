@@ -45,9 +45,31 @@ namespace EngiSentry.Rules
             return Finalize(index, rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index)).Concat(plotPlanRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Select(x => x.Evaluate(index, plotPlan))));
         }
 
-        private static QaReport Finalize(EngineeringEntityIndex index, IEnumerable<QaRuleEvaluation> evaluations)
+        public static QaReport EvaluateWithProfile(EngineeringEntityIndex index, IEnumerable<IQaRule> rules, PlotPlanModel plotPlan, IEnumerable<IPlotPlanQaRule> plotPlanRules, ProfileResolution resolution)
         {
-            var report = new QaReport { Drawing = index.Drawing, ExecutionStatus = "Complete" };
+            if (index == null) throw new ArgumentNullException(nameof(index));
+            if (rules == null) throw new ArgumentNullException(nameof(rules));
+            if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
+            if (plotPlanRules == null) throw new ArgumentNullException(nameof(plotPlanRules));
+            if (resolution == null || resolution.ValidationStatus != "VALID") throw new ArgumentException("A valid profile resolution is required.", nameof(resolution));
+            var settings = resolution.EffectiveRuleSettings.ToDictionary(x => x.EffectiveRuleId, StringComparer.Ordinal);
+            var catalog = rules.Select(x => x.RuleId).Concat(plotPlanRules.Select(x => x.RuleId)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            if (catalog.Distinct(StringComparer.Ordinal).Count() != catalog.Count || catalog.Any(x => !settings.ContainsKey(x)) || settings.Count != catalog.Count) throw new ArgumentException("Profile resolution does not match the QA rule catalog.", nameof(resolution));
+            IEnumerable<QaRuleEvaluation> evaluations = rules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Where(x => settings[x.RuleId].Enabled).Select(x => ApplySeverity(x.Evaluate(index), settings[x.RuleId].EffectiveSeverity))
+                .Concat(plotPlanRules.OrderBy(x => x.RuleId, StringComparer.Ordinal).Where(x => settings[x.RuleId].Enabled).Select(x => ApplySeverity(x.Evaluate(index, plotPlan), settings[x.RuleId].EffectiveSeverity)));
+            return Finalize(index, evaluations, resolution);
+        }
+
+        private static QaRuleEvaluation ApplySeverity(QaRuleEvaluation evaluation, string severity)
+        {
+            evaluation.Result.Severity = severity;
+            foreach (QaFinding finding in evaluation.Findings) finding.Severity = severity;
+            return evaluation;
+        }
+
+        private static QaReport Finalize(EngineeringEntityIndex index, IEnumerable<QaRuleEvaluation> evaluations, ProfileResolution? profileResolution = null)
+        {
+            var report = new QaReport { Drawing = index.Drawing, ExecutionStatus = "Complete", ProfileResolution = profileResolution };
             foreach (QaRuleEvaluation evaluation in evaluations)
             {
                 report.RuleResults.Add(evaluation.Result);

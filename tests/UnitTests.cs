@@ -181,6 +181,7 @@ namespace EngiSentry.Tests
             spatialDuplicateModel.BoundaryLabels[1].RawText="UNIT LIMIT E 101"; bool conflictThrown=false; try { PlotSpatialBuilder.Build(spatialDuplicateModel, duplicateCapture); } catch (InvalidOperationException) { conflictThrown=true; } Assert(conflictThrown, "Conflicting duplicate spatial constraint did not fail.");
             var spatialPlan = PlotPlanBuilder.Build(new EngineeringEntityIndex(), spatialModel, new DrawingSnapshot(), spatialCapture); Assert(spatialPlan.Geometry.Statistics.SpatialConstraintCount==3 && spatialPlan.Geometry.Statistics.ResolvedSpatialConstraintCount==2 && spatialPlan.Geometry.Statistics.AmbiguousSpatialConstraintCount==1 && spatialPlan.Geometry.Statistics.MissingSpatialConstraintCount==0, "Spatial statistics construction failed.");
             var missingQa = QaEngine.Evaluate(plotIndex, BuiltInQaRules.All, new PlotPlanModel { Geometry = new PlotGeometryModel { SpatialConstraints = missingSpatial } }, BuiltInPlotPlanQaRules.All); Assert(missingQa.RuleResults.Single(x=>x.RuleId=="PP-SPAT-001").FindingCount==1 && missingQa.RuleResults.Single(x=>x.RuleId=="PP-SPAT-002").FindingCount==0, "Missing spatial QA rule failed.");
+            ProfileTests.Run();
             Console.WriteLine("All EngiSentry M2.2 tests passed.");
             return 0;
         }

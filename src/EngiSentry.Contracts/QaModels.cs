@@ -12,6 +12,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 4)] public List<QaRuleResult> RuleResults { get; set; } = new List<QaRuleResult>();
         [DataMember(Order = 5)] public List<QaFinding> Findings { get; set; } = new List<QaFinding>();
         [DataMember(Order = 6)] public QaStatistics Statistics { get; set; } = new QaStatistics();
+        [DataMember(Order = 7, EmitDefaultValue = false)] public ProfileResolution? ProfileResolution { get; set; }
     }
 
     [DataContract]

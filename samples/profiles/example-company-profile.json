@@ -1,0 +1,13 @@
+[
+  {
+    "ProfileId": "example.company.profile",
+    "Name": "Example Company Profile",
+    "Level": "Company",
+    "Source": "M3.0 example/test fixture only",
+    "Version": "1.0",
+    "RuleSettings": [
+      { "RuleId": "ENGI-EQ-003", "Enabled": false },
+      { "RuleId": "PP-SPAT-002", "SeverityOverride": "Error" }
+    ]
+  }
+]
