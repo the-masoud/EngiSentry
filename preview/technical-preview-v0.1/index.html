@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="EngiSentry Technical Preview v0.1 — local deterministic engineering QA dashboard.">
+  <title>EngiSentry | Technical Preview v0.1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="topbar container">
+    <a class="brand" href="#top" aria-label="EngiSentry home"><span class="brand-mark">ES</span><span><strong>EngiSentry</strong><small>Engineering QA &amp; Drawing Intelligence</small></span></a>
+    <span class="preview-label">Technical Preview <b>v0.1</b></span>
+  </header>
+  <main id="top" class="container">
+    <section class="hero panel">
+      <div class="hero-copy"><p class="eyebrow">LOCAL · AUTOCAD 2021 · DETERMINISTIC</p><h1>Engineering evidence,<br><em>made visible.</em></h1><p class="lede">A local technical preview of EngiSentry’s traceable drawing intelligence—built from a validated, read-only Plot Plan QA run.</p><div class="drawing-line"><span id="drawingName">—</span><i></i><span>AutoCAD 2021 x64</span><i></i><span>Read-only analysis</span></div></div>
+      <aside class="status-card"><span>Overall QA status</span><strong id="overallStatus">—</strong><small id="executionStatus">—</small><div class="status-rule"></div><p>Findings are evidence for review, not automated drawing changes.</p></aside>
+    </section>
+
+    <section class="metric-grid" aria-label="Drawing overview" id="overviewMetrics"></section>
+
+    <section class="section-intro"><p class="eyebrow">PLOT PLAN QA</p><h2>Structured evidence from a complex drawing</h2><p>Placement, geometry, and explicit spatial checks are reported separately so the review team can see exactly what needs attention.</p></section>
+    <section class="split-metrics">
+      <article class="panel overview-panel"><div class="panel-heading"><span>Equipment placement</span><b>44 occurrences</b></div><div class="placement-bars" id="placementBars"></div><div class="panel-note">Coordinate evidence is associated deterministically to each drawing-tag occurrence.</div></article>
+      <article class="panel overview-panel"><div class="panel-heading"><span>Geometry evidence</span><b>ModelSpace support</b></div><div class="geometry-numbers" id="geometryNumbers"></div><div class="panel-note">Supported geometry and label associations are kept distinct from engineering conclusions.</div></article>
+    </section>
+
+    <section class="two-column">
+      <article class="panel"><div class="section-heading"><div><p class="eyebrow">EXPLICIT SPATIAL QA</p><h2>Coordinate ↔ segment checks</h2></div><span class="tag">M2.2</span></div><div class="spatial-summary" id="spatialSummary"></div><div class="spatial-examples" id="spatialExamples"></div></article>
+      <article class="panel"><div class="section-heading"><div><p class="eyebrow">RULE SUMMARY</p><h2>15 deterministic rules</h2></div><span class="tag">Traceable</span></div><div class="rule-list" id="ruleList"></div></article>
+    </section>
+
+    <section class="panel findings-panel"><div class="section-heading findings-heading"><div><p class="eyebrow">FINDINGS</p><h2>Evidence ready for review</h2></div><span class="result-count" id="findingCount">—</span></div><div class="filter-bar"><div class="filter-group" aria-label="Severity filter"><button class="active" data-severity="All">All</button><button data-severity="Warning">Warnings</button><button data-severity="Info">Info</button></div><label>Rule <select id="ruleFilter"><option value="">All rules</option></select></label><label>Category <select id="categoryFilter"><option value="">All categories</option></select></label></div><div class="table-wrap"><table><thead><tr><th>Severity</th><th>Rule</th><th>Category</th><th>Subject</th><th>Finding</th><th>Evidence</th></tr></thead><tbody id="findingsBody"></tbody></table></div></section>
+
+    <section class="trust-grid"><article class="panel trust-card"><p class="eyebrow">SAFETY / TRUST</p><h2>Designed for careful review</h2><ul><li><b>READ-ONLY</b><span>No automatic drawing modification</span></li><li><b>DBMOD unchanged</b><span>Runtime safety evidence retained</span></li><li><b>DWG integrity preserved</b><span>Disposable fixture verified after analysis</span></li><li><b>Deterministic QA</b><span>Same evidence, repeatable results</span></li></ul></article><article class="panel direction-card"><p class="eyebrow">WHAT ENGISENTRY DEMONSTRATES TODAY</p><h2>From CAD entities to engineering evidence</h2><p>Semantic extraction turns drawing text into equipment, structural, coordinate, road, and boundary evidence. Deterministic linking then surfaces evidence consistency, coordinate association, geometry association, and explicit coordinate-to-geometry spatial validation.</p><p class="eyebrow next">NEXT PRODUCT DIRECTION</p><div class="chips"><span>Company / client / project standards</span><span>Cross-document QA</span><span>Revision intelligence</span><span>Safe assisted fixes</span><span>P&amp;ID / broader engineering QA</span></div></article></section>
+  </main>
+  <footer class="container"><span>EngiSentry Technical Preview v0.1</span><span id="provenance">Local artifact-derived preview</span></footer>
+  <script src="data.js"></script><script src="app.js"></script>
+</body>
+</html>
