@@ -108,6 +108,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 1)] public List<PlotGeometryPrimitive> Primitives { get; set; } = new List<PlotGeometryPrimitive>();
         [DataMember(Order = 2)] public List<GeometryAssociation> Associations { get; set; } = new List<GeometryAssociation>();
         [DataMember(Order = 3)] public PlotGeometryStatistics Statistics { get; set; } = new PlotGeometryStatistics();
+        [DataMember(Order = 4)] public List<SpatialCoordinateConstraint> SpatialConstraints { get; set; } = new List<SpatialCoordinateConstraint>();
     }
     [DataContract]
     public sealed class GeometryAssociation
@@ -147,5 +148,52 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 5)] public int ResolvedAssociationCount { get; set; }
         [DataMember(Order = 6)] public int MissingAssociationCount { get; set; }
         [DataMember(Order = 7)] public int AmbiguousAssociationCount { get; set; }
+        [DataMember(Order = 8)] public int SpatialConstraintCount { get; set; }
+        [DataMember(Order = 9)] public int RoadSpatialConstraintCount { get; set; }
+        [DataMember(Order = 10)] public int BoundarySpatialConstraintCount { get; set; }
+        [DataMember(Order = 11)] public int ResolvedSpatialConstraintCount { get; set; }
+        [DataMember(Order = 12)] public int MissingSpatialConstraintCount { get; set; }
+        [DataMember(Order = 13)] public int AmbiguousSpatialConstraintCount { get; set; }
+    }
+
+    [DataContract]
+    public sealed class SpatialCoordinateConstraint
+    {
+        [DataMember(Order = 1)] public string ConstraintId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string SubjectKind { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public string? LabelRawText { get; set; }
+        [DataMember(Order = 4)] public string LabelSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public string? LabelSourceLayer { get; set; }
+        [DataMember(Order = 6)] public double LabelPositionX { get; set; }
+        [DataMember(Order = 7)] public double LabelPositionY { get; set; }
+        [DataMember(Order = 8)] public double LabelPositionZ { get; set; }
+        [DataMember(Order = 9)] public string Axis { get; set; } = string.Empty;
+        [DataMember(Order = 10)] public decimal CoordinateValue { get; set; }
+        [DataMember(Order = 11)] public double AssociationScale { get; set; }
+        [DataMember(Order = 12)] public string Status { get; set; } = "Missing";
+        [DataMember(Order = 13)] public string Reason { get; set; } = string.Empty;
+        [DataMember(Order = 14)] public string? SelectedGeometryHandle { get; set; }
+        [DataMember(Order = 15)] public string? SelectedGeometryLayer { get; set; }
+        [DataMember(Order = 16)] public string? SelectedGeometryKind { get; set; }
+        [DataMember(Order = 17)] public int? SelectedSegmentIndex { get; set; }
+        [DataMember(Order = 18)] public double? SelectedDistance { get; set; }
+        [DataMember(Order = 19)] public List<SpatialGeometryCandidate> Candidates { get; set; } = new List<SpatialGeometryCandidate>();
+    }
+
+    [DataContract]
+    public sealed class SpatialGeometryCandidate
+    {
+        [DataMember(Order = 1)] public string SourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string SourceLayer { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public string GeometryKind { get; set; } = string.Empty;
+        [DataMember(Order = 4)] public int SegmentIndex { get; set; }
+        [DataMember(Order = 5)] public double SegmentStartX { get; set; }
+        [DataMember(Order = 6)] public double SegmentStartY { get; set; }
+        [DataMember(Order = 7)] public double SegmentStartZ { get; set; }
+        [DataMember(Order = 8)] public double SegmentEndX { get; set; }
+        [DataMember(Order = 9)] public double SegmentEndY { get; set; }
+        [DataMember(Order = 10)] public double SegmentEndZ { get; set; }
+        [DataMember(Order = 11)] public double Distance { get; set; }
+        [DataMember(Order = 12)] public double CoordinateDeviation { get; set; }
     }
 }
