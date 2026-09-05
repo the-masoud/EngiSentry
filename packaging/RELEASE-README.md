@@ -1,4 +1,4 @@
-# EngiSentry v1.0.0
+# EngiSentry v1.0.1
 
 Supported environment:
 
@@ -19,13 +19,15 @@ If AutoCAD displays its normal security prompt, review and approve it normally.
 
 `ENGISENTRY`, `ES_HELLO`, `ES_SCAN`, `ES_SEMANTIC`, `ES_INDEX`, `ES_QA`, `ES_PLOTQA`, `ES_PROFILEQA`, `ES_CROSSQA`, `ES_REVBASELINE`, and `ES_REVISION` are available.
 
-`ES_PROFILEQA` accepts an Engineering Standard Profile JSON file. `ES_CROSSQA` accepts an External Equipment Register CSV file. `ES_REVISION` accepts an EngiSentry revision baseline JSON file. `ES_REVBASELINE` creates a revision baseline JSON file.
+`ES_PROFILEQA` resolves the active standards profile automatically and falls back to BuiltIn rules when no external profile is installed. `ES_CROSSQA` resolves the active Equipment Register automatically. `ES_REVBASELINE` creates and activates a revision baseline; `ES_REVISION` uses the active baseline automatically.
+
+Visual Results are shown inside AutoCAD for all commands. QA findings can be selected and, when source evidence is available, `Zoom To Evidence` centers the drawing on the related object.
 
 Development/repository execution writes reports under `<repo>\artifacts\...`.
 
 Installed packaged execution writes reports under `%LOCALAPPDATA%\EngiSentry\artifacts\...`.
 
-## Validated v1.0 scope
+## Validated v1.0.1 scope
 
 EngiSentry provides CAD evidence extraction, engineering semantic extraction, deterministic QA, Plot Plan coordinate and geometry association, explicit coordinate-to-geometry validation, spatial measurements, profile-driven clearance rules, external Equipment Register cross-document QA, deterministic revision comparison, traceable evidence, and read-only execution.
 

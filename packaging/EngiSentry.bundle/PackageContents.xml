@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ApplicationPackage SchemaVersion="1.0" Name="EngiSentry" AppVersion="1.0.0" ProductCode="{5D77D81D-8A76-4F4B-9E42-4D1A0A6E3D11}" UpgradeCode="{A2B8B3E0-6F4A-4C76-9F29-3B7F1F28C2D4}" Description="Engineering QA &amp; Drawing Intelligence">
+<ApplicationPackage SchemaVersion="1.0" Name="EngiSentry" AppVersion="1.0.1" ProductCode="{5D77D81D-8A76-4F4B-9E42-4D1A0A6E3D11}" UpgradeCode="{A2B8B3E0-6F4A-4C76-9F29-3B7F1F28C2D4}" Description="Engineering QA &amp; Drawing Intelligence">
   <Components>
     <ComponentEntry AppName="EngiSentry" ModuleName="./Contents/Win64/EngiSentry.AutoCAD2021.dll" LoadReasons="LoadOnCommandInvocation" OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R24.0">
       <Commands GroupName="EngiSentry">

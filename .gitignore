@@ -16,3 +16,6 @@ artifacts/entities/
 artifacts/qa/
 artifacts/revision/
 artifacts/release/
+_project-data/
+artifacts/regression/
+artifacts/runtime-validation/

@@ -21,6 +21,8 @@ namespace EngiSentry.AutoCAD2021
         public void Hello()
         {
             WriteToActiveEditor("\nEngiSentry M0.1\nAutoCAD connection: OK\n");
+            Document? helloDocument = Application.DocumentManager?.MdiActiveDocument;
+            VisualResultsPalette.ShowHome("ES_HELLO", helloDocument, helloDocument == null ? "<none>" : System.IO.Path.GetFileName(helloDocument.Name), "READY", "Plugin loaded and AutoCAD connection is OK.");
         }
 
         [CommandMethod("ENGISENTRY")]
@@ -32,6 +34,7 @@ namespace EngiSentry.AutoCAD2021
                 if (document == null)
                 {
                     WriteToActiveEditor("\nEngiSentry\nAutoCAD connection: OK\nDrawing: <none>\nStatus: NO ACTIVE DRAWING\n");
+                    VisualResultsPalette.ShowHome("ENGISENTRY", null, "<none>", "NO ACTIVE DRAWING", "AutoCAD connection is OK.");
                     return;
                 }
 
@@ -41,10 +44,12 @@ namespace EngiSentry.AutoCAD2021
                 document.Editor.WriteMessage(
                     "\nEngiSentry\nAutoCAD connection: OK\nDrawing: {0}\nStatus: READY\n",
                     drawingName);
+                    VisualResultsPalette.ShowHome("ENGISENTRY", document, drawingName, "READY", "AutoCAD connection is OK.");
             }
             catch (System.Exception exception)
             {
                 WriteToActiveEditor("\nEngiSentry error: {0}\n", exception.Message);
+                VisualResultsPalette.ShowFailure("ENGISENTRY", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message);
             }
         }
 
@@ -57,6 +62,7 @@ namespace EngiSentry.AutoCAD2021
                 if (document == null)
                 {
                     WriteToActiveEditor("\nEngiSentry M0.2 Scan Failed\nReason: no active drawing\n");
+                    VisualResultsPalette.ShowFailure("ES_SCAN", null, "<none>", "No active drawing.");
                     return;
                 }
 
@@ -65,10 +71,12 @@ namespace EngiSentry.AutoCAD2021
                 int unresolved = 0;
                 foreach (EngiSentry.Contracts.XrefSnapshot xref in snapshot.Xrefs) if (!xref.IsResolved) unresolved++;
                 document.Editor.WriteMessage("\nEngiSentry M0.2 Scan Complete\nDrawing: {0}\nModel entities: {1}\nPaper entities: {2}\nBlocks: {3}\nBlock references: {4}\nXrefs: {5}\nUnresolved Xrefs: {6}\nSnapshot: {7}\nDBMOD unchanged: {8}\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", snapshot.ModelSpaceEntityCount, snapshot.PaperSpaceEntityCount, snapshot.BlockDefinitions.Count, snapshot.BlockReferenceCount, snapshot.Xrefs.Count, unresolved, path, snapshot.DrawingModifiedByScan ? "NO" : "YES");
+                VisualResultsPalette.ShowScan(document, snapshot, path);
             }
             catch (System.Exception exception)
             {
                 WriteToActiveEditor("\nEngiSentry M0.2 Scan Failed\nReason: {0}\n", exception.Message);
+                VisualResultsPalette.ShowFailure("ES_SCAN", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message);
             }
         }
 
@@ -78,7 +86,7 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M0.3 Semantic Extraction Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M0.3 Semantic Extraction Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_SEMANTIC", null, "<none>", "No active drawing."); return; }
                 DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
                 EngineeringDrawingModel model = SemanticExtractor.Extract(snapshot);
                 int afterExtraction = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
@@ -88,8 +96,9 @@ namespace EngiSentry.AutoCAD2021
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during semantic artifact creation.");
                 SemanticStatistics statistics = model.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M0.3 Semantic Extraction Complete\nDrawing: {0}\nEquipment tag occurrences: {1}\nUnique equipment tags: {2}\nStructure tag occurrences: {3}\nCoordinates: {4}\nElevations: {5}\nRoad labels: {6}\nBoundary labels: {7}\nEquipment list rows: {8}\nSemantic model: {9}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", statistics.EquipmentTagOccurrences, statistics.UniqueEquipmentTags, statistics.StructureTagOccurrences, statistics.CoordinateCount, statistics.ElevationCount, statistics.RoadLabelCount, statistics.BoundaryLabelCount, statistics.EquipmentListEntryCount, path);
+                VisualResultsPalette.ShowSemantic(document, snapshot, model, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M0.3 Semantic Extraction Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M0.3 Semantic Extraction Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_SEMANTIC", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_INDEX")]
@@ -98,7 +107,7 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M0.4 Entity Index Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M0.4 Entity Index Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_INDEX", null, "<none>", "No active drawing."); return; }
                 DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
@@ -109,8 +118,9 @@ namespace EngiSentry.AutoCAD2021
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during entity-index artifact creation.");
                 EntityIndexStatistics s = index.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M0.4 Entity Index Complete\nDrawing: {0}\nEquipment entities: {1}\nStructure entities: {2}\nEquipment with drawing evidence: {3}\nEquipment with list evidence: {4}\nEquipment with both: {5}\nGrouped tags: {6}\nGrouped member links: {7}\nUnresolved links: {8}\nAmbiguous links: {9}\nEntity index: {10}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentEntityCount, s.StructureEntityCount, s.EquipmentEntitiesWithDrawingEvidence, s.EquipmentEntitiesWithEquipmentListEvidence, s.EquipmentEntitiesWithBoth, s.GroupedTagCount, s.GroupedMemberLinkCount, s.UnresolvedLinkCount, s.AmbiguousLinkCount, path);
+                VisualResultsPalette.ShowIndex(document, snapshot, index, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M0.4 Entity Index Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M0.4 Entity Index Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_INDEX", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_QA")]
@@ -119,7 +129,7 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M1.0 QA Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M1.0 QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_QA", null, "<none>", "No active drawing."); return; }
                 DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
@@ -131,8 +141,9 @@ namespace EngiSentry.AutoCAD2021
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during QA artifact creation.");
                 QaStatistics s = report.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M1.0 QA Complete\nDrawing: {0}\nRules executed: {1}\nFindings: {2}\nWarnings: {3}\nErrors: {4}\nOverall status: {5}\nQA report: {6}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.RuleCount, s.TotalFindings, s.WarningFindings, s.ErrorFindings, report.OverallStatus, path);
+                VisualResultsPalette.ShowQa(document, snapshot, report, path, "ES_QA", "QA Results", "General deterministic drawing QA.");
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M1.0 QA Failed\nReason: {0}\n", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M1.0 QA Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_QA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_PLOTQA")]
@@ -142,7 +153,7 @@ namespace EngiSentry.AutoCAD2021
             {
                 WriteToActiveEditor("\n[ES_PLOTQA] START\n");
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_PLOTQA", null, "<none>", "No active drawing."); return; }
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] Snapshot built\n");
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
@@ -162,8 +173,9 @@ namespace EngiSentry.AutoCAD2021
                 PlotPlanStatistics s = plotPlan.Statistics;
                 PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M2.2 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nGeometry primitives: {5}\nGeometry associations: {6}\nResolved geometry associations: {7}\nMissing geometry associations: {8}\nAmbiguous geometry associations: {9}\nSpatial constraints: {10}\nResolved spatial constraints: {11}\nMissing spatial constraints: {12}\nAmbiguous spatial constraints: {13}\nRules executed: {14}\nFindings: {15}\nInfo: {16}\nWarnings: {17}\nErrors: {18}\nOverall status: {19}\nQA report: {20}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, g.SupportedPrimitiveCount, g.GeometryAssociationCount, g.ResolvedAssociationCount, g.MissingAssociationCount, g.AmbiguousAssociationCount, g.SpatialConstraintCount, g.ResolvedSpatialConstraintCount, g.MissingSpatialConstraintCount, g.AmbiguousSpatialConstraintCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
+                VisualResultsPalette.ShowPlotQa(document, snapshot, plotPlan, qa, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_PLOTQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_PROFILEQA")]
@@ -172,10 +184,9 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: no active drawing\n"); return; }
-                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nProfile JSON path: ") { AllowSpaces = true });
-                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M3.0 Profile QA Cancelled\n"); return; }
-                ProfileResolution resolution = ProfileResolver.Resolve(KnownPlotPlanRules(), ProfileJson.ReadFile(prompt.StringResult));
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_PROFILEQA", null, "<none>", "No active drawing."); return; }
+                string profileSource;
+                ProfileResolution resolution = ResolveAutomaticProfile(out profileSource);
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
@@ -186,10 +197,12 @@ namespace EngiSentry.AutoCAD2021
                 string path = SnapshotFileWriter.WriteProfilePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during profile QA artifact creation.");
+                document.Editor.WriteMessage("\nEngiSentry profile source: {0}\n", profileSource);
                 document.Editor.WriteMessage("\nEngiSentry M3.0 Profile QA Complete\nDrawing: {0}\nEffective profiles: {1}\nRules executed: {2}\nFindings: {3}\nInfo: {4}\nWarnings: {5}\nErrors: {6}\nOverall status: {7}\nQA report: {8}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", string.Join(" -> ", resolution.AppliedProfileIds), qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
+                VisualResultsPalette.ShowProfileQa(document, snapshot, plotPlan, qa, resolution, path);
             }
-            catch (ProfileValidationException exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}\n", exception.Message); }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (ProfileValidationException exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_PROFILEQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M3.0 Profile QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_PROFILEQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_CROSSQA")]
@@ -198,10 +211,9 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: no active drawing\n"); return; }
-                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nExternal Equipment Register CSV path: ") { AllowSpaces = true });
-                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M6.0 Cross-Document QA Cancelled\n"); return; }
-                ExternalEquipmentRegister register = ExternalEquipmentRegisterParser.ReadFile(prompt.StringResult);
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_CROSSQA", null, "<none>", "No active drawing."); return; }
+                string registerPath = ResolveAutomaticEquipmentRegister();
+                ExternalEquipmentRegister register = ExternalEquipmentRegisterParser.ReadFile(registerPath);
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
@@ -214,9 +226,10 @@ namespace EngiSentry.AutoCAD2021
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during cross-document QA artifact creation.");
                 QaStatistics s = qa.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M6.0 Cross-Document QA Complete\nExternal file: {0}\nExternal SHA256: {1}\nSource rows: {2}\nExpanded equipment identities: {3}\nRules executed: {4}\nFindings: {5}\nInfo: {6}\nWarnings: {7}\nErrors: {8}\nOverall status: {9}\nReport: {10}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", register.SourceFullPath, register.SourceSha256, register.Statistics.SourceRowCount, register.Statistics.ExpandedEquipmentCount, s.RuleCount, s.TotalFindings, s.InfoFindings, s.WarningFindings, s.ErrorFindings, qa.OverallStatus, path);
+                VisualResultsPalette.ShowCrossQa(document, snapshot, register, qa, path);
             }
-            catch (ExternalRegisterValidationException exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}\n", exception.Message); }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (ExternalRegisterValidationException exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_CROSSQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_CROSSQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_REVBASELINE")]
@@ -225,15 +238,16 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: no active drawing\n"); return; }
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_REVBASELINE", null, "<none>", "No active drawing."); return; }
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture);
                 RevisionSnapshot revision = RevisionSnapshotBuilder.Build(snapshot, index, plot);
                 int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision baseline processing.");
-                string path = SnapshotFileWriter.WriteRevisionBaseline(revision); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision baseline artifact creation.");
+                string path = SnapshotFileWriter.WriteRevisionBaseline(revision); SetActiveRevisionBaseline(path); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision baseline artifact creation.");
                 document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Baseline Complete\nEquipment count: {0}\nBaseline: {1}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", revision.Statistics.EquipmentCount, path);
+                VisualResultsPalette.ShowRevisionBaseline(document, snapshot, revision, path);
             }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Baseline Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_REVBASELINE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         [CommandMethod("ES_REVISION")]
@@ -242,19 +256,81 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
-                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: no active drawing\n"); return; }
-                PromptResult prompt = document.Editor.GetString(new PromptStringOptions("\nRevision baseline JSON path: ") { AllowSpaces = true });
-                if (prompt.Status != PromptStatus.OK) { document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Cancelled\n"); return; }
-                string sha256; RevisionSnapshot baseline = RevisionSnapshotFile.Read(prompt.StringResult, out sha256);
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_REVISION", null, "<none>", "No active drawing."); return; }
+                string baselinePath = ResolveAutomaticRevisionBaseline();
+                string sha256; RevisionSnapshot baseline = RevisionSnapshotFile.Read(baselinePath, out sha256);
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture); RevisionSnapshot current = RevisionSnapshotBuilder.Build(snapshot, index, plot);
-                RevisionComparisonReport report = RevisionComparer.Compare(baseline, current, System.IO.Path.GetFileName(prompt.StringResult), prompt.StringResult, sha256);
+                RevisionComparisonReport report = RevisionComparer.Compare(baseline, current, System.IO.Path.GetFileName(baselinePath), baselinePath, sha256);
                 int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision processing.");
                 string path = SnapshotFileWriter.WriteRevisionComparison(report, snapshot.FileName, snapshot.ScanTimestampUtc); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision artifact creation.");
-                RevisionComparisonStatistics s = report.Statistics; document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Complete\nBaseline file: {0}\nBaseline SHA256: {1}\nBaseline equipment: {2}\nCurrent equipment: {3}\nAdded: {4}\nRemoved: {5}\nCoordinate changed: {6}\nAttribute changed: {7}\nChanged equipment: {8}\nUnchanged equipment: {9}\nTotal changes: {10}\nReport: {11}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", prompt.StringResult, sha256, s.BaselineEquipmentCount, s.CurrentEquipmentCount, s.AddedEquipmentCount, s.RemovedEquipmentCount, s.CoordinateChangedEquipmentCount, s.AttributeChangedEquipmentCount, s.ChangedEquipmentCount, s.UnchangedEquipmentCount, s.TotalChangeCount, path);
+                RevisionComparisonStatistics s = report.Statistics; document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Complete\nBaseline file: {0}\nBaseline SHA256: {1}\nBaseline equipment: {2}\nCurrent equipment: {3}\nAdded: {4}\nRemoved: {5}\nCoordinate changed: {6}\nAttribute changed: {7}\nChanged equipment: {8}\nUnchanged equipment: {9}\nTotal changes: {10}\nReport: {11}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", baselinePath, sha256, s.BaselineEquipmentCount, s.CurrentEquipmentCount, s.AddedEquipmentCount, s.RemovedEquipmentCount, s.CoordinateChangedEquipmentCount, s.AttributeChangedEquipmentCount, s.ChangedEquipmentCount, s.UnchangedEquipmentCount, s.TotalChangeCount, path);
+                VisualResultsPalette.ShowRevision(document, snapshot, report, path);
             }
-            catch (RevisionValidationException exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}\n", exception.Message); }
-            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+            catch (RevisionValidationException exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_REVISION", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_REVISION", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
+        private static string ResolveAutomaticEquipmentRegister()
+        {
+            Document? document = Application.DocumentManager?.MdiActiveDocument;
+            string drawingDirectory = document == null ? string.Empty : (System.IO.Path.GetDirectoryName(document.Name) ?? string.Empty);
+            string projectRegister = string.IsNullOrWhiteSpace(drawingDirectory) ? string.Empty : System.IO.Path.Combine(drawingDirectory, "EngiSentry", "active-equipment-register.csv");
+            string localRegister = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "references", "active-equipment-register.csv");
+            string assemblyDirectory = System.IO.Path.GetDirectoryName(typeof(Commands).Assembly.Location) ?? string.Empty;
+            string bundledRegister = System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDirectory, "..", "Data", "active-equipment-register.csv"));
+            string[] candidates = new[] { projectRegister, localRegister, bundledRegister };
+            foreach (string candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate) && System.IO.File.Exists(candidate)) return candidate;
+            }
+            throw new ExternalRegisterValidationException("No active Equipment Register is configured. Ask the EngiSentry administrator to install the project register.");
+        }
+
+        private static void SetActiveRevisionBaseline(string baselinePath)
+        {
+            string stateDirectory = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "revision");
+            System.IO.Directory.CreateDirectory(stateDirectory);
+            string pointerPath = System.IO.Path.Combine(stateDirectory, "active-baseline.path");
+            System.IO.File.WriteAllText(pointerPath, System.IO.Path.GetFullPath(baselinePath));
+        }
+
+        private static string ResolveAutomaticRevisionBaseline()
+        {
+            string localRoot = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry");
+            string pointerPath = System.IO.Path.Combine(localRoot, "revision", "active-baseline.path");
+            if (System.IO.File.Exists(pointerPath))
+            {
+                string pointed = System.IO.File.ReadAllText(pointerPath).Trim();
+                if (!string.IsNullOrWhiteSpace(pointed) && System.IO.File.Exists(pointed)) return pointed;
+            }
+
+            string artifactDirectory = System.IO.Path.Combine(localRoot, "artifacts", "revision");
+            if (System.IO.Directory.Exists(artifactDirectory))
+            {
+                string? latest = System.IO.Directory.GetFiles(artifactDirectory, "*.revision.baseline.json", System.IO.SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
+                    .ThenByDescending(x => x, System.StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(latest)) return latest;
+            }
+            throw new RevisionValidationException("No revision baseline is available. Run ES_REVBASELINE on the reference revision first.");
+        }
+
+        private static ProfileResolution ResolveAutomaticProfile(out string profileSource)
+        {
+            string localProfile = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "profiles", "active-profiles.json");
+            string assemblyDirectory = System.IO.Path.GetDirectoryName(typeof(Commands).Assembly.Location) ?? string.Empty;
+            string bundledProfile = System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDirectory, "..", "Profiles", "active-profiles.json"));
+            string[] candidates = new[] { localProfile, bundledProfile };
+            foreach (string candidate in candidates)
+            {
+                if (!System.IO.File.Exists(candidate)) continue;
+                profileSource = candidate;
+                return ProfileResolver.Resolve(KnownPlotPlanRules(), ProfileJson.ReadFile(candidate));
+            }
+            profileSource = "BuiltIn only (no active external profile installed)";
+            return ProfileResolver.Resolve(KnownPlotPlanRules(), null);
         }
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()
