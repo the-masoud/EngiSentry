@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -242,6 +244,7 @@ namespace EngiSentry.AutoCAD2021
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture);
                 RevisionSnapshot revision = RevisionSnapshotBuilder.Build(snapshot, index, plot);
+                if (revision.Statistics.EquipmentCount == 0) throw new RevisionValidationException("INSUFFICIENT_EVIDENCE: no drawing-backed equipment identities were detected, so a trustworthy revision baseline cannot be created.");
                 int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision baseline processing.");
                 string path = SnapshotFileWriter.WriteRevisionBaseline(revision); SetActiveRevisionBaseline(path); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision baseline artifact creation.");
                 document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Baseline Complete\nEquipment count: {0}\nBaseline: {1}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", revision.Statistics.EquipmentCount, path);
@@ -261,10 +264,11 @@ namespace EngiSentry.AutoCAD2021
                 string sha256; RevisionSnapshot baseline = RevisionSnapshotFile.Read(baselinePath, out sha256);
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot); EngineeringEntityIndex index = EntityIndexer.Build(semantic); PlotPlanModel plot = PlotPlanBuilder.Build(index, semantic, snapshot, capture); RevisionSnapshot current = RevisionSnapshotBuilder.Build(snapshot, index, plot);
+                if (baseline.Statistics.EquipmentCount == 0 || current.Statistics.EquipmentCount == 0) throw new RevisionValidationException("INSUFFICIENT_EVIDENCE: baseline and current drawings must both contain drawing-backed equipment identities before revision changes can be trusted.");
                 RevisionComparisonReport report = RevisionComparer.Compare(baseline, current, System.IO.Path.GetFileName(baselinePath), baselinePath, sha256);
                 int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during revision processing.");
                 string path = SnapshotFileWriter.WriteRevisionComparison(report, snapshot.FileName, snapshot.ScanTimestampUtc); int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture); if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during revision artifact creation.");
-                RevisionComparisonStatistics s = report.Statistics; document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Complete\nBaseline file: {0}\nBaseline SHA256: {1}\nBaseline equipment: {2}\nCurrent equipment: {3}\nAdded: {4}\nRemoved: {5}\nCoordinate changed: {6}\nAttribute changed: {7}\nChanged equipment: {8}\nUnchanged equipment: {9}\nTotal changes: {10}\nReport: {11}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", baselinePath, sha256, s.BaselineEquipmentCount, s.CurrentEquipmentCount, s.AddedEquipmentCount, s.RemovedEquipmentCount, s.CoordinateChangedEquipmentCount, s.AttributeChangedEquipmentCount, s.ChangedEquipmentCount, s.UnchangedEquipmentCount, s.TotalChangeCount, path);
+                RevisionComparisonStatistics s = report.Statistics; RevisionLineageAssessment lineage = RevisionLineageAssessor.Assess(report.Baseline, report.Current); document.Editor.WriteMessage("\nEngiSentry M7.0 Revision Complete\nBaseline file: {0}\nBaseline SHA256: {1}\nBaseline equipment: {2}\nCurrent equipment: {3}\nAdded: {4}\nRemoved: {5}\nCoordinate changed: {6}\nAttribute changed: {7}\nChanged equipment: {8}\nUnchanged equipment: {9}\nTotal changes: {10}\nRevision lineage: {11}\nIdentity overlap: {12}% ({13}/{14})\nReport: {15}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", baselinePath, sha256, s.BaselineEquipmentCount, s.CurrentEquipmentCount, s.AddedEquipmentCount, s.RemovedEquipmentCount, s.CoordinateChangedEquipmentCount, s.AttributeChangedEquipmentCount, s.ChangedEquipmentCount, s.UnchangedEquipmentCount, s.TotalChangeCount, lineage.Confidence, lineage.IdentityOverlapPercent, lineage.CommonIdentityCount, lineage.UnionIdentityCount, path);
                 VisualResultsPalette.ShowRevision(document, snapshot, report, path);
             }
             catch (RevisionValidationException exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}\n", exception.Message);  VisualResultsPalette.ShowFailure("ES_REVISION", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
@@ -274,25 +278,24 @@ namespace EngiSentry.AutoCAD2021
         private static string ResolveAutomaticEquipmentRegister()
         {
             Document? document = Application.DocumentManager?.MdiActiveDocument;
-            string drawingDirectory = document == null ? string.Empty : (System.IO.Path.GetDirectoryName(document.Name) ?? string.Empty);
-            string projectRegister = string.IsNullOrWhiteSpace(drawingDirectory) ? string.Empty : System.IO.Path.Combine(drawingDirectory, "EngiSentry", "active-equipment-register.csv");
-            string localRegister = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "references", "active-equipment-register.csv");
-            string assemblyDirectory = System.IO.Path.GetDirectoryName(typeof(Commands).Assembly.Location) ?? string.Empty;
-            string bundledRegister = System.IO.Path.GetFullPath(System.IO.Path.Combine(assemblyDirectory, "..", "Data", "active-equipment-register.csv"));
-            string[] candidates = new[] { projectRegister, localRegister, bundledRegister };
-            foreach (string candidate in candidates)
+            string drawingPath = document == null ? string.Empty : document.Name;
+            string drawingDirectory = string.IsNullOrWhiteSpace(drawingPath) ? string.Empty : (System.IO.Path.GetDirectoryName(drawingPath) ?? string.Empty);
+            string drawingBaseName = string.IsNullOrWhiteSpace(drawingPath) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(drawingPath);
+            string[] candidates = string.IsNullOrWhiteSpace(drawingDirectory) ? new string[0] : new[]
             {
-                if (!string.IsNullOrWhiteSpace(candidate) && System.IO.File.Exists(candidate)) return candidate;
-            }
-            throw new ExternalRegisterValidationException("No active Equipment Register is configured. Ask the EngiSentry administrator to install the project register.");
+                System.IO.Path.Combine(drawingDirectory, "EngiSentry", "active-equipment-register.csv"),
+                System.IO.Path.Combine(drawingDirectory, drawingBaseName + ".equipment-register.csv"),
+                System.IO.Path.Combine(drawingDirectory, "active-equipment-register.csv")
+            };
+            foreach (string candidate in candidates) if (System.IO.File.Exists(candidate)) return candidate;
+            throw new ExternalRegisterValidationException("No Equipment Register is linked to this drawing/project. ES_CROSSQA will not use a global or test register because that could create false findings. Add a project register under <drawing folder>\\EngiSentry\\active-equipment-register.csv or a drawing-specific <drawing name>.equipment-register.csv.");
         }
 
         private static void SetActiveRevisionBaseline(string baselinePath)
         {
             string stateDirectory = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "revision");
             System.IO.Directory.CreateDirectory(stateDirectory);
-            string pointerPath = System.IO.Path.Combine(stateDirectory, "active-baseline.path");
-            System.IO.File.WriteAllText(pointerPath, System.IO.Path.GetFullPath(baselinePath));
+            System.IO.File.WriteAllText(System.IO.Path.Combine(stateDirectory, "active-baseline.path"), System.IO.Path.GetFullPath(baselinePath));
         }
 
         private static string ResolveAutomaticRevisionBaseline()
@@ -304,17 +307,7 @@ namespace EngiSentry.AutoCAD2021
                 string pointed = System.IO.File.ReadAllText(pointerPath).Trim();
                 if (!string.IsNullOrWhiteSpace(pointed) && System.IO.File.Exists(pointed)) return pointed;
             }
-
-            string artifactDirectory = System.IO.Path.Combine(localRoot, "artifacts", "revision");
-            if (System.IO.Directory.Exists(artifactDirectory))
-            {
-                string? latest = System.IO.Directory.GetFiles(artifactDirectory, "*.revision.baseline.json", System.IO.SearchOption.TopDirectoryOnly)
-                    .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
-                    .ThenByDescending(x => x, System.StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(latest)) return latest;
-            }
-            throw new RevisionValidationException("No revision baseline is available. Run ES_REVBASELINE on the reference revision first.");
+            throw new RevisionValidationException("No active revision baseline is available. Open the reference revision and run ES_REVBASELINE first.");
         }
 
         private static ProfileResolution ResolveAutomaticProfile(out string profileSource)
@@ -356,6 +349,15 @@ namespace EngiSentry.AutoCAD2021
             {
                 System.Diagnostics.Debug.WriteLine("EngiSentry command output error: " + exception);
             }
+        }
+    }
+
+    internal static class AutoCADHostBoundary
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        internal static bool IsCoreConsole()
+        {
+            return string.Equals(Process.GetCurrentProcess().ProcessName, "accoreconsole", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

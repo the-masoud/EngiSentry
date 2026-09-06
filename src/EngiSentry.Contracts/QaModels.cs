@@ -130,5 +130,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 5)] public int InfoFindings { get; set; }
         [DataMember(Order = 6)] public int WarningFindings { get; set; }
         [DataMember(Order = 7)] public int ErrorFindings { get; set; }
+        [DataMember(Order = 8)] public int RulesNotApplicable { get; set; }
+        [DataMember(Order = 9)] public int RulesInsufficientEvidence { get; set; }
     }
 }

@@ -19,6 +19,7 @@ namespace EngiSentry.Rules
         public abstract string RuleId { get; } public abstract string Title { get; } public abstract string Category { get; } public abstract string Severity { get; } public abstract string Description { get; }
         public abstract QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan);
         protected QaRuleEvaluation Finish(int count, IEnumerable<QaFinding> findings) { var list = findings.ToList(); return new QaRuleEvaluation(new QaRuleResult { RuleId = RuleId, Severity = Severity, EvaluatedSubjectCount = count, FindingCount = list.Count, Status = list.Count == 0 ? "PASS" : "FINDINGS" }, list); }
+        protected QaRuleEvaluation NotApplicable() => new QaRuleEvaluation(new QaRuleResult { RuleId = RuleId, Severity = Severity, EvaluatedSubjectCount = 0, FindingCount = 0, Status = "NOT_APPLICABLE" }, Array.Empty<QaFinding>());
         protected QaFinding Finding(string id, string type, string subject, string message, QaEvidence evidence, IEnumerable<string> handles) => new QaFinding { FindingId = id, RuleId = RuleId, Severity = Severity, Category = Category, SubjectType = type, SubjectId = subject, Message = message, Evidence = evidence, SourceHandles = handles.Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal).ToList() };
         protected static QaEvidence Evidence(EquipmentPlacement p) => new QaEvidence { PlacementId = p.PlacementId, EquipmentEntityId = p.EquipmentEntityId, NormalizedTag = p.NormalizedTag, TagSourceHandle = p.TagSourceHandle, CoordinateAssociations = new List<CoordinateAssociation> { p.Easting, p.Northing } };
         protected static IEnumerable<string> Handles(EquipmentPlacement p, bool candidates) => new[] { p.TagSourceHandle }.Concat(new[] { p.Easting, p.Northing }.SelectMany(a => candidates ? a.Candidates.Select(c => c.SourceHandle) : new[] { a.SelectedSourceHandle ?? string.Empty }));
@@ -26,12 +27,12 @@ namespace EngiSentry.Rules
     internal sealed class IncompletePlacementRule : PlotPlanRuleBase
     {
         public override string RuleId => "PP-COORD-001"; public override string Title => "Incomplete Equipment Placement"; public override string Category => "PlotPlanPlacement"; public override string Severity => "Warning"; public override string Description => Title;
-        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.EquipmentPlacements.Count, plotPlan.EquipmentPlacements.Where(p => p.PlacementStatus == "Incomplete").Select(p => Finding(RuleId + ":" + p.PlacementId, "EquipmentPlacement", p.PlacementId, "Equipment placement is incomplete because one or more coordinates could not be resolved.", Evidence(p), Handles(p, false))));
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => plotPlan.EquipmentPlacements.Count == 0 ? NotApplicable() : Finish(plotPlan.EquipmentPlacements.Count, plotPlan.EquipmentPlacements.Where(p => p.PlacementStatus == "Incomplete").Select(p => Finding(RuleId + ":" + p.PlacementId, "EquipmentPlacement", p.PlacementId, "Equipment placement is incomplete because one or more coordinates could not be resolved.", Evidence(p), Handles(p, false))));
     }
     internal sealed class AmbiguousPlacementRule : PlotPlanRuleBase
     {
         public override string RuleId => "PP-COORD-002"; public override string Title => "Ambiguous Equipment Placement"; public override string Category => "PlotPlanPlacement"; public override string Severity => "Warning"; public override string Description => Title;
-        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.EquipmentPlacements.Count, plotPlan.EquipmentPlacements.Where(p => p.PlacementStatus == "Ambiguous").Select(p => Finding(RuleId + ":" + p.PlacementId, "EquipmentPlacement", p.PlacementId, "Equipment placement has ambiguous coordinate evidence.", Evidence(p), Handles(p, true))));
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => plotPlan.EquipmentPlacements.Count == 0 ? NotApplicable() : Finish(plotPlan.EquipmentPlacements.Count, plotPlan.EquipmentPlacements.Where(p => p.PlacementStatus == "Ambiguous").Select(p => Finding(RuleId + ":" + p.PlacementId, "EquipmentPlacement", p.PlacementId, "Equipment placement has ambiguous coordinate evidence.", Evidence(p), Handles(p, true))));
     }
     internal sealed class ConflictingPlacementRule : PlotPlanRuleBase
     {
@@ -53,18 +54,18 @@ namespace EngiSentry.Rules
     internal sealed class MissingGeometryRule : PlotPlanRuleBase
     {
         public override string RuleId => "PP-GEO-001"; public override string Title => "Missing Plot Geometry Association"; public override string Category => "PlotPlanGeometry"; public override string Severity => "Warning"; public override string Description => Title;
-        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Missing").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has no resolved supported geometry association under the M2.1 association rules.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle })));
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => plotPlan.Geometry.Associations.Count == 0 ? NotApplicable() : Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Missing").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has no resolved supported geometry association under the M2.1 association rules.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle })));
     }
     internal sealed class AmbiguousGeometryRule : PlotPlanRuleBase
     {
         public override string RuleId => "PP-GEO-002"; public override string Title => "Ambiguous Plot Geometry Association"; public override string Category => "PlotPlanGeometry"; public override string Severity => "Warning"; public override string Description => Title;
-        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Ambiguous").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has ambiguous supported geometry association evidence.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle }.Concat(x.Candidates.Select(c => c.SourceHandle)))));
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => plotPlan.Geometry.Associations.Count == 0 ? NotApplicable() : Finish(plotPlan.Geometry.Associations.Count, plotPlan.Geometry.Associations.Where(x => x.Status == "Ambiguous").Select(x => Finding(RuleId + ":" + x.AssociationId, "PlotGeometryLabel", x.AssociationId, "Plot geometry label has ambiguous supported geometry association evidence.", new QaEvidence { GeometryAssociation = x }, new[] { x.LabelSourceHandle }.Concat(x.Candidates.Select(c => c.SourceHandle)))));
     }
 
     internal sealed class MissingSpatialRule : PlotPlanRuleBase
     {
         public override string RuleId => "PP-SPAT-001"; public override string Title => "Missing Explicit Spatial Geometry Match"; public override string Category => "PlotPlanSpatialConsistency"; public override string Severity => "Warning"; public override string Description => Title;
-        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => Finish(plotPlan.Geometry.SpatialConstraints.Count, plotPlan.Geometry.SpatialConstraints.Where(x => x.Status == "Missing").Select(x => Finding(RuleId + ":" + x.ConstraintId, "SpatialCoordinateConstraint", x.ConstraintId, "Explicit Plot Plan coordinate annotation has no resolved supported local geometry match.", new QaEvidence { SpatialCoordinateConstraint = x }, new[] { x.LabelSourceHandle })));
+        public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan) => plotPlan.Geometry.SpatialConstraints.Count == 0 ? NotApplicable() : Finish(plotPlan.Geometry.SpatialConstraints.Count, plotPlan.Geometry.SpatialConstraints.Where(x => x.Status == "Missing").Select(x => Finding(RuleId + ":" + x.ConstraintId, "SpatialCoordinateConstraint", x.ConstraintId, "Explicit Plot Plan coordinate annotation has no resolved supported local geometry match.", new QaEvidence { SpatialCoordinateConstraint = x }, new[] { x.LabelSourceHandle })));
     }
 
     internal sealed class AmbiguousSpatialRule : PlotPlanRuleBase
@@ -72,6 +73,7 @@ namespace EngiSentry.Rules
         public override string RuleId => "PP-SPAT-002"; public override string Title => "Ambiguous Explicit Spatial Geometry Match"; public override string Category => "PlotPlanSpatialConsistency"; public override string Severity => "Warning"; public override string Description => Title;
         public override QaRuleEvaluation Evaluate(EngineeringEntityIndex index, PlotPlanModel plotPlan)
         {
+                        if (plotPlan.Geometry.SpatialConstraints.Count == 0) return NotApplicable();
             IEnumerable<QaFinding> findings = plotPlan.Geometry.SpatialConstraints.Where(x => x.Status == "Ambiguous").Select(x => Finding(RuleId + ":" + x.ConstraintId, "SpatialCoordinateConstraint", x.ConstraintId, "Explicit Plot Plan coordinate annotation has multiple plausible supported geometry matches.", new QaEvidence { SpatialCoordinateConstraint = x }, new[] { x.LabelSourceHandle }.Concat(x.Candidates.Select(c => c.SourceHandle))));
             return Finish(plotPlan.Geometry.SpatialConstraints.Count, findings);
         }

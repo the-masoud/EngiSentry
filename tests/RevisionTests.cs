@@ -22,9 +22,18 @@ namespace EngiSentry.Tests
             RevisionComparisonReport report = RevisionComparer.Compare(current, changed, "base.json", "base.json", "ABC");
             Assert(report.Statistics.AddedEquipmentCount == 1 && report.Statistics.RemovedEquipmentCount == 0 && report.Statistics.CoordinateChangedEquipmentCount == 1 && report.Statistics.AttributeChangedEquipmentCount == 1, "Revision comparison changes failed.");
             Assert(report.Changes.Any(x => x.ChangeKind == "EquipmentAdded") && report.Changes.Any(x => x.ChangeKind == "EquipmentCoordinateEvidenceChanged") && report.Changes.Any(x => x.ChangeKind == "EquipmentAttributeEvidenceChanged"), "Revision change kinds failed.");
-            bool unitsRejected = false;
-            try { RevisionComparer.Compare(current, new RevisionSnapshot { Drawing = new RevisionDrawing { InsertionUnits = "Other" } }, "", "", ""); } catch (RevisionValidationException) { unitsRejected = true; }
-            Assert(unitsRejected, "Insertion unit mismatch was accepted.");
+            RevisionLineageAssessment mediumLineage = RevisionLineageAssessor.Assess(current, changed);
+            Assert(mediumLineage.Confidence == "MEDIUM" && mediumLineage.CommonIdentityCount == 1 && mediumLineage.UnionIdentityCount == 2 && mediumLineage.IdentityOverlapPercent == 50m, "Revision lineage MEDIUM assessment failed.");
+            RevisionLineageAssessment highLineage = RevisionLineageAssessor.Assess(current, current);
+            Assert(highLineage.Confidence == "HIGH" && highLineage.IdentityOverlapPercent == 100m, "Revision lineage HIGH assessment failed.");
+            var unrelated = new RevisionSnapshot { Drawing = new RevisionDrawing(), Equipment = { new RevisionEquipmentRecord { EquipmentCanonicalId = "equipment:OTHER-1", NormalizedTag = "OTHER-1" } } };
+            RevisionLineageAssessment lowLineage = RevisionLineageAssessor.Assess(current, unrelated);
+            Assert(lowLineage.Confidence == "LOW" && lowLineage.CommonIdentityCount == 0 && lowLineage.IdentityOverlapPercent == 0m, "Revision lineage LOW assessment failed.");
+            RevisionLineageAssessment insufficientLineage = RevisionLineageAssessor.Assess(new RevisionSnapshot(), new RevisionSnapshot());
+            Assert(insufficientLineage.Confidence == "INSUFFICIENT_EVIDENCE", "Revision lineage insufficient-evidence assessment failed.");
+            var differentUnits = new RevisionSnapshot { Drawing = new RevisionDrawing { InsertionUnits = "Other" } };
+            RevisionComparisonReport differentUnitReport = RevisionComparer.Compare(current, differentUnits, "", "", "");
+            Assert(differentUnitReport != null, "Insertion unit metadata unexpectedly blocked revision comparison.");
         }
     }
 }

@@ -13,6 +13,30 @@ namespace EngiSentry.Revision
         public RevisionValidationException(string message) : base(message) { }
     }
 
+    public sealed class RevisionLineageAssessment
+    {
+        public string Confidence { get; set; } = "INSUFFICIENT_EVIDENCE";
+        public int CommonIdentityCount { get; set; }
+        public int UnionIdentityCount { get; set; }
+        public decimal IdentityOverlapPercent { get; set; }
+    }
+
+    public static class RevisionLineageAssessor
+    {
+        public static RevisionLineageAssessment Assess(RevisionSnapshot baseline, RevisionSnapshot current)
+        {
+            if (baseline == null) throw new ArgumentNullException(nameof(baseline));
+            if (current == null) throw new ArgumentNullException(nameof(current));
+            var baselineIds = new HashSet<string>((baseline.Equipment ?? new List<RevisionEquipmentRecord>()).Select(x => x.EquipmentCanonicalId).Where(x => !string.IsNullOrWhiteSpace(x)), StringComparer.Ordinal);
+            var currentIds = new HashSet<string>((current.Equipment ?? new List<RevisionEquipmentRecord>()).Select(x => x.EquipmentCanonicalId).Where(x => !string.IsNullOrWhiteSpace(x)), StringComparer.Ordinal);
+            int common = baselineIds.Intersect(currentIds).Count();
+            int union = baselineIds.Union(currentIds).Count();
+            decimal overlap = union == 0 ? 0m : decimal.Round(common * 100m / union, 1, MidpointRounding.AwayFromZero);
+            string confidence = union == 0 ? "INSUFFICIENT_EVIDENCE" : overlap >= 80m ? "HIGH" : overlap >= 50m ? "MEDIUM" : "LOW";
+            return new RevisionLineageAssessment { Confidence = confidence, CommonIdentityCount = common, UnionIdentityCount = union, IdentityOverlapPercent = overlap };
+        }
+    }
+
     public static class RevisionSnapshotBuilder
     {
         public static RevisionSnapshot Build(DrawingSnapshot snapshot, EngineeringEntityIndex index, PlotPlanModel plotPlan)
@@ -69,7 +93,6 @@ namespace EngiSentry.Revision
         public static RevisionComparisonReport Compare(RevisionSnapshot baseline, RevisionSnapshot current, string fileName, string fullPath, string sha256)
         {
             RevisionSnapshotFile.Validate(baseline); RevisionSnapshotFile.Validate(current);
-            if (!string.IsNullOrWhiteSpace(baseline.Drawing.InsertionUnits) && !string.IsNullOrWhiteSpace(current.Drawing.InsertionUnits) && !string.Equals(baseline.Drawing.InsertionUnits, current.Drawing.InsertionUnits, StringComparison.OrdinalIgnoreCase)) throw new RevisionValidationException("drawing insertion units differ");
             var b = baseline.Equipment.ToDictionary(x => x.EquipmentCanonicalId, StringComparer.Ordinal); var c = current.Equipment.ToDictionary(x => x.EquipmentCanonicalId, StringComparer.Ordinal); var changes = new List<RevisionChangeRecord>(); var changedIds = new HashSet<string>(StringComparer.Ordinal); int coordinate = 0, attributes = 0, unchanged = 0;
             foreach (string id in b.Keys.Union(c.Keys).OrderBy(x => x, StringComparer.Ordinal))
             {

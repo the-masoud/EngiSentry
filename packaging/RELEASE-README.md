@@ -1,4 +1,4 @@
-# EngiSentry v1.0.1
+# EngiSentry v1.1.0
 
 Supported environment:
 
@@ -27,9 +27,11 @@ Development/repository execution writes reports under `<repo>\artifacts\...`.
 
 Installed packaged execution writes reports under `%LOCALAPPDATA%\EngiSentry\artifacts\...`.
 
-## Validated v1.0.1 scope
+## Validated v1.1.0 scope
 
 EngiSentry provides CAD evidence extraction, engineering semantic extraction, deterministic QA, Plot Plan coordinate and geometry association, explicit coordinate-to-geometry validation, spatial measurements, profile-driven clearance rules, external Equipment Register cross-document QA, deterministic revision comparison, traceable evidence, and read-only execution.
+
+Version 1.1.0 hardens visible nested Model-space evidence extraction, excludes Paper-space Road/Boundary legend evidence, adds deterministic fail-closed Road/Boundary geometry association, strengthens revision baseline trust, scopes CrossQA registers to the active drawing/project, and improves Results evidence navigation.
 
 EngiSentry does not modify or save the analyzed DWG.
 

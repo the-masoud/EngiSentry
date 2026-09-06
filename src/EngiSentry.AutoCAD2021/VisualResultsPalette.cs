@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,20 +6,19 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Windows;
 using EngiSentry.Contracts;
+using EngiSentry.Revision;
 
 namespace EngiSentry.AutoCAD2021
 {
     internal static class VisualResultsPalette
     {
-        private static PaletteSet palette;
-        private static VisualResultsControl control;
-
         public static void ShowHome(string command, Document document, string drawing, string status, string detail)
         {
             Publish(new VisualResultsData
@@ -248,18 +247,42 @@ namespace EngiSentry.AutoCAD2021
         public static void ShowRevision(Document document, DrawingSnapshot snapshot, RevisionComparisonReport report, string outputPath)
         {
             RevisionComparisonStatistics s = report.Statistics;
+            RevisionLineageAssessment lineage = RevisionLineageAssessor.Assess(report.Baseline, report.Current);
+            string overlap = lineage.IdentityOverlapPercent.ToString("0.#", CultureInfo.InvariantCulture) + "%";
+            string lineageLabel = lineage.Confidence.Replace("_", " ");
+            string statusDetail = s.TotalChangeCount == 0 ? "No engineering changes detected" : "Baseline comparison completed";
+            string note = s.TotalChangeCount == 0
+                ? "Baseline and current drawing match for all tracked revision evidence."
+                : "Review the detected engineering changes below.";
+            if (string.Equals(lineage.Confidence, "LOW", StringComparison.Ordinal))
+            {
+                statusDetail += " | LOW lineage confidence (" + overlap + " identity overlap)";
+                note = "These drawings may not be revisions of the same engineering drawing. Comparison completed; engineering review is required.";
+            }
+            else if (string.Equals(lineage.Confidence, "MEDIUM", StringComparison.Ordinal))
+            {
+                statusDetail += " | MEDIUM lineage confidence (" + overlap + " identity overlap)";
+                note = "Moderate revision-lineage confidence. Review drawing context before disposition.";
+            }
+            else if (string.Equals(lineage.Confidence, "INSUFFICIENT_EVIDENCE", StringComparison.Ordinal))
+            {
+                statusDetail += " | lineage confidence unavailable";
+                note = "Revision lineage could not be assessed because no canonical equipment identities were available.";
+            }
+            else
+            {
+                statusDetail += " | HIGH lineage confidence (" + overlap + " identity overlap)";
+            }
             Publish(new VisualResultsData
             {
                 Command = "ES_REVISION",
                 Title = "Revision Comparison",
                 Drawing = snapshot.FileName,
                 Status = s.TotalChangeCount == 0 ? "UNCHANGED" : "CHANGES FOUND",
-                StatusDetail = s.TotalChangeCount == 0 ? "No engineering changes detected" : "Baseline comparison completed",
+                StatusDetail = statusDetail,
                 OutputPath = outputPath,
                 Document = document,
-                Note = s.TotalChangeCount == 0
-                    ? "Baseline and current drawing match for all tracked revision evidence."
-                    : "Review the detected engineering changes below.",
+                Note = note,
                 Metrics = new List<VisualMetric>
                 {
                     new VisualMetric("Baseline equipment", s.BaselineEquipmentCount.ToString(CultureInfo.InvariantCulture)),
@@ -269,7 +292,9 @@ namespace EngiSentry.AutoCAD2021
                     new VisualMetric("Coordinate changes", s.CoordinateChangedEquipmentCount.ToString(CultureInfo.InvariantCulture)),
                     new VisualMetric("Attribute changes", s.AttributeChangedEquipmentCount.ToString(CultureInfo.InvariantCulture)),
                     new VisualMetric("Total changes", s.TotalChangeCount.ToString(CultureInfo.InvariantCulture)),
-                    new VisualMetric("Unchanged", s.UnchangedEquipmentCount.ToString(CultureInfo.InvariantCulture))
+                    new VisualMetric("Unchanged", s.UnchangedEquipmentCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Revision lineage", lineageLabel),
+                    new VisualMetric("Identity overlap", overlap)
                 },
                 RevisionChanges = report.Changes
             });
@@ -318,18 +343,81 @@ namespace EngiSentry.AutoCAD2021
 
         private static void Publish(VisualResultsData data)
         {
+            if (AutoCADHostBoundary.IsCoreConsole()) return;
+            PublishInteractive(data);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void PublishInteractive(VisualResultsData data)
+        {
+            InteractiveVisualResultsPalette.Publish(data);
+        }
+
+        private static void UpdateNote(string note)
+        {
+            if (AutoCADHostBoundary.IsCoreConsole()) return;
+            UpdateNoteInteractive(note);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void UpdateNoteInteractive(string note)
+        {
+            InteractiveVisualResultsPalette.UpdateNote(note);
+        }
+
+        private static void UpdateCommand(string command, string title)
+        {
+            if (AutoCADHostBoundary.IsCoreConsole()) return;
+            UpdateCommandInteractive(command, title);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void UpdateCommandInteractive(string command, string title)
+        {
+            InteractiveVisualResultsPalette.UpdateCommand(command, title);
+        }
+    }
+
+    internal static class InteractiveVisualResultsPalette
+    {
+        private static Form window;
+        private static VisualResultsControl control;
+
+        internal static void Publish(VisualResultsData data)
+        {
             try
             {
-                if (palette == null)
+                if (window == null || window.IsDisposed)
                 {
                     control = new VisualResultsControl();
-                    palette = new PaletteSet("EngiSentry Results");
-                    palette.Add("Results", control);
-                    palette.Size = new Size(700, 650);
+                    window = new Form
+                    {
+                        Text = "EngiSentry Results",
+                        StartPosition = FormStartPosition.CenterScreen,
+                        Size = new Size(930, 680),
+                        MinimumSize = new Size(520, 360),
+                        FormBorderStyle = FormBorderStyle.Sizable,
+                        MaximizeBox = true,
+                        MinimizeBox = true,
+                        ShowInTaskbar = true,
+                        BackColor = Color.FromArgb(30, 31, 34)
+                    };
+                    control.Dock = DockStyle.Fill;
+                    window.Controls.Add(control);
+                    window.FormClosed += (sender, args) =>
+                    {
+                        window = null;
+                        control = null;
+                    };
+                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
                 }
+
                 control.SetResult(data);
-                EnsureUsablePaletteSize(data);
-                palette.Visible = true;
+                EnsureUsableWindowSize(data);
+                if (window.WindowState == FormWindowState.Minimized)
+                    window.WindowState = FormWindowState.Normal;
+                window.Show();
+                window.BringToFront();
             }
             catch (Exception exception)
             {
@@ -337,39 +425,36 @@ namespace EngiSentry.AutoCAD2021
             }
         }
 
-        private static void EnsureUsablePaletteSize(VisualResultsData data)
+        internal static void UpdateNote(string note)
         {
+            if (control != null) control.SetNote(note);
+        }
+
+        internal static void UpdateCommand(string command, string title)
+        {
+            if (control != null) control.SetCommandAndTitle(command, title);
+        }
+
+        private static void EnsureUsableWindowSize(VisualResultsData data)
+        {
+            if (window == null || window.IsDisposed) return;
+
             bool hasTable = (data.QaFindings != null && data.QaFindings.Count > 0) ||
                             (data.RevisionChanges != null && data.RevisionChanges.Count > 0);
-            int metricCount = data.Metrics == null ? 0 : data.Metrics.Count;
-            int metricRows = Math.Max(1, (metricCount + 1) / 2);
             int rowCount = data.QaFindings != null && data.QaFindings.Count > 0
                 ? data.QaFindings.Count
                 : data.RevisionChanges != null && data.RevisionChanges.Count > 0
                     ? data.RevisionChanges.Count
                     : data.Details == null ? 0 : data.Details.Count;
 
+            int preferredWidth = hasTable ? 930 : 720;
             int visibleRows = Math.Max(3, Math.Min(rowCount, hasTable ? 12 : 8));
-            int preferredWidth = hasTable ? 900 : 680;
-            int metricsHeight = metricRows * (hasTable ? 44 : 51) + 12;
-            int gridHeight = 28 + visibleRows * 25;
-            if (string.Equals(data.Command, "ES_REVISION", StringComparison.OrdinalIgnoreCase) && rowCount > 0 && rowCount <= 8) gridHeight += 14;
-            int preferredHeight = Math.Max(380, Math.Min(760, 54 + metricsHeight + 26 + 17 + gridHeight + 38 + 24));
+            int preferredHeight = Math.Max(460, Math.Min(760, 255 + (visibleRows * 25)));
 
-            Size preferredSize = new Size(preferredWidth, preferredHeight);
-            palette.MinimumSize = preferredSize;
-            Size currentSize = palette.Size;
-            palette.Size = new Size(Math.Max(currentSize.Width, preferredWidth), Math.Max(currentSize.Height, preferredHeight));
-        }
-
-        private static void UpdateNote(string note)
-        {
-            if (control != null) control.SetNote(note);
-        }
-
-        private static void UpdateCommand(string command, string title)
-        {
-            if (control != null) control.SetCommandAndTitle(command, title);
+            // Respect a user's manual resize after the window has opened. Only grow
+            // a newly-small window enough to keep the result usable; never dock it.
+            if (window.Width < preferredWidth) window.Width = preferredWidth;
+            if (window.Height < preferredHeight) window.Height = preferredHeight;
         }
     }
 
@@ -618,7 +703,7 @@ namespace EngiSentry.AutoCAD2021
                 }
                 detailGrid.ClearSelection();
             }
-            else if (string.Equals(data.Command, "ES_REVISION", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(data.Command, "ES_REVISION", StringComparison.OrdinalIgnoreCase) && !string.Equals(data.Status, "FAILED", StringComparison.OrdinalIgnoreCase) && !string.Equals(data.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
             {
                 gridLabel.Text = "CHANGES";
                 AddColumn("Result", 710);
@@ -634,7 +719,7 @@ namespace EngiSentry.AutoCAD2021
                 AddColumn("Value", 520);
                 foreach (VisualDetail detail in data.Details ?? new List<VisualDetail>()) detailGrid.Rows.Add(detail.Label, detail.Value);
             }
-            zoomEvidenceButton.Enabled = false;
+            UpdateZoomEvidenceButtonState();
         }
 
         private static string RevisionChangeLabel(RevisionChangeRecord change)
@@ -721,9 +806,14 @@ namespace EngiSentry.AutoCAD2021
 
         private void DetailGridSelectionChanged(object sender, EventArgs e)
         {
+            UpdateZoomEvidenceButtonState();
+        }
+
+        private void UpdateZoomEvidenceButtonState()
+        {
             DataGridViewRow row = detailGrid.CurrentRow;
             QaFinding finding = row == null ? null : row.Tag as QaFinding;
-            zoomEvidenceButton.Enabled = finding != null && FirstHandle(finding) != null && current != null && current.Document != null;
+            zoomEvidenceButton.Enabled = finding != null && !string.IsNullOrWhiteSpace(FirstHandle(finding)) && current != null && current.Document != null;
         }
 
         private void OpenOutputFolder(object sender, EventArgs e)
@@ -758,32 +848,54 @@ namespace EngiSentry.AutoCAD2021
                     SetNote("No valid source handle is available for this finding.");
                     return;
                 }
+
+                string selectionHandle = handleText.Split(new[] { ':' }, 2)[0];
                 long handleValue;
-                if (!long.TryParse(handleText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out handleValue))
+                if (!long.TryParse(selectionHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out handleValue))
                 {
                     SetNote("The finding source handle is invalid.");
                     return;
                 }
-                ObjectId objectId = document.Database.GetObjectId(false, new Handle(handleValue), 0);
-                Extents3d extents;
-                using (Transaction transaction = document.TransactionManager.StartTransaction())
+
+                // Validate that the evidence still resolves in the drawing, but let
+                // AutoCAD's own ZOOM Object command perform the actual navigation.
+                // This avoids WCS/DCS/view-target differences between drawings.
+                bool modelSpaceEvidence;
+                ObjectId targetModelLayoutId = ObjectId.Null;
+                using (DocumentLock documentLock = document.LockDocument())
                 {
-                    DBObject dbObject = transaction.GetObject(objectId, OpenMode.ForRead, false);
-                    Entity entity = dbObject as Entity;
-                    if (entity == null) throw new InvalidOperationException("The source object is not drawable.");
-                    extents = entity.GeometricExtents;
+                    ObjectId objectId = document.Database.GetObjectId(false, new Handle(handleValue), 0);
+                    if (objectId.IsNull || !objectId.IsValid || objectId.IsErased)
+                        throw new InvalidOperationException("The source handle does not resolve to a live drawing object.");
+
+                    using (Transaction transaction = document.TransactionManager.StartTransaction())
+                    {
+                        Entity entity = transaction.GetObject(objectId, OpenMode.ForRead, false) as Entity;
+                        if (entity == null) throw new InvalidOperationException("The source object is not drawable.");
+                        BlockTable blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead, false);
+                        ObjectId modelSpaceBlockTableRecordId = blockTable[BlockTableRecord.ModelSpace];
+                        BlockTableRecord modelSpace = transaction.GetObject(modelSpaceBlockTableRecordId, OpenMode.ForRead, false) as BlockTableRecord;
+                        modelSpaceEvidence = entity.OwnerId == modelSpaceBlockTableRecordId;
+                        if (modelSpaceEvidence && modelSpace != null)
+                            targetModelLayoutId = modelSpace.LayoutId;
+                    }
+
+                    if (modelSpaceEvidence && !targetModelLayoutId.IsNull && Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument == document)
+                    {
+                        LayoutManager layoutManager = LayoutManager.Current;
+                        ObjectId currentLayoutId = layoutManager.GetLayoutId(layoutManager.CurrentLayout);
+                        if (currentLayoutId != targetModelLayoutId)
+                            layoutManager.SetCurrentLayoutId(targetModelLayoutId);
+                    }
                 }
-                document.Editor.SetImpliedSelection(new[] { objectId });
-                using (ViewTableRecord view = document.Editor.GetCurrentView())
-                {
-                    double width = Math.Max(extents.MaxPoint.X - extents.MinPoint.X, 1.0);
-                    double height = Math.Max(extents.MaxPoint.Y - extents.MinPoint.Y, 1.0);
-                    view.CenterPoint = new Point2d((extents.MinPoint.X + extents.MaxPoint.X) / 2.0, (extents.MinPoint.Y + extents.MaxPoint.Y) / 2.0);
-                    view.Width = width * 1.6;
-                    view.Height = height * 1.6;
-                    document.Editor.SetCurrentView(view);
-                }
-                SetNote("Evidence selected and view centered on handle " + handleText + ".");
+
+                string safeHandle = new string(selectionHandle.Where(Uri.IsHexDigit).ToArray());
+                string zoomCommand =
+                    "(progn (setq _es_e (handent \"" + safeHandle + "\")) " +
+                    "(if _es_e (progn (command \"_.ZOOM\" \"_O\" _es_e \"\") " +
+                    "(sssetfirst nil (ssadd _es_e))))) ";
+                document.SendStringToExecute(zoomCommand + Environment.NewLine, true, false, false);
+                SetNote("Zoom requested for evidence handle " + handleText + " using AutoCAD ZOOM Object.");
             }
             catch (Exception exception)
             {

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "1.0",
+  "product": "EngiSentry",
+  "scope": "Plot Plan v1.1",
+  "asOf": "2026-09-05",
+  "policy": {
+    "spacingRequiresEngineeringJudgmentByDefault": true,
+    "conflictResult": "EXPERT_REVIEW_REQUIRED",
+    "quarantinedSourceCanAutoEnforce": false,
+    "legacyConflictSourceCanAutoEnforce": false,
+    "flareUniversalFixedDistanceRuleAllowed": false
+  },
+  "authorityClasses": [
+    "GOVERNING_PROJECT",
+    "ACTIVE_PRIMARY",
+    "ACTIVE_SUPPORTING",
+    "ENGINEERING_GUIDANCE",
+    "LEGACY_CONFLICT",
+    "QUARANTINED"
+  ],
+  "decisionStates": [
+    "PASS", "FAIL", "ADVISORY", "EXPERT_REVIEW_REQUIRED",
+    "STANDARD_CONFLICT", "NOT_APPLICABLE", "INSUFFICIENT_EVIDENCE",
+    "SOURCE_QUARANTINED"
+  ],
+  "sources": [
+    {
+      "id": "PROJECT_APPROVED_CRITERIA",
+      "authority": "GOVERNING_PROJECT",
+      "status": "CONTROLLED_PROJECT_SOURCE",
+      "autoEnforce": "ONLY_EXPLICIT_DETERMINISTIC_CLAUSES"
+    },
+    {
+      "id": "IPS-G-SF-150(1):2023_INSO-23591",
+      "authority": "ACTIVE_PRIMARY",
+      "status": "PROJECT_PROVIDED_2023_1402_COPY",
+      "domain": ["layout", "spacing"],
+      "autoEnforce": "CONDITIONAL",
+      "note": "Confirm controlled-copy status before production rule activation."
+    },
+    {
+      "id": "API-521",
+      "edition": "7",
+      "published": "2020-06-02",
+      "nextEditionStatus": "Edition 8 in editing as of 2026-09-05",
+      "authority": "ACTIVE_PRIMARY",
+      "domain": ["pressure-relief", "depressuring", "flare-siting-context"],
+      "autoEnforce": "NO_UNIVERSAL_FIXED_DISTANCE"
+    },
+    {
+      "id": "API-537",
+      "edition": "4",
+      "published": "2024-11-15",
+      "addenda": ["A1:2025-01-23", "A2:2026-06-22"],
+      "nextEditionStatus": "Edition 5 in development as of 2026-09-05",
+      "authority": "ACTIVE_PRIMARY",
+      "domain": ["flare-details"],
+      "autoEnforce": "CONDITIONAL"
+    },
+    {
+      "id": "ISO-23251:2019",
+      "edition": "2",
+      "status": "CONFIRMED_CURRENT_2024",
+      "authority": "ACTIVE_SUPPORTING",
+      "domain": ["pressure-relief", "depressuring"],
+      "autoEnforce": "CONDITIONAL",
+      "note": "ISO states this edition supplements API 521 6th Ed. (2014)."
+    },
+    {
+      "id": "EI-15",
+      "edition": "5",
+      "published": "2024-10",
+      "authority": "ACTIVE_SUPPORTING",
+      "domain": ["hazardous-area", "ignition-source-location"]
+    },
+    {
+      "id": "CCPS-SITING-LAYOUT-2E",
+      "published": "2018-03",
+      "authority": "ENGINEERING_GUIDANCE",
+      "domain": ["facility-siting", "layout", "risk-based-spacing"],
+      "autoEnforce": "ADVISORY_OR_EXPERT_REVIEW"
+    },
+    {
+      "id": "API-RP-752",
+      "edition": "4",
+      "published": "2024-01",
+      "authority": "ACTIVE_PRIMARY",
+      "domain": ["permanent-building-siting"],
+      "autoEnforce": "CONDITIONAL_RISK_EVALUATION"
+    },
+    {
+      "id": "API-RP-753",
+      "edition": "2",
+      "published": "2024-01",
+      "authority": "ACTIVE_PRIMARY",
+      "domain": ["portable-building-siting"],
+      "autoEnforce": "CONDITIONAL_RISK_EVALUATION"
+    },
+    {
+      "id": "API-RP-756",
+      "edition": "2",
+      "published": "2024-01",
+      "authority": "ACTIVE_PRIMARY",
+      "domain": ["tent-siting"],
+      "autoEnforce": "CONDITIONAL_RISK_EVALUATION"
+    },
+    {
+      "id": "PCD-PD-135-REV1",
+      "authority": "GOVERNING_PROJECT",
+      "status": "LOCAL_COMPANY_CRITERIA",
+      "domain": ["project-layout", "project-spacing"],
+      "autoEnforce": "CONDITIONAL_EXCEPT_QUARANTINED_CLAUSES"
+    },
+    {
+      "id": "PCD-PD-135-FLARE-TERMS",
+      "authority": "QUARANTINED",
+      "status": "PROVIDER_REPORTED_MAJOR_ERRORS",
+      "domain": ["flare-location"],
+      "autoEnforce": "NEVER",
+      "defaultDecision": "SOURCE_QUARANTINED"
+    },
+    {
+      "id": "IPS-E-PR-190(1):2009",
+      "authority": "LEGACY_CONFLICT",
+      "status": "PROVIDER_REPORTED_OUTDATED_AND_CONFLICTING",
+      "domain": ["layout", "spacing"],
+      "autoEnforce": "NEVER"
+    }
+  ],
+  "ruleFamilies": {
+    "equipmentTagConsistency": "DETERMINISTIC",
+    "coordinatePlacement": "DETERMINISTIC_WITH_EVIDENCE",
+    "roadAccessGeometry": "CONDITIONAL_DETERMINISTIC",
+    "fenceBoundaryClearance": "CONDITIONAL_DETERMINISTIC",
+    "equipmentSpacing": "MIXED_APPLICABILITY_REQUIRED",
+    "maintenanceClearance": "EXPERT_REVIEW_REQUIRED_BY_DEFAULT",
+    "fireAccess": "MIXED",
+    "occupiedBuildingSiting": "RISK_BASED_REVIEW_BY_DEFAULT",
+    "flareSiting": "EXPERT_REVIEW_REQUIRED",
+    "hazardousAreaIgnitionSource": "CONDITIONAL_REVIEW",
+    "revisionComparison": "DETERMINISTIC_EVIDENCE_COMPARISON"
+  },
+  "requiredRuleMetadata": [
+    "ruleId",
+    "sourceId",
+    "editionOrRevision",
+    "clauseOrTable",
+    "requirementType",
+    "applicability",
+    "units",
+    "measurementReferencePoints",
+    "authority",
+    "conflictState",
+    "expertApprovalRequired"
+  ]
+}
