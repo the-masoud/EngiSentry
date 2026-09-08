@@ -6,9 +6,11 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NETStandard.Library" Version="2.0.3" PrivateAssets="All" />
+    <PackageReference Include="ExcelDataReader" Version="3.9.0" />
     <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
   </ItemGroup>
 </Project>

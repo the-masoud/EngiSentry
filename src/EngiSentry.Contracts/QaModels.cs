@@ -13,6 +13,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 5)] public List<QaFinding> Findings { get; set; } = new List<QaFinding>();
         [DataMember(Order = 6)] public QaStatistics Statistics { get; set; } = new QaStatistics();
         [DataMember(Order = 7, EmitDefaultValue = false)] public ProfileResolution? ProfileResolution { get; set; }
+        [DataMember(Order = 8, EmitDefaultValue = false)] public EngineeringDistanceRunSummary? EngineeringDistanceSummary { get; set; }
     }
 
     [DataContract]
@@ -37,6 +38,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 7)] public string Message { get; set; } = string.Empty;
         [DataMember(Order = 8)] public QaEvidence Evidence { get; set; } = new QaEvidence();
         [DataMember(Order = 9)] public List<string> SourceHandles { get; set; } = new List<string>();
+        [DataMember(Order = 10, EmitDefaultValue = false)] public StandardFindingProvenance? StandardsProvenance { get; set; }
     }
 
     [DataContract]
@@ -70,6 +72,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 26)] public SpatialCoordinateConstraint? SpatialCoordinateConstraint { get; set; }
         [DataMember(Order = 27, EmitDefaultValue = false)] public ClearanceEvidence? ClearanceEvidence { get; set; }
         [DataMember(Order = 28, EmitDefaultValue = false)] public CrossDocumentEvidence? CrossDocumentEvidence { get; set; }
+        [DataMember(Order = 29, EmitDefaultValue = false)] public EngineeringDistanceEvidence? EngineeringDistanceEvidence { get; set; }
     }
 
     [DataContract]

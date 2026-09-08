@@ -42,7 +42,7 @@ namespace EngiSentry.PlotPlan
                 CoordinateAssociation easting = Associate("E", eastingCandidates, scale);
                 CoordinateAssociation northing = Associate("N", northingCandidates, scale);
                 PreferCoherentPair(easting, northing, eastingCandidates, northingCandidates, scale);
-                var placement = new EquipmentPlacement { PlacementId = "placement:" + source.Item1.CanonicalId + ":" + handle, EquipmentEntityId = source.Item1.CanonicalId, NormalizedTag = source.Item2.NormalizedTag ?? source.Item1.NormalizedTag, TagSourceHandle = handle, TagSourceLayer = source.Item2.SourceLayer ?? text.Layer, TagPositionX = text.PositionX, TagPositionY = text.PositionY, TagPositionZ = text.PositionZ, TagTextHeight = text.Height, TagRotation = text.Rotation, AssociationScale = scale, Easting = easting, Northing = northing };
+                var placement = new EquipmentPlacement { PlacementId = "placement:" + source.Item1.CanonicalId + ":" + handle, EquipmentEntityId = source.Item1.CanonicalId, NormalizedTag = source.Item2.NormalizedTag ?? source.Item1.NormalizedTag, TagSourceHandle = handle, TagSourceLayer = source.Item2.SourceLayer ?? text.Layer, TagPositionX = text.PositionX, TagPositionY = text.PositionY, TagPositionZ = text.PositionZ, TagTextHeight = text.Height, TagRotation = text.Rotation, AssociationScale = scale, Easting = easting, Northing = northing, EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment };
                 placement.PlacementStatus = placement.Easting.Status == "Ambiguous" || placement.Northing.Status == "Ambiguous" ? "Ambiguous" : placement.Easting.Status == "Resolved" && placement.Northing.Status == "Resolved" ? "Complete" : "Incomplete";
                 placements.Add(placement);
             }
@@ -59,7 +59,8 @@ namespace EngiSentry.PlotPlan
                 geometry.Statistics.MissingSpatialConstraintCount = constraints.Count(x => x.Status == "Missing");
                 geometry.Statistics.AmbiguousSpatialConstraintCount = constraints.Count(x => x.Status == "Ambiguous");
             }
-            PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(placements, geometry.SpatialConstraints);
+            geometry.EngineeringSpatialSubjects = EngineeringSpatialSubjectBuilder.Build(model, geometry).ToList();
+            PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(placements, geometry);
             return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
         }
 

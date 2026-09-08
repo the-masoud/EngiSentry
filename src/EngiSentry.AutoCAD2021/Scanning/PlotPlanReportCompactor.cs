@@ -27,7 +27,8 @@ namespace EngiSentry.AutoCAD2021.Scanning
                         Primitives = new List<PlotGeometryPrimitive>(),
                         Associations = source.Geometry.Associations,
                         Statistics = source.Geometry.Statistics,
-                        SpatialConstraints = source.Geometry.SpatialConstraints
+                        SpatialConstraints = source.Geometry.SpatialConstraints,
+                        EngineeringSpatialSubjects = source.Geometry.EngineeringSpatialSubjects
                     }
                 }
             };

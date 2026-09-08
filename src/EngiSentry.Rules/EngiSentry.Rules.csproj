@@ -10,5 +10,6 @@
   <ItemGroup>
     <PackageReference Include="NETStandard.Library" Version="2.0.3" PrivateAssets="All" />
     <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
+    <ProjectReference Include="..\EngiSentry.PlotPlan\EngiSentry.PlotPlan.csproj" />
   </ItemGroup>
 </Project>

@@ -156,6 +156,8 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("\n[ES_PLOTQA] START\n");
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
                 if (document == null) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_PLOTQA", null, "<none>", "No active drawing."); return; }
+                ProjectDistanceCriteria? criteria = ProjectDistanceCriteriaStore.ResolveOrPrompt(document.Name);
+                if (criteria == null) { WriteToActiveEditor("\nES_PLOTQA cancelled: Project Distance Criteria were not saved.\n"); VisualResultsPalette.ShowCancelled("ES_PLOTQA", document, System.IO.Path.GetFileName(document.Name), "Project Distance Criteria were not saved."); return; }
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] Snapshot built\n");
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
@@ -164,7 +166,14 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("[ES_PLOTQA] Entity index built\n");
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
-                QaReport qa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
+                QaReport baseQa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
+                QaReport qa = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plotPlan, baseQa);
+                EngineeringDistanceRunSummary summary = qa.EngineeringDistanceSummary ?? throw new InvalidOperationException("ES_PLOTQA engineering distance summary is required.");
+                var evaluations = summary.Evaluations ?? throw new InvalidOperationException("ES_PLOTQA engineering distance evaluations are required.");
+                EngineeringDistanceRuleEvaluation roadEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId);
+                EngineeringDistanceRuleEvaluation plantEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId);
+                EngineeringDistanceRuleEvaluation unitEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId);
+                WriteToActiveEditor("Project criteria source: ProjectDistanceCriteria\nEquipment to Road minimum: {0} m\nEquipment to Plant minimum: {1} m\nEquipment to Unit Boundary minimum: {2} m\nEquipment to Road rule status: {3}\nEquipment to Plant rule status: {4}\nEquipment to Unit Boundary rule status: {5}\n", summary.AccessRoadEdgeMinimumMeters, summary.SecurityFenceMinimumMeters, summary.UnitBoundaryMinimumMeters, roadEvaluation.Status, plantEvaluation.Status, unitEvaluation.Status);
                 WriteToActiveEditor("[ES_PLOTQA] QA complete\n");
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during plot-plan QA processing.");
@@ -215,7 +224,7 @@ namespace EngiSentry.AutoCAD2021
                 Document? document = Application.DocumentManager?.MdiActiveDocument;
                 if (document == null) { WriteToActiveEditor("\nEngiSentry M6.0 Cross-Document QA Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_CROSSQA", null, "<none>", "No active drawing."); return; }
                 string registerPath = ResolveAutomaticEquipmentRegister();
-                ExternalEquipmentRegister register = ExternalEquipmentRegisterParser.ReadFile(registerPath);
+                ExternalEquipmentRegister register = ExternalEquipmentRegisterLoader.ReadFile(registerPath);
                 DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
@@ -275,20 +284,30 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M7.0 Revision Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_REVISION", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_DISTANCESETTINGS")]
+        public void DistanceSettings()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nProject Distance Criteria require an active saved drawing.\n"); return; }
+                string projectDirectory = ProjectDistanceCriteriaStore.ResolveProjectDirectory(document.Name);
+                ProjectDistanceCriteria criteria;
+                if (!ProjectDistanceCriteriaStore.TryLoad(projectDirectory, ProjectDistanceCriteriaStore.ProductionStorageRoot, out ProjectDistanceCriteria? saved)) criteria = ProjectDistanceCriteriaStore.CreateDefaults(projectDirectory);
+                else criteria = ProjectDistanceCriteriaStore.CreateCurrentDraft(saved!);
+                ProjectDistanceCriteria? selected = ProjectDistanceCriteriaDialog.Show(projectDirectory, criteria);
+                if (selected == null) { document.Editor.WriteMessage("\nEngiSentry Project Distance Criteria cancelled.\n"); return; }
+                ProjectDistanceCriteriaStore.Save(selected, ProjectDistanceCriteriaStore.ProductionStorageRoot);
+                document.Editor.WriteMessage("\nEngiSentry Project Distance Criteria saved\nProject directory: {0}\nEquipment to Road minimum: {1} m\nEquipment to Plant minimum: {2} m\nEquipment to Unit Boundary minimum: {3} m\n", selected.ProjectDirectory, selected.AccessRoadEdgeMinimumMeters, selected.SecurityFenceMinimumMeters, selected.UnitBoundaryMinimumMeters);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry Project Distance Criteria Failed\nReason: {0}\n", exception.Message); }
+        }
+
         private static string ResolveAutomaticEquipmentRegister()
         {
             Document? document = Application.DocumentManager?.MdiActiveDocument;
             string drawingPath = document == null ? string.Empty : document.Name;
-            string drawingDirectory = string.IsNullOrWhiteSpace(drawingPath) ? string.Empty : (System.IO.Path.GetDirectoryName(drawingPath) ?? string.Empty);
-            string drawingBaseName = string.IsNullOrWhiteSpace(drawingPath) ? string.Empty : System.IO.Path.GetFileNameWithoutExtension(drawingPath);
-            string[] candidates = string.IsNullOrWhiteSpace(drawingDirectory) ? new string[0] : new[]
-            {
-                System.IO.Path.Combine(drawingDirectory, "EngiSentry", "active-equipment-register.csv"),
-                System.IO.Path.Combine(drawingDirectory, drawingBaseName + ".equipment-register.csv"),
-                System.IO.Path.Combine(drawingDirectory, "active-equipment-register.csv")
-            };
-            foreach (string candidate in candidates) if (System.IO.File.Exists(candidate)) return candidate;
-            throw new ExternalRegisterValidationException("No Equipment Register is linked to this drawing/project. ES_CROSSQA will not use a global or test register because that could create false findings. Add a project register under <drawing folder>\\EngiSentry\\active-equipment-register.csv or a drawing-specific <drawing name>.equipment-register.csv.");
+            return ExternalEquipmentRegisterLoader.ResolveAutomaticPath(drawingPath);
         }
 
         private static void SetActiveRevisionBaseline(string baselinePath)

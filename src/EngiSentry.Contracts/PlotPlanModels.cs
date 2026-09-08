@@ -30,6 +30,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 12)] public CoordinateAssociation Easting { get; set; } = new CoordinateAssociation { Axis = "E" };
         [DataMember(Order = 13)] public CoordinateAssociation Northing { get; set; } = new CoordinateAssociation { Axis = "N" };
         [DataMember(Order = 14)] public string PlacementStatus { get; set; } = "Incomplete";
+        [DataMember(Order = 15, EmitDefaultValue = false)] public string? EngineeringApplicabilityKey { get; set; }
     }
 
     [DataContract]
@@ -110,6 +111,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 2)] public List<GeometryAssociation> Associations { get; set; } = new List<GeometryAssociation>();
         [DataMember(Order = 3)] public PlotGeometryStatistics Statistics { get; set; } = new PlotGeometryStatistics();
         [DataMember(Order = 4)] public List<SpatialCoordinateConstraint> SpatialConstraints { get; set; } = new List<SpatialCoordinateConstraint>();
+        [DataMember(Order = 5)] public List<EngineeringSpatialSubject> EngineeringSpatialSubjects { get; set; } = new List<EngineeringSpatialSubject>();
     }
     [DataContract]
     public sealed class GeometryAssociation
@@ -179,6 +181,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 17)] public int? SelectedSegmentIndex { get; set; }
         [DataMember(Order = 18)] public double? SelectedDistance { get; set; }
         [DataMember(Order = 19)] public List<SpatialGeometryCandidate> Candidates { get; set; } = new List<SpatialGeometryCandidate>();
+        [DataMember(Order = 20, EmitDefaultValue = false)] public string? EngineeringMeasurementBasisKey { get; set; }
     }
 
     [DataContract]
@@ -248,6 +251,8 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 20)] public double ClosestPointX { get; set; }
         [DataMember(Order = 21)] public double ClosestPointY { get; set; }
         [DataMember(Order = 22)] public double Distance2D { get; set; }
+        [DataMember(Order = 23, EmitDefaultValue = false)] public string? EngineeringMeasurementBasisKey { get; set; }
+        [DataMember(Order = 24, EmitDefaultValue = false)] public string? EngineeringApplicabilityKey { get; set; }
     }
 
     [DataContract]

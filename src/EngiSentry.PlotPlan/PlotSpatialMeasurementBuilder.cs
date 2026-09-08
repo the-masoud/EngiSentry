@@ -50,6 +50,37 @@ namespace EngiSentry.PlotPlan
             };
         }
 
+        public static PlotSpatialMeasurementModel Build(IEnumerable<EquipmentPlacement> placements, PlotGeometryModel geometry)
+        {
+            if (placements == null) throw new ArgumentNullException(nameof(placements));
+            if (geometry == null) throw new ArgumentNullException(nameof(geometry));
+            List<EquipmentPlacement> placementList = placements.ToList();
+            PlotSpatialMeasurementModel legacy = Build(placementList, geometry.SpatialConstraints);
+            List<PlacementEvidence> eligible = placementList.Where(IsEligiblePlacement).Select(ToPlacementEvidence).OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
+            List<EngineeringSpatialSubject> subjects = geometry.EngineeringSpatialSubjects.OrderBy(x => x.SubjectId, StringComparer.Ordinal).ToList();
+            EnsureUnique(subjects.Select(x => x.SubjectId), "engineering spatial SubjectId");
+            var engineering = new List<EquipmentSpatialMeasurement>();
+            foreach (PlacementEvidence placement in eligible)
+            foreach (EngineeringSpatialSubject subject in subjects)
+                engineering.Add(BuildEngineeringSpatial(placement, subject, ResolvePrimitive(geometry, subject)));
+
+            List<EquipmentSpatialMeasurement> spatial = legacy.EquipmentSpatialMeasurements.Concat(engineering).OrderBy(x => x.MeasurementId, StringComparer.Ordinal).ToList();
+            return new PlotSpatialMeasurementModel
+            {
+                EquipmentPairMeasurements = legacy.EquipmentPairMeasurements,
+                EquipmentSpatialMeasurements = spatial,
+                Statistics = new PlotSpatialMeasurementStatistics
+                {
+                    EligibleEquipmentPlacementCount = legacy.Statistics.EligibleEquipmentPlacementCount,
+                    EquipmentPairMeasurementCount = legacy.Statistics.EquipmentPairMeasurementCount,
+                    ResolvedSpatialConstraintSourceCount = legacy.Statistics.ResolvedSpatialConstraintSourceCount,
+                    EquipmentSpatialMeasurementCount = spatial.Count,
+                    RoadMeasurementCount = spatial.Count(x => string.Equals(x.SubjectKind, "Road", StringComparison.Ordinal)),
+                    BoundaryMeasurementCount = spatial.Count(x => string.Equals(x.SubjectKind, "Boundary", StringComparison.Ordinal))
+                }
+            };
+        }
+
         private static bool IsEligiblePlacement(EquipmentPlacement placement)
         {
             return placement != null
@@ -68,7 +99,7 @@ namespace EngiSentry.PlotPlan
             decimal northing = placement.Northing.SelectedValue!.Value;
             EnsureFinite((double)easting, "equipment Easting");
             EnsureFinite((double)northing, "equipment Northing");
-            return new PlacementEvidence(placement.PlacementId, placement.EquipmentEntityId, placement.NormalizedTag, easting, northing);
+            return new PlacementEvidence(placement.PlacementId, placement.EquipmentEntityId, placement.NormalizedTag, placement.EngineeringApplicabilityKey, easting, northing);
         }
 
         private static ResolvedConstraintEvidence ToResolvedConstraintEvidence(SpatialCoordinateConstraint constraint)
@@ -126,7 +157,55 @@ namespace EngiSentry.PlotPlan
                 ConstraintId = constraint.Constraint.ConstraintId, SubjectKind = constraint.Constraint.SubjectKind, Axis = constraint.Constraint.Axis, CoordinateValue = constraint.Constraint.CoordinateValue, LabelSourceHandle = constraint.Constraint.LabelSourceHandle,
                 GeometrySourceHandle = constraint.Candidate.SourceHandle, GeometrySourceLayer = constraint.Candidate.SourceLayer, GeometryKind = constraint.Candidate.GeometryKind, SegmentIndex = constraint.Candidate.SegmentIndex,
                 SegmentStartX = constraint.StartX, SegmentStartY = constraint.StartY, SegmentEndX = constraint.EndX, SegmentEndY = constraint.EndY,
-                ClosestPointX = closestX, ClosestPointY = closestY, Distance2D = distance
+                ClosestPointX = closestX, ClosestPointY = closestY, Distance2D = distance,
+                EngineeringMeasurementBasisKey = constraint.Constraint.EngineeringMeasurementBasisKey,
+                EngineeringApplicabilityKey = placement.EngineeringApplicabilityKey
+            };
+        }
+
+        private static PlotGeometryPrimitive ResolvePrimitive(PlotGeometryModel geometry, EngineeringSpatialSubject subject)
+        {
+            if (subject == null || string.IsNullOrEmpty(subject.SubjectId) || string.IsNullOrEmpty(subject.GeometrySourceHandle) || string.IsNullOrEmpty(subject.GeometrySourceLayer) || string.IsNullOrEmpty(subject.GeometryKind) || subject.LabelSourceHandles == null || subject.LabelSourceHandles.Count == 0)
+                throw new InvalidOperationException("Engineering spatial subject is invalid.");
+            List<PlotGeometryPrimitive> primitives = geometry.Primitives.Where(x => x != null && string.Equals(x.SourceHandle, subject.GeometrySourceHandle, StringComparison.Ordinal)).ToList();
+            if (primitives.Count != 1) throw new InvalidOperationException("Engineering spatial subject cannot resolve exactly one primitive: " + subject.GeometrySourceHandle);
+            EngineeringSpatialSubjectBuilder.ValidatePrimitive(primitives[0]);
+            return primitives[0];
+        }
+
+        private static EquipmentSpatialMeasurement BuildEngineeringSpatial(PlacementEvidence placement, EngineeringSpatialSubject subject, PlotGeometryPrimitive primitive)
+        {
+            double x = (double)placement.Easting;
+            double y = (double)placement.Northing;
+            SegmentEvidence? governing = null;
+            int count = primitive.Vertices.Count;
+            int segmentCount = primitive.Closed ? count : count - 1;
+            for (int index = 0; index < segmentCount; index++)
+            {
+                PlotGeometryVertex start = primitive.Vertices[index];
+                PlotGeometryVertex end = primitive.Vertices[(index + 1) % count];
+                double dx = end.X - start.X;
+                double dy = end.Y - start.Y;
+                double lengthSquared = dx * dx + dy * dy;
+                if (!IsFinite(lengthSquared)) throw new InvalidOperationException("Engineering spatial primitive contains non-finite segment evidence: " + primitive.SourceHandle);
+                if (lengthSquared <= 0d) continue;
+                double t = ((x - start.X) * dx + (y - start.Y) * dy) / lengthSquared;
+                t = Math.Max(0d, Math.Min(1d, t));
+                double closestX = start.X + t * dx;
+                double closestY = start.Y + t * dy;
+                double distance = Distance(x, y, closestX, closestY);
+                var candidate = new SegmentEvidence(index, start.X, start.Y, end.X, end.Y, closestX, closestY, distance);
+                if (governing == null || candidate.Distance < governing.Distance || (candidate.Distance == governing.Distance && candidate.Index < governing.Index)) governing = candidate;
+            }
+            if (governing == null) throw new InvalidOperationException("Engineering spatial primitive has no positive-length XY segment: " + primitive.SourceHandle);
+            return new EquipmentSpatialMeasurement
+            {
+                MeasurementId = "distance:equipment-engineering-spatial:" + placement.PlacementId + ":" + subject.SubjectId,
+                PlacementId = placement.PlacementId, EquipmentEntityId = placement.EquipmentEntityId, NormalizedTag = placement.NormalizedTag, EquipmentEasting = placement.Easting, EquipmentNorthing = placement.Northing,
+                ConstraintId = subject.SubjectId, SubjectKind = subject.SubjectKind, Axis = string.Empty, CoordinateValue = 0m,
+                LabelSourceHandle = subject.LabelSourceHandles.OrderBy(x => x, StringComparer.Ordinal).First(), GeometrySourceHandle = primitive.SourceHandle, GeometrySourceLayer = primitive.SourceLayer, GeometryKind = primitive.GeometryKind,
+                SegmentIndex = governing.Index, SegmentStartX = governing.StartX, SegmentStartY = governing.StartY, SegmentEndX = governing.EndX, SegmentEndY = governing.EndY, ClosestPointX = governing.ClosestX, ClosestPointY = governing.ClosestY, Distance2D = governing.Distance,
+                EngineeringMeasurementBasisKey = subject.EngineeringMeasurementBasisKey, EngineeringApplicabilityKey = placement.EngineeringApplicabilityKey
             };
         }
 
@@ -149,8 +228,8 @@ namespace EngiSentry.PlotPlan
 
         private sealed class PlacementEvidence
         {
-            internal PlacementEvidence(string placementId, string equipmentEntityId, string normalizedTag, decimal easting, decimal northing) { PlacementId = placementId; EquipmentEntityId = equipmentEntityId; NormalizedTag = normalizedTag; Easting = easting; Northing = northing; }
-            internal string PlacementId { get; } internal string EquipmentEntityId { get; } internal string NormalizedTag { get; } internal decimal Easting { get; } internal decimal Northing { get; }
+            internal PlacementEvidence(string placementId, string equipmentEntityId, string normalizedTag, string? engineeringApplicabilityKey, decimal easting, decimal northing) { PlacementId = placementId; EquipmentEntityId = equipmentEntityId; NormalizedTag = normalizedTag; EngineeringApplicabilityKey = engineeringApplicabilityKey; Easting = easting; Northing = northing; }
+            internal string PlacementId { get; } internal string EquipmentEntityId { get; } internal string NormalizedTag { get; } internal string? EngineeringApplicabilityKey { get; } internal decimal Easting { get; } internal decimal Northing { get; }
         }
 
         private sealed class ResolvedConstraintEvidence
@@ -158,6 +237,12 @@ namespace EngiSentry.PlotPlan
             internal ResolvedConstraintEvidence(SpatialCoordinateConstraint constraint, SpatialGeometryCandidate candidate, double lengthSquared) { Constraint = constraint; Candidate = candidate; LengthSquared = lengthSquared; }
             internal SpatialCoordinateConstraint Constraint { get; } internal SpatialGeometryCandidate Candidate { get; } internal double LengthSquared { get; }
             internal double StartX => Candidate.SegmentStartX; internal double StartY => Candidate.SegmentStartY; internal double EndX => Candidate.SegmentEndX; internal double EndY => Candidate.SegmentEndY;
+        }
+
+        private sealed class SegmentEvidence
+        {
+            internal SegmentEvidence(int index, double startX, double startY, double endX, double endY, double closestX, double closestY, double distance) { Index = index; StartX = startX; StartY = startY; EndX = endX; EndY = endY; ClosestX = closestX; ClosestY = closestY; Distance = distance; }
+            internal int Index { get; } internal double StartX { get; } internal double StartY { get; } internal double EndX { get; } internal double EndY { get; } internal double ClosestX { get; } internal double ClosestY { get; } internal double Distance { get; }
         }
     }
 }

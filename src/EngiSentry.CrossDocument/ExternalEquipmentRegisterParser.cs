@@ -41,14 +41,17 @@ namespace EngiSentry.CrossDocument
                 if (row.Fields.Count == 1 && string.IsNullOrWhiteSpace(row.Fields[0])) continue;
                 if (row.Fields.Count != 3) throw new ExternalRegisterValidationException("row " + row.LineNumber.ToString() + " has the wrong column count");
                 string sourceTag = row.Fields[0];
-                EquipmentTagParts parts = EquipmentTagParser.Parse(sourceTag);
+                EquipmentTagParseResult parts;
+                try { parts = EquipmentTagGrammar.Parse(sourceTag); }
+                catch (FormatException) { throw new ExternalRegisterValidationException("invalid equipment tag: " + (sourceTag ?? string.Empty)); }
                 sourceRows++;
-                string[] suffixes = parts.Suffix == null ? new[] { string.Empty } : parts.Suffix.Split('/');
-                foreach (string suffix in suffixes)
+                EquipmentTagExpansionResult expansion = EquipmentTagExpander.Expand(parts);
+                if (!expansion.Success) throw new ExternalRegisterValidationException((expansion.FailureReason ?? "InvalidGroupedTag") + ": " + parts.NormalizedTag);
+                foreach (EquipmentTagExpansionMember member in expansion.Members)
                 {
-                    string normalized = (parts.Prefix + "-" + parts.Unit + "-" + parts.Sequence + suffix).ToUpperInvariant();
+                    string normalized = member.NormalizedMemberTag;
                     if (!identities.Add(normalized)) throw new ExternalRegisterValidationException("duplicate expanded equipment identity: " + normalized);
-                    records.Add(new ExternalEquipmentRecord { SourceRowNumber = row.LineNumber, SourceTag = sourceTag, NormalizedTag = normalized, Description = BlankToNull(row.Fields[1]), Installation = BlankToNull(row.Fields[2]), ExpansionMethod = parts.Suffix == null ? "Direct" : "GroupedSuffixExpansion" });
+                    records.Add(new ExternalEquipmentRecord { SourceRowNumber = row.LineNumber, SourceTag = sourceTag, NormalizedTag = normalized, Description = BlankToNull(row.Fields[1]), Installation = BlankToNull(row.Fields[2]), ExpansionMethod = member.ExpansionMethod });
                 }
             }
             records = records.OrderBy(x => x.NormalizedTag, StringComparer.Ordinal).ThenBy(x => x.SourceRowNumber).ToList();
@@ -91,14 +94,4 @@ namespace EngiSentry.CrossDocument
         private sealed class CsvRow { public int LineNumber; public List<string> Fields = new List<string>(); }
     }
 
-    public sealed class EquipmentTagParts { public string Prefix = string.Empty; public string Unit = string.Empty; public string Sequence = string.Empty; public string? Suffix; }
-    public static class EquipmentTagParser
-    {
-        private static readonly System.Text.RegularExpressions.Regex Pattern = new System.Text.RegularExpressions.Regex(@"^\s*([A-Za-z]{1,5})-([0-9]+)-([0-9]+)([A-Za-z]+(?:/[A-Za-z]+)*)?\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
-        public static EquipmentTagParts Parse(string value)
-        {
-            var match = Pattern.Match(value ?? string.Empty); if (!match.Success) throw new ExternalRegisterValidationException("invalid equipment tag: " + (value ?? string.Empty));
-            return new EquipmentTagParts { Prefix = match.Groups[1].Value, Unit = match.Groups[2].Value, Sequence = match.Groups[3].Value, Suffix = match.Groups[4].Success ? match.Groups[4].Value : null };
-        }
-    }
 }

@@ -21,6 +21,8 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 4)] public string? Description { get; set; }
         [DataMember(Order = 5)] public string? Installation { get; set; }
         [DataMember(Order = 6)] public string ExpansionMethod { get; set; } = "Direct";
+        [DataMember(Order = 7)] public int? SourceSheetIndex { get; set; }
+        [DataMember(Order = 8)] public string? SourceSheetName { get; set; }
     }
     [DataContract]
     public sealed class ExternalEquipmentStatistics

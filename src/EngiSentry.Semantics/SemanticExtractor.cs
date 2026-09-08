@@ -9,25 +9,35 @@ namespace EngiSentry.Semantics
 {
     public static class SemanticExtractor
     {
+        private enum TagClassification { None, Equipment, Structure, Ambiguous }
         private const double RowYTolerance = 1.0;
-        private static readonly Regex EquipmentThreePart = new Regex(@"^\s*([A-Za-z]{1,6})-([0-9]+)-([0-9]+)([A-Za-z]+(?:[/~][A-Za-z]+)*)?\s*$", RegexOptions.Compiled);
-        private static readonly Regex EquipmentTwoPart = new Regex(@"^\s*([A-Za-z]{1,6})-?([0-9]{3,6})(?:-?([A-Za-z][A-Za-z0-9]*(?:[/~][A-Za-z0-9]+)*))?\s*$", RegexOptions.Compiled);
         private static readonly Regex StructureLegacy = new Regex(@"^\s*([A-Za-z0-9]+)-([A-Za-z]{2})-([0-9]+)\s*$", RegexOptions.Compiled);
         private static readonly Regex StructureTypeFirst = new Regex(@"^\s*([A-Za-z]{2,6})-([0-9]{1,4})-([0-9]{1,4})\s*$", RegexOptions.Compiled);
-        private static readonly Regex Coordinate = new Regex(@"^\s*([EN])\s*(?:[.=]\s*|\s+)([+-]?[0-9][0-9.,]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex Coordinate = new Regex(@"^\s*([EN])\s*(?:[.=]\s*|\s+)([+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[0-9]+,[0-9]{1,2}))\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex Elevation = new Regex(@"^\s*([TH])\s*\.?\s*([OPSGC])\s*\.?\s*([PSGC])?\s*\.?\s*EL\s*\.?\s*([+-]?[0-9][0-9.,]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex BoundaryKeyword = new Regex(@"\b(UNIT\s+LIMIT|BATTERY\s+LIMIT|FENCE|BOUNDARY)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RoadToken = new Regex(@"(?<![A-Za-z0-9_-])ROAD(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex FenceToken = new Regex(@"(?<![A-Za-z0-9_-])FENCE(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex UnitLimitToken = new Regex(@"(?<![A-Za-z0-9_-])UNIT\s+LIMIT(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BatteryLimitToken = new Regex(@"(?<![A-Za-z0-9_-])BATTERY\s+LIMIT(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BoundaryToken = new Regex(@"(?<![A-Za-z0-9_-])BOUNDARY(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BoundaryCoordinate = new Regex(@"\b(?:UNIT\s+LIMIT|BATTERY\s+LIMIT|BOUNDARY)\b.*?([EN])\s*(?:[.=]\s*|\s+)([+-]?[0-9][0-9.,]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static EngineeringDrawingModel Extract(DrawingSnapshot snapshot)
         {
-            var model = new EngineeringDrawingModel { Drawing = new SemanticDrawing { FileName = snapshot.FileName, FullPath = snapshot.FullPath, DwgVersion = snapshot.DwgVersion, CurrentLayout = snapshot.CurrentLayout } };
+            var model = new EngineeringDrawingModel { Drawing = new SemanticDrawing { FileName = snapshot.FileName, FullPath = snapshot.FullPath, DwgVersion = snapshot.DwgVersion, CurrentLayout = snapshot.CurrentLayout, InsertionUnits = snapshot.InsertionUnits } };
             var layerVisibility = snapshot.Layers.Where(x => !string.IsNullOrWhiteSpace(x.Name)).ToDictionary(x => x.Name!, x => x.IsOn && !x.IsFrozen, StringComparer.OrdinalIgnoreCase);
             List<TextSnapshot> allText = snapshot.TextEntities.Concat(snapshot.InstantiatedTextEntities ?? new List<TextSnapshot>()).Where(x => !IsBlockDefinitionMetadata(x) && IsLayerActive(x.Layer, layerVisibility)).OrderBy(x => x.Handle, StringComparer.Ordinal).ThenBy(x => x.Text, StringComparer.Ordinal).ToList();
             foreach (TextSnapshot text in allText)
             {
-                StructureTag? structure = ParseStructure(text); if (structure != null) model.StructureTags.Add(structure);
-                EquipmentTag? equipment = structure == null ? ParseEquipment(text) : null; if (equipment != null) model.EquipmentTags.Add(equipment);
+                TagClassification classification = ClassifyTag(text);
+                if (classification == TagClassification.Structure)
+                {
+                    StructureTag? structure = ParseStructure(text); if (structure != null) model.StructureTags.Add(structure);
+                }
+                else if (classification == TagClassification.Equipment)
+                {
+                    EquipmentTag? equipment = ParseEquipment(text); if (equipment != null) model.EquipmentTags.Add(equipment);
+                }
                 CoordinateEvidence? coordinate = ParseCoordinate(text); if (coordinate != null) model.Coordinates.Add(coordinate);
                 ElevationEvidence? elevation = ParseElevation(text); if (elevation != null) model.Elevations.Add(elevation);
                 if (string.Equals(text.SpaceKind, "Model", StringComparison.OrdinalIgnoreCase))
@@ -55,15 +65,9 @@ namespace EngiSentry.Semantics
         {
             // Block definition names are metadata, not visible drawing-tag evidence.
             if (string.Equals(text.Type, "BLOCKNAME", StringComparison.Ordinal)) return null;
-            string raw = (text.Text ?? string.Empty).Trim();
-            Match three = EquipmentThreePart.Match(raw);
-            if (three.Success)
-            {
-                return new EquipmentTag { RawText=text.Text, RawTag=text.Text, NormalizedTag=NormalizeIdentity(raw), EquipmentPrefix=three.Groups[1].Value.ToUpperInvariant(), UnitNumber=three.Groups[2].Value, SequenceNumber=three.Groups[3].Value, Suffix=three.Groups[4].Success ? three.Groups[4].Value.ToUpperInvariant() : null, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
-            }
-            Match compact = EquipmentTwoPart.Match(raw);
-            if (!compact.Success) return null;
-            return new EquipmentTag { RawText=text.Text, RawTag=text.Text, NormalizedTag=NormalizeIdentity(raw), EquipmentPrefix=compact.Groups[1].Value.ToUpperInvariant(), UnitNumber=null, SequenceNumber=compact.Groups[2].Value, Suffix=compact.Groups[3].Success ? compact.Groups[3].Value.ToUpperInvariant() : null, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
+            EquipmentTagParseResult parsed;
+            if (!EquipmentTagGrammar.TryParse(text.Text, out parsed)) return null;
+            return new EquipmentTag { RawText=text.Text, RawTag=text.Text, NormalizedTag=parsed.NormalizedTag, EquipmentPrefix=parsed.Prefix, UnitNumber=parsed.UnitNumber, SequenceNumber=parsed.SequenceNumber, Suffix=parsed.SuffixExpression, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
         }
         private static StructureTag? ParseStructure(TextSnapshot text)
         {
@@ -74,10 +78,31 @@ namespace EngiSentry.Semantics
                 return new StructureTag { RawText=text.Text, RawTag=text.Text, NormalizedTag=NormalizeIdentity(raw), AreaOrUnitCode=legacy.Groups[1].Value, TypeCode=legacy.Groups[2].Value.ToUpperInvariant(), SequenceNumber=legacy.Groups[3].Value, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
             Match match = StructureTypeFirst.Match(raw); if (!match.Success) return null;
             string type = match.Groups[1].Value.ToUpperInvariant();
-            string layer = text.Layer ?? string.Empty;
-            bool structuralContext = layer.IndexOf("STR", StringComparison.OrdinalIgnoreCase) >= 0 || type == "STR" || type == "PR" || type == "SH";
-            if (!structuralContext) return null;
             return new StructureTag { RawText=text.Text, RawTag=text.Text, NormalizedTag=NormalizeIdentity(raw), AreaOrUnitCode=match.Groups[2].Value, TypeCode=type, SequenceNumber=match.Groups[3].Value, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
+        }
+        private static TagClassification ClassifyTag(TextSnapshot text)
+        {
+            if (IsBlockDefinitionMetadata(text)) return TagClassification.None;
+            string raw = text.Text ?? string.Empty;
+            if (StructureLegacy.IsMatch(raw)) return TagClassification.Structure;
+
+            bool equipment = EquipmentTagGrammar.TryParse(raw, out _);
+            Match typeFirst = StructureTypeFirst.Match(raw);
+            if (!typeFirst.Success) return equipment ? TagClassification.Equipment : TagClassification.None;
+
+            string type = typeFirst.Groups[1].Value.ToUpperInvariant();
+            string layer = text.Layer ?? string.Empty;
+            bool structuralLayer = layer.IndexOf("STR", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool equipmentListLayer = string.Equals(layer, "EQ-LIST", StringComparison.OrdinalIgnoreCase);
+            bool weakStructuralType = type == "STR" || type == "PR" || type == "SH";
+
+            if (equipment)
+            {
+                if (equipmentListLayer) return TagClassification.Equipment;
+                if (structuralLayer) return TagClassification.Structure;
+                return weakStructuralType ? TagClassification.Ambiguous : TagClassification.Equipment;
+            }
+            return structuralLayer || weakStructuralType ? TagClassification.Structure : TagClassification.None;
         }
         private static CoordinateEvidence? ParseCoordinate(TextSnapshot text)
         {
@@ -93,12 +118,19 @@ namespace EngiSentry.Semantics
         private static BoundaryEvidence? ParseBoundary(TextSnapshot text)
         {
             string raw = text.Text ?? string.Empty;
-            Match keyword = BoundaryKeyword.Match(raw);
-            if (!keyword.Success) return null;
+            bool fence = FenceToken.IsMatch(raw);
+            bool unitLimit = UnitLimitToken.IsMatch(raw);
+            bool batteryLimit = BatteryLimitToken.IsMatch(raw);
+            int specificCount = (fence ? 1 : 0) + (unitLimit ? 1 : 0) + (batteryLimit ? 1 : 0);
+            if (specificCount > 1) return null;
+            string kind;
+            if (fence) kind = "Fence";
+            else if (unitLimit) kind = "UnitLimit";
+            else if (batteryLimit) kind = "BatteryLimit";
+            else if (BoundaryToken.IsMatch(raw)) kind = "Boundary";
+            else return null;
             Match coordinate = BoundaryCoordinate.Match(raw);
             decimal value = 0; bool hasValue = coordinate.Success && TryParseEngineeringNumber(coordinate.Groups[2].Value, out value);
-            string sourceKind = keyword.Success ? keyword.Groups[1].Value : (text.Layer ?? string.Empty);
-            string kind = sourceKind.IndexOf("FENCE", StringComparison.OrdinalIgnoreCase) >= 0 ? "Fence" : sourceKind.IndexOf("BATTERY", StringComparison.OrdinalIgnoreCase) >= 0 ? "BatteryLimit" : "UnitLimit";
             return new BoundaryEvidence { RawText=text.Text, BoundaryType=kind, Axis=coordinate.Success ? coordinate.Groups[1].Value.ToUpperInvariant() : null, CoordinateValue=hasValue ? value : (decimal?)null, ParseStatus=hasValue ? "Parsed" : "Partial", SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
         }
         private static bool IsLayerActive(string? layer, IReadOnlyDictionary<string, bool> visibility)
@@ -108,7 +140,7 @@ namespace EngiSentry.Semantics
             return !visibility.TryGetValue(layer!, out active) || active;
         }
         private static bool IsBlockDefinitionMetadata(TextSnapshot text) => string.Equals(text.Type, "BLOCKNAME", StringComparison.OrdinalIgnoreCase) || string.Equals(text.ObjectType, "BLOCKNAME", StringComparison.OrdinalIgnoreCase) || string.Equals(text.ObjectType, "BLOCK", StringComparison.OrdinalIgnoreCase);
-        private static bool IsRoadLabel(string? raw) => !string.IsNullOrWhiteSpace(raw) && raw!.IndexOf("ROAD", StringComparison.OrdinalIgnoreCase) >= 0;
+        private static bool IsRoadLabel(string? raw) => !string.IsNullOrWhiteSpace(raw) && RoadToken.IsMatch(raw!);
         private static string NormalizeIdentity(string value) => Regex.Replace(value.Trim(), @"\s+", " ").ToUpperInvariant();
         private static bool TryParseEngineeringNumber(string raw, out decimal value)
         {
@@ -147,7 +179,7 @@ namespace EngiSentry.Semantics
             }
             foreach (List<TextSnapshot> row in rows)
             {
-                List<TextSnapshot> tagTexts = row.Where(x => ParseEquipment(x) != null).OrderBy(x => x.PositionX).ThenBy(x => x.Handle, StringComparer.Ordinal).ToList();
+                List<TextSnapshot> tagTexts = row.Where(x => ClassifyTag(x) == TagClassification.Equipment).OrderBy(x => x.PositionX).ThenBy(x => x.Handle, StringComparer.Ordinal).ToList();
                 if (tagTexts.Count != 1) continue;
                 TextSnapshot tagText = tagTexts[0];
                 List<TextSnapshot> cells = row.Where(x => x != tagText).OrderBy(x => x.PositionX).ThenBy(x => x.Handle, StringComparer.Ordinal).ToList();
