@@ -153,11 +153,13 @@ namespace EngiSentry.AutoCAD2021
             });
         }
 
-        public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, string outputPath)
+        public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanQaReport report, string outputPath)
         {
+            PlotPlanModel plotPlan = report.PlotPlan;
+            QaReport qaReport = report.Qa;
             PlotPlanStatistics p = plotPlan.Statistics;
             PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
-            QaStatistics q = report.Statistics;
+            QaStatistics q = qaReport.Statistics;
             List<VisualMetric> metrics = new List<VisualMetric>
             {
                 new VisualMetric("Rules", q.RuleCount.ToString(CultureInfo.InvariantCulture)),
@@ -170,7 +172,7 @@ namespace EngiSentry.AutoCAD2021
                 Command = "ES_PLOTQA",
                 Title = "Plot Plan QA",
                 Drawing = snapshot.FileName,
-                Status = report.OverallStatus,
+                Status = qaReport.OverallStatus,
                 StatusDetail = "Plot-plan QA evaluation completed",
                 OutputPath = outputPath,
                 Document = document,
@@ -179,8 +181,16 @@ namespace EngiSentry.AutoCAD2021
                        " | Geometry gaps: " + g.MissingAssociationCount.ToString(CultureInfo.InvariantCulture) +
                        " | Spatial gaps: " + g.MissingSpatialConstraintCount.ToString(CultureInfo.InvariantCulture),
                 Metrics = metrics,
-                QaFindings = report.Findings
+                QaFindings = qaReport.Findings,
+                AuthorityReviewItems = report.ReviewProjection == null
+                    ? new List<StandardAuthorityReviewItem>()
+                    : report.ReviewProjection.ReviewItems
             });
+        }
+
+        public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, string outputPath)
+        {
+            ShowPlotQa(document, snapshot, new PlotPlanQaReport { PlotPlan = plotPlan, Qa = report }, outputPath);
         }
 
         public static void ShowProfileQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, ProfileResolution resolution, string outputPath)
@@ -472,6 +482,7 @@ namespace EngiSentry.AutoCAD2021
         public List<VisualDetail> Details { get; set; } = new List<VisualDetail>();
         public List<QaFinding> QaFindings { get; set; } = new List<QaFinding>();
         public List<RevisionChangeRecord> RevisionChanges { get; set; } = new List<RevisionChangeRecord>();
+        public List<StandardAuthorityReviewItem> AuthorityReviewItems { get; set; } = new List<StandardAuthorityReviewItem>();
     }
 
     internal sealed class VisualMetric
@@ -498,6 +509,9 @@ namespace EngiSentry.AutoCAD2021
         private readonly FlowLayoutPanel metricsPanel = new FlowLayoutPanel();
         private readonly DataGridView detailGrid = new DataGridView();
         private readonly Label gridLabel = new Label();
+        private readonly Panel reviewPanel = new Panel();
+        private readonly DataGridView reviewGrid = new DataGridView();
+        private readonly Label reviewLabel = new Label();
         private readonly Button openOutputButton = new Button();
         private readonly Button zoomEvidenceButton = new Button();
         private readonly Panel bodyPanel = new Panel();
@@ -591,6 +605,19 @@ namespace EngiSentry.AutoCAD2021
             ConfigureGrid();
             bodyPanel.Controls.Add(detailGrid);
             bodyPanel.Controls.Add(gridLabel);
+            reviewPanel.Dock = DockStyle.Bottom;
+            reviewPanel.Height = 166;
+            reviewLabel.Dock = DockStyle.Top;
+            reviewLabel.Height = 17;
+            reviewLabel.Text = "ENGINEERING REVIEW";
+            reviewLabel.ForeColor = Color.FromArgb(160, 166, 175);
+            reviewLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
+            reviewPanel.Padding = new Padding(0, 2, 0, 0);
+            reviewPanel.Controls.Add(reviewGrid);
+            reviewPanel.Controls.Add(reviewLabel);
+            reviewPanel.Visible = false;
+            bodyPanel.Controls.Add(reviewPanel);
+            ConfigureReviewGrid();
 
             FlowLayoutPanel footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(6, 3, 6, 4), BackColor = Color.FromArgb(38, 40, 44), FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight, WrapContents = false, AutoScroll = true };
             openOutputButton.Text = "Open Output Folder";
@@ -641,14 +668,37 @@ namespace EngiSentry.AutoCAD2021
             detailGrid.SelectionChanged += DetailGridSelectionChanged;
         }
 
+        private void ConfigureReviewGrid()
+        {
+            reviewGrid.AllowUserToAddRows = false;
+            reviewGrid.AllowUserToDeleteRows = false;
+            reviewGrid.AllowUserToResizeRows = false;
+            reviewGrid.BackgroundColor = Color.FromArgb(30, 31, 34);
+            reviewGrid.BorderStyle = BorderStyle.None;
+            reviewGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            reviewGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            reviewGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold) };
+            reviewGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False };
+            reviewGrid.EnableHeadersVisualStyles = false;
+            reviewGrid.MultiSelect = false;
+            reviewGrid.ReadOnly = true;
+            reviewGrid.RowHeadersVisible = false;
+            reviewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            reviewGrid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+            reviewGrid.RowTemplate.Height = 25;
+            reviewGrid.ColumnHeadersHeight = 26;
+            reviewGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        }
+
         private void BuildMetrics(IEnumerable<VisualMetric> metrics)
         {
             metricsPanel.SuspendLayout();
             metricsPanel.Controls.Clear();
             List<VisualMetric> items = (metrics ?? Enumerable.Empty<VisualMetric>()).ToList();
             bool hasTable = current != null &&
-                ((current.QaFindings != null && current.QaFindings.Count > 0) ||
-                 (current.RevisionChanges != null && current.RevisionChanges.Count > 0));
+            ((current.QaFindings != null && current.QaFindings.Count > 0) ||
+                 (current.RevisionChanges != null && current.RevisionChanges.Count > 0) ||
+                 (current.AuthorityReviewItems != null && current.AuthorityReviewItems.Count > 0));
             int available = Math.Max(180, metricsPanel.ClientSize.Width - metricsPanel.Padding.Horizontal - 2);
             int columns = 2;
             int gap = 5;
@@ -719,7 +769,46 @@ namespace EngiSentry.AutoCAD2021
                 AddColumn("Value", 520);
                 foreach (VisualDetail detail in data.Details ?? new List<VisualDetail>()) detailGrid.Rows.Add(detail.Label, detail.Value);
             }
+            BuildReviewGrid(data.AuthorityReviewItems);
             UpdateZoomEvidenceButtonState();
+        }
+
+        private void BuildReviewGrid(IEnumerable<StandardAuthorityReviewItem> items)
+        {
+            reviewGrid.Columns.Clear();
+            reviewGrid.Rows.Clear();
+            List<StandardAuthorityReviewItem> reviewItems = (items ?? Enumerable.Empty<StandardAuthorityReviewItem>()).ToList();
+            reviewPanel.Visible = reviewItems.Count > 0;
+            if (reviewItems.Count == 0) return;
+
+            AddReviewColumn("Rule", 235);
+            AddReviewColumn("Decision", 170);
+            AddReviewColumn("Enforcement", 180);
+            AddReviewColumn("Authority evidence", 560);
+            foreach (StandardAuthorityReviewItem item in reviewItems)
+            {
+                int row = reviewGrid.Rows.Add(item.RuleId, item.DecisionState, item.EffectiveEnforcementMode, ReviewEvidence(item));
+                reviewGrid.Rows[row].Height = 36;
+            }
+        }
+
+        private void AddReviewColumn(string name, int width)
+        {
+            DataGridViewTextBoxColumn column = new DataGridViewTextBoxColumn
+            {
+                Name = name, HeaderText = name, MinimumWidth = 55, FillWeight = width,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            };
+            reviewGrid.Columns.Add(column);
+        }
+
+        private static string ReviewEvidence(StandardAuthorityReviewItem item)
+        {
+            if (item == null || item.Clauses == null || item.Clauses.Count == 0) return item == null ? string.Empty : item.Message;
+            return string.Join(" | ", item.Clauses.Select(clause =>
+                clause.ClauseId + " / " + clause.SourceId + " / " + clause.PolicyId + " / " + clause.PolicyClauseId +
+                " / " + clause.AuthorityClass + " / " + clause.EnforcementMode + " / " + clause.Rationale));
         }
 
         private static string RevisionChangeLabel(RevisionChangeRecord change)

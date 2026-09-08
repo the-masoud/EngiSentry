@@ -75,6 +75,8 @@ namespace EngiSentry.Contracts
     {
         [DataMember(Order = 1)] public PlotPlanModel PlotPlan { get; set; } = new PlotPlanModel();
         [DataMember(Order = 2)] public QaReport Qa { get; set; } = new QaReport();
+        [DataMember(Order = 3, EmitDefaultValue = false)] public PlotPlanStandardsAuthorityReport? StandardsAuthority { get; set; } = null;
+        [IgnoreDataMember] public StandardAuthorityReviewProjection? ReviewProjection { get; set; }
     }
 
     [DataContract]
