@@ -56,7 +56,7 @@ namespace EngiSentry.Standards
                 new[] { new StandardRulePackPrecedenceDefinition { PackId = pack.PackId, Precedence = 10 } });
             StandardAuthorityResolution authorityResolution = StandardAuthorityResolver.Resolve(ruleResolution, clauseRegistry, policyRegistry);
             StandardExecutionGateResolution executionGate = StandardAuthorityExecutionGate.Evaluate(authorityResolution);
-            StandardAuthorityReviewProjection reviewProjection = StandardAuthorityReviewProjector.Create(authorityResolution);
+            StandardAuthorityReviewProjection reviewProjection = StandardAuthorityReviewProjector.Create(authorityResolution, sourceRegistry, clauseRegistry);
 
             return new PlotPlanStandardsAuthorityRuntimeContext(
                 sourceRegistry,

@@ -374,6 +374,8 @@ namespace EngiSentry.Tests
             RunP62();
             RunP63();
             RunP64();
+            RunP71();
+            RunP72();
         }
 
         private static void RunP55(StandardSourceRegistry realSources, StandardClauseRegistry p36Clauses)
@@ -535,6 +537,91 @@ namespace EngiSentry.Tests
             Assert(AuthorityIdentity(report.StandardsAuthority.AuthorityResolution) == authorityIdentity &&
                    GateIdentity(report.StandardsAuthority.ExecutionGate) == gateIdentity,
                    "P6.5 review projection mutation contaminated authority or gate state.");
+        }
+
+        private static void RunP71()
+        {
+            PlotPlanStandardsAuthorityRuntimeContext first = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+            PlotPlanStandardsAuthorityRuntimeContext second = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+            string[] sourceIds = { "ips.e-pr-190.rev1.2009", "ips.g-sf-150.rev1.2023", "trc.pcd-pd-135.rev1" };
+            string[] sourceHashes =
+            {
+                "FC0FF48E0CD3A4658BD6A19DE285A0D9C383BAF4484CE9A9156CE44EAAF4E152",
+                "B767EE1829C2F901CD6D2A1E59C97FB1030789C65F90FD530CDA6A67C3E99B4B",
+                "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E"
+            };
+            Assert(first.SourceRegistry.Sources.Count == 3 && first.SourceRegistry.Sources.Select(source => source.SourceId).SequenceEqual(sourceIds) && first.SourceRegistry.Sources.Select(source => source.SourceSha256).SequenceEqual(sourceHashes), "P7.1 source identity or hash evidence was not stable.");
+
+            StandardAuthorityReviewProjection review = first.ReviewProjection;
+            Assert(review.ReviewItems.Count == 4 && review.ReviewItems.Select(item => item.RuleId).SequenceEqual(new[]
+            {
+                "runtime.plotplan.authority.epr.legacy",
+                "runtime.plotplan.authority.gsf.primary",
+                "runtime.plotplan.authority.pcd.flare",
+                "runtime.plotplan.authority.pcd.general"
+            }) && review.ReviewItems.All(item => item.Clauses.Count > 0 && item.Clauses.All(clause =>
+                !string.IsNullOrEmpty(clause.ClauseId) &&
+                !string.IsNullOrEmpty(clause.SourceId) &&
+                !string.IsNullOrEmpty(clause.ClauseReference) &&
+                !string.IsNullOrEmpty(clause.ClauseText) &&
+                !string.IsNullOrEmpty(clause.SourceDocumentNumber) &&
+                !string.IsNullOrEmpty(clause.SourceTitle) &&
+                !string.IsNullOrEmpty(clause.SourceIssuer) &&
+                !string.IsNullOrEmpty(clause.SourceRevisionOrEdition) &&
+                !string.IsNullOrEmpty(clause.SourceFileName) &&
+                !string.IsNullOrEmpty(clause.SourceSha256))), "P7.1 review items did not trace to complete source and clause evidence.");
+
+            StandardClauseAuthorityResolution flare = review.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single();
+            Assert(flare.ClauseId == "trc.pcd-pd-135.3.4.13.b" && flare.SourceId == "trc.pcd-pd-135.rev1" && flare.ClauseReference == "3.4.13(b) — Flare" && flare.ClauseText != null && flare.ClauseText.Contains("90 meters") && flare.PageNumber == 24 && flare.SourceRevisionOrEdition == "1" && flare.SourceFileName == "PCD-PD-135.pdf" && flare.SourceSha256 == "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E", "P7.1 flare clause traceability was not preserved.");
+
+            Assert(first.AuthorityResolution.Rules.Count == 4 && first.ExecutionGate.Rules.Count == 4 && first.ReviewProjection.ReviewItems.Count == 4 && first.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && first.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired && first.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && first.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && first.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P7.1 authority safety counts or states changed.");
+
+            PlotPlanQaReport report = PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), new QaReport());
+            string json = Json(report);
+            Assert(report.ReviewProjection != null && report.Qa.Findings.Count == 0 && report.Qa.RuleResults.Count == 0 && !json.Contains("\"ReviewProjection\""), "P7.1 authority integration changed QA findings, rule results, or serialization.");
+
+            StandardAuthorityReviewProjection withoutRegistries = StandardAuthorityReviewProjector.Create(first.AuthorityResolution, null, null);
+            StandardClauseAuthorityResolution unavailable = withoutRegistries.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single();
+            Assert(unavailable.SourceDocumentNumber == null && unavailable.SourceTitle == null && unavailable.SourceIssuer == null && unavailable.SourceRevisionOrEdition == null && unavailable.SourceFileName == null && unavailable.SourceSha256 == null && unavailable.ClauseReference == null && unavailable.ClauseText == null && unavailable.ClauseHeading == null && unavailable.PageNumber == null, "P7.1 unavailable provenance metadata was fabricated.");
+
+            string firstIdentity = string.Join("|", review.ReviewItems.Select(item => item.RuleId + ":" + string.Join(",", item.Clauses.Select(clause => clause.ClauseId + ":" + clause.SourceId + ":" + clause.ClauseReference + ":" + clause.PageNumber + ":" + clause.SourceSha256))));
+            string secondIdentity = string.Join("|", second.ReviewProjection.ReviewItems.Select(item => item.RuleId + ":" + string.Join(",", item.Clauses.Select(clause => clause.ClauseId + ":" + clause.SourceId + ":" + clause.ClauseReference + ":" + clause.PageNumber + ":" + clause.SourceSha256))));
+            Assert(firstIdentity == secondIdentity, "P7.1 repeated authority traceability construction was not deterministic.");
+            flare.ClauseText = "mutated";
+            flare.SourceSha256 = "mutated";
+            StandardAuthorityReviewItem? secondFlareItem = second.ReviewProjection.ReviewItems.SingleOrDefault(item => item.RuleId == "runtime.plotplan.authority.pcd.flare");
+            Assert(secondFlareItem != null && secondFlareItem.Clauses.Single().ClauseText != "mutated" && secondFlareItem.Clauses.Single().SourceSha256 != "mutated", "P7.1 review traceability mutation leaked across contexts.");
+        }
+
+        private static void RunP72()
+        {
+            DateTime timestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            PlotPlanQaReport firstReport = PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), new QaReport());
+            PlotPlanQaReport secondReport = PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), new QaReport());
+            StandardAuthorityReviewPackage first = StandardAuthorityReviewPackageBuilder.Create(firstReport, "PLOTPLAN-A0-E-FINAL.dwg", timestamp);
+            StandardAuthorityReviewPackage second = StandardAuthorityReviewPackageBuilder.Create(secondReport, "PLOTPLAN-A0-E-FINAL.dwg", timestamp);
+            string firstJson = Json(first);
+            string secondJson = Json(second);
+
+            Assert(first.SchemaVersion == "1.0" && first.DrawingName == "PLOTPLAN-A0-E-FINAL.dwg" && first.ScanTimestampUtc == timestamp && first.StandardsAuthority.AuthorityResolution.Rules.Count == 4 && first.StandardsAuthority.ExecutionGate.Rules.Count == 4 && first.ReviewProjection.ReviewItems.Count == 4 && first.StandardsAuthority.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0, "P7.2 package contract or counts failed.");
+            Assert(first.StandardsAuthority.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && first.StandardsAuthority.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && first.StandardsAuthority.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && first.StandardsAuthority.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P7.2 package gate states changed.");
+
+            string[] ruleIds = { "runtime.plotplan.authority.epr.legacy", "runtime.plotplan.authority.gsf.primary", "runtime.plotplan.authority.pcd.flare", "runtime.plotplan.authority.pcd.general" };
+            Assert(first.ReviewProjection.ReviewItems.Select(item => item.RuleId).SequenceEqual(ruleIds) && first.StandardsAuthority.AuthorityResolution.Rules.Select(rule => rule.RuleId).SequenceEqual(ruleIds) && first.StandardsAuthority.ExecutionGate.Rules.Select(rule => rule.RuleId).SequenceEqual(ruleIds) && first.ReviewProjection.ReviewItems.All(item => item.Clauses.SequenceEqual(item.Clauses.OrderBy(clause => clause.ClauseId, StringComparer.Ordinal))), "P7.2 package ordering was not deterministic.");
+            Assert(first.ReviewProjection.ReviewItems.All(item => item.Clauses.Count > 0 && item.Clauses.All(clause => !string.IsNullOrEmpty(clause.ClauseId) && !string.IsNullOrEmpty(clause.SourceId) && !string.IsNullOrEmpty(clause.SourceSha256))), "P7.2 review item traceability was incomplete.");
+            string[] acceptedSourceIds = { "ips.e-pr-190.rev1.2009", "ips.g-sf-150.rev1.2023", "trc.pcd-pd-135.rev1" };
+            string[] acceptedSourceHashes = { "FC0FF48E0CD3A4658BD6A19DE285A0D9C383BAF4484CE9A9156CE44EAAF4E152", "B767EE1829C2F901CD6D2A1E59C97FB1030789C65F90FD530CDA6A67C3E99B4B", "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" };
+            Assert(acceptedSourceIds.Select((sourceId, index) => first.ReviewProjection.ReviewItems.SelectMany(item => item.Clauses).Where(clause => clause.SourceId == sourceId).ToList()).Select((clauses, index) => clauses.Count > 0 && clauses.All(clause => clause.SourceSha256 == acceptedSourceHashes[index])).All(valid => valid), "P7.2 accepted source identities were not preserved.");
+            Assert(first.StandardsAuthority.AuthorityResolution.Rules.All(rule => rule.Clauses.SequenceEqual(rule.Clauses.OrderBy(clause => clause.ClauseId, StringComparer.Ordinal))), "P7.2 authority clause ordering was not deterministic.");
+
+            StandardClauseAuthorityResolution flare = first.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single();
+            Assert(flare.ClauseId == "trc.pcd-pd-135.3.4.13.b" && flare.SourceId == "trc.pcd-pd-135.rev1" && flare.SourceSha256 == "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" && flare.PageNumber == 24 && flare.ClauseText != null && flare.ClauseText.Contains("90 meters"), "P7.2 package traceability or flare evidence failed.");
+            Assert(firstJson == secondJson && firstReport.Qa.Findings.Count == 0 && firstReport.Qa.RuleResults.Count == 0 && !Json(firstReport).Contains("\"ReviewProjection\"") && !Json(firstReport).Contains("StandardAuthorityReviewPackage") && firstJson.Contains("\"ReviewProjection\"") && firstJson.Contains("trc.pcd-pd-135.3.4.13.b") && firstJson.Contains("90 meters"), "P7.2 serialization or QA safety boundaries failed.");
+
+            first.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState = "mutated";
+            flare.ClauseText = "mutated";
+            flare.SourceSha256 = "mutated";
+            Assert(firstReport.ReviewProjection!.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && firstReport.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single().ClauseText != "mutated" && second.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single().SourceSha256 != "mutated", "P7.2 package mutation isolation failed.");
         }
 
         private static List<KnownQaRule> Catalog() => BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();

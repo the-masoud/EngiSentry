@@ -179,7 +179,8 @@ namespace EngiSentry.AutoCAD2021
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during plot-plan QA processing.");
                 PlotPlanQaReport plotPlanQaReport = PlotPlanReportCompactor.CreatePlotPlanQaReport(plotPlan, qa);
                 string path = SnapshotFileWriter.WritePlotPlanQaReport(plotPlanQaReport, snapshot.FileName, snapshot.ScanTimestampUtc);
-                WriteToActiveEditor("[ES_PLOTQA] Artifact written\n");
+                string reviewPackagePath = SnapshotFileWriter.WriteStandardsReviewPackage(StandardAuthorityReviewPackageBuilder.Create(plotPlanQaReport, snapshot.FileName ?? "unnamed", snapshot.ScanTimestampUtc));
+                WriteToActiveEditor("[ES_PLOTQA] Artifacts written\nQA report: {0}\nStandards review package: {1}\n", path, reviewPackagePath);
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during plot-plan QA artifact creation.");
                 PlotPlanStatistics s = plotPlan.Statistics;

@@ -93,6 +93,18 @@ namespace EngiSentry.AutoCAD2021.Scanning
             return path;
         }
 
+        internal static string WriteStandardsReviewPackage(StandardAuthorityReviewPackage package)
+        {
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan");
+            Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(package.DrawingName);
+            string timestamp = package.ScanTimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".standards.review.json");
+            var serializer = new DataContractJsonSerializer(typeof(StandardAuthorityReviewPackage));
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, package);
+            return path;
+        }
+
         internal static string WriteProfilePlotPlanQaReport(PlotPlanQaReport report, string? drawingName, DateTime timestampUtc)
         {
             string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan");

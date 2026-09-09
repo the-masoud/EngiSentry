@@ -4,6 +4,16 @@ using System.Runtime.Serialization;
 namespace EngiSentry.Contracts
 {
     [DataContract]
+    public sealed class StandardAuthorityReviewPackage
+    {
+        [DataMember(Order = 1)] public string SchemaVersion { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string DrawingName { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public System.DateTime ScanTimestampUtc { get; set; }
+        [DataMember(Order = 4)] public PlotPlanStandardsAuthorityReport StandardsAuthority { get; set; } = new PlotPlanStandardsAuthorityReport();
+        [DataMember(Order = 5)] public StandardAuthorityReviewProjection ReviewProjection { get; set; } = new StandardAuthorityReviewProjection();
+    }
+
+    [DataContract]
     public sealed class StandardAuthorityReviewItem
     {
         [DataMember(Order = 1)] public string RuleId { get; set; } = string.Empty;
