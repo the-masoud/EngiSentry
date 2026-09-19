@@ -14,6 +14,7 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Windows;
 using EngiSentry.Contracts;
 using EngiSentry.Revision;
+using EngiSentry.Standards;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -153,13 +154,14 @@ namespace EngiSentry.AutoCAD2021
             });
         }
 
-        public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanQaReport report, string outputPath)
+        public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanQaReport report, string outputPath, StandardAuthorityReviewPackage standardsReviewPackage = null, string standardsReviewPackagePath = null, string standardsReviewPackageSha256 = null)
         {
             PlotPlanModel plotPlan = report.PlotPlan;
             QaReport qaReport = report.Qa;
             PlotPlanStatistics p = plotPlan.Statistics;
             PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
             QaStatistics q = qaReport.Statistics;
+            EngineeringDistanceRunSummary distanceSummary = qaReport.EngineeringDistanceSummary;
             List<VisualMetric> metrics = new List<VisualMetric>
             {
                 new VisualMetric("Rules", q.RuleCount.ToString(CultureInfo.InvariantCulture)),
@@ -182,9 +184,13 @@ namespace EngiSentry.AutoCAD2021
                        " | Spatial gaps: " + g.MissingSpatialConstraintCount.ToString(CultureInfo.InvariantCulture),
                 Metrics = metrics,
                 QaFindings = qaReport.Findings,
+                DistanceRows = PlotPlanDistanceRows(distanceSummary, plotPlan.Measurements),
                 AuthorityReviewItems = report.ReviewProjection == null
                     ? new List<StandardAuthorityReviewItem>()
-                    : report.ReviewProjection.ReviewItems
+                    : report.ReviewProjection.ReviewItems,
+                StandardsReviewPackage = standardsReviewPackage,
+                StandardsReviewPackagePath = standardsReviewPackagePath,
+                StandardsReviewPackageSha256 = standardsReviewPackageSha256
             });
         }
 
@@ -357,6 +363,34 @@ namespace EngiSentry.AutoCAD2021
             PublishInteractive(data);
         }
 
+        private static List<VisualDistanceRow> PlotPlanDistanceRows(EngineeringDistanceRunSummary summary, PlotSpatialMeasurementModel measurements)
+        {
+            return PlotPlanDistancePresentation.Build(summary, measurements).Select(x => new VisualDistanceRow
+            {
+                Name = x.Name,
+                Minimum = x.MinimumDistanceMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m",
+                Observed = x.Observed,
+                Status = x.DisplayStatus,
+                Interpretation = x.Interpretation
+            }).ToList();
+        }
+
+        private static string DisplayDistanceStatus(string status)
+        {
+            if (status == "INSUFFICIENT_EVIDENCE") return "INSUFFICIENT EVIDENCE";
+            if (status == "VIOLATIONS") return "VIOLATIONS / FAIL";
+            return status ?? "<unknown>";
+        }
+
+        private static string GovernanceDisplay(ProjectDistanceGovernanceAggregateItem governance)
+        {
+            if (governance == null || governance.Resolution == null || string.IsNullOrWhiteSpace(governance.Resolution.State)) return string.Empty;
+            if (governance.Resolution.State == "PROJECT_RULE_ONLY") return "Project criterion only — no approved standards-governance basis is active.";
+            if (governance.Resolution.State == "EXPERT_REVIEW_REQUIRED") return "Engineering review required.";
+            if (governance.Resolution.State == "SOURCE_QUARANTINED") return "Source quarantined — not auto-enforced.";
+            return "Governance state: " + governance.Resolution.State;
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void PublishInteractive(VisualResultsData data)
         {
@@ -385,6 +419,97 @@ namespace EngiSentry.AutoCAD2021
         private static void UpdateCommandInteractive(string command, string title)
         {
             InteractiveVisualResultsPalette.UpdateCommand(command, title);
+        }
+    }
+
+    public sealed class PlotPlanDistancePresentationRow
+    {
+        public string RuleId { get; set; }
+        public string Name { get; set; }
+        public decimal MinimumDistanceMeters { get; set; }
+        public string Observed { get; set; }
+        public int ResolvedCount { get; set; }
+        public string UnderlyingStatus { get; set; }
+        public string DisplayStatus { get; set; }
+        public string Interpretation { get; set; }
+    }
+
+    public static class PlotPlanDistancePresentation
+    {
+        public static IReadOnlyList<PlotPlanDistancePresentationRow> Build(EngineeringDistanceRunSummary summary, PlotSpatialMeasurementModel measurements)
+        {
+            if (summary == null || summary.Evaluations == null) return new List<PlotPlanDistancePresentationRow>();
+            return new[]
+            {
+                BuildRow(summary, measurements, ProjectDistanceRuleBinder.EquipmentToRoadRuleId, "Equipment → Road", summary.AccessRoadEdgeMinimumMeters),
+                BuildRow(summary, measurements, ProjectDistanceRuleBinder.EquipmentToPlantRuleId, "Equipment → Plant / Security Fence", summary.SecurityFenceMinimumMeters),
+                BuildRow(summary, measurements, ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId, "Equipment → Unit Boundary", summary.UnitBoundaryMinimumMeters)
+            };
+        }
+
+        private static PlotPlanDistancePresentationRow BuildRow(EngineeringDistanceRunSummary summary, PlotSpatialMeasurementModel measurements, string ruleId, string name, decimal minimum)
+        {
+            EngineeringDistanceRuleEvaluation evaluation = summary.Evaluations.SingleOrDefault(x => x != null && x.RuleId == ruleId);
+            ProjectDistanceGovernanceAggregateItem governance = summary.Governance == null || summary.Governance.Items == null
+                ? null
+                : summary.Governance.Items.SingleOrDefault(x => x != null && x.ProjectRuleId == ruleId);
+            List<EquipmentSpatialMeasurement> resolved = ResolvedMeasurements(evaluation, measurements);
+            string interpretation = evaluation == null || evaluation.Status == "INSUFFICIENT_EVIDENCE"
+                ? "No resolved evidence is available for this check."
+                : evaluation.Status == "PASS"
+                    ? "Requirement met based on available evidence."
+                    : evaluation.Status == "VIOLATIONS"
+                        ? "Observed evidence is below the configured project minimum."
+                        : "No resolved evidence is available for this check.";
+            string governanceText = GovernanceDisplay(governance);
+            if (!string.IsNullOrWhiteSpace(governanceText)) interpretation += " " + governanceText;
+            bool hasEvidence = evaluation != null && evaluation.Status != "INSUFFICIENT_EVIDENCE" && resolved.Count > 0;
+            string observed = !hasEvidence
+                ? "<not resolved>"
+                : string.Format(CultureInfo.InvariantCulture, "{0:0.###} m ({1} resolved)", resolved.Min(x => x.Distance2D) * (evaluation.MetersPerDrawingUnit), resolved.Count);
+            return new PlotPlanDistancePresentationRow
+            {
+                RuleId = ruleId,
+                Name = name,
+                MinimumDistanceMeters = minimum,
+                Observed = observed,
+                ResolvedCount = hasEvidence ? resolved.Count : 0,
+                UnderlyingStatus = evaluation == null ? "<not available>" : evaluation.Status,
+                DisplayStatus = DisplayDistanceStatus(evaluation == null ? null : evaluation.Status),
+                Interpretation = interpretation
+            };
+        }
+
+        private static List<EquipmentSpatialMeasurement> ResolvedMeasurements(EngineeringDistanceRuleEvaluation evaluation, PlotSpatialMeasurementModel measurements)
+        {
+            if (evaluation == null || measurements == null || measurements.EquipmentSpatialMeasurements == null) return new List<EquipmentSpatialMeasurement>();
+            string subjectKind = evaluation.MeasurementKind == "EquipmentToRoad2D" ? "Road" : "Boundary";
+            return measurements.EquipmentSpatialMeasurements
+                .Where(x => x != null
+                    && string.Equals(x.SubjectKind, subjectKind, StringComparison.Ordinal)
+                    && string.Equals(x.EngineeringMeasurementBasisKey, evaluation.RequiredMeasurementBasisKey, StringComparison.Ordinal)
+                    && string.Equals(x.EngineeringApplicabilityKey, evaluation.RequiredApplicabilityKey, StringComparison.Ordinal))
+                .GroupBy(x => x.PlacementId, StringComparer.Ordinal)
+                .Select(x => x.OrderBy(y => y.Distance2D).ThenBy(y => y.MeasurementId, StringComparer.Ordinal).First())
+                .OrderBy(x => x.PlacementId, StringComparer.Ordinal)
+                .ThenBy(x => x.MeasurementId, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private static string DisplayDistanceStatus(string status)
+        {
+            if (status == "INSUFFICIENT_EVIDENCE") return "INSUFFICIENT EVIDENCE";
+            if (status == "VIOLATIONS") return "VIOLATIONS / FAIL";
+            return status ?? "<unknown>";
+        }
+
+        private static string GovernanceDisplay(ProjectDistanceGovernanceAggregateItem governance)
+        {
+            if (governance == null || governance.Resolution == null || string.IsNullOrWhiteSpace(governance.Resolution.State)) return string.Empty;
+            if (governance.Resolution.State == "PROJECT_RULE_ONLY") return "Project criterion only — no approved standards-governance basis is active.";
+            if (governance.Resolution.State == "EXPERT_REVIEW_REQUIRED") return "Engineering review required.";
+            if (governance.Resolution.State == "SOURCE_QUARANTINED") return "Source quarantined — not auto-enforced.";
+            return "Governance state: " + governance.Resolution.State;
         }
     }
 
@@ -479,10 +604,14 @@ namespace EngiSentry.AutoCAD2021
         public string Note { get; set; }
         public Document Document { get; set; }
         public List<VisualMetric> Metrics { get; set; } = new List<VisualMetric>();
+        public List<VisualDistanceRow> DistanceRows { get; set; } = new List<VisualDistanceRow>();
         public List<VisualDetail> Details { get; set; } = new List<VisualDetail>();
         public List<QaFinding> QaFindings { get; set; } = new List<QaFinding>();
         public List<RevisionChangeRecord> RevisionChanges { get; set; } = new List<RevisionChangeRecord>();
         public List<StandardAuthorityReviewItem> AuthorityReviewItems { get; set; } = new List<StandardAuthorityReviewItem>();
+        public StandardAuthorityReviewPackage StandardsReviewPackage { get; set; }
+        public string StandardsReviewPackagePath { get; set; }
+        public string StandardsReviewPackageSha256 { get; set; }
     }
 
     internal sealed class VisualMetric
@@ -499,6 +628,15 @@ namespace EngiSentry.AutoCAD2021
         public string Value { get; private set; }
     }
 
+    internal sealed class VisualDistanceRow
+    {
+        public string Name { get; set; }
+        public string Minimum { get; set; }
+        public string Observed { get; set; }
+        public string Status { get; set; }
+        public string Interpretation { get; set; }
+    }
+
     internal sealed class VisualResultsControl : UserControl
     {
         private readonly Label titleLabel = new Label();
@@ -506,14 +644,29 @@ namespace EngiSentry.AutoCAD2021
         private readonly Label drawingLabel = new Label();
         private readonly Label statusLabel = new Label();
         private readonly Label noteLabel = new Label();
+        private readonly Label artifactPathLabel = new Label();
         private readonly FlowLayoutPanel metricsPanel = new FlowLayoutPanel();
         private readonly DataGridView detailGrid = new DataGridView();
+        private readonly DataGridView distanceGrid = new DataGridView();
+        private readonly Label distanceLabel = new Label();
+        private readonly Panel distancePanel = new Panel();
         private readonly Label gridLabel = new Label();
         private readonly Panel reviewPanel = new Panel();
         private readonly DataGridView reviewGrid = new DataGridView();
         private readonly Label reviewLabel = new Label();
         private readonly Button openOutputButton = new Button();
         private readonly Button zoomEvidenceButton = new Button();
+        private readonly TextBox reviewerTextBox = new TextBox();
+        private readonly ComboBox humanReviewComboBox = new ComboBox();
+        private readonly TextBox reviewCommentTextBox = new TextBox();
+        private readonly Button saveReviewDecisionButton = new Button();
+        private readonly Label existingReviewLabel = new Label();
+        private readonly Label evidenceCurrentnessLabel = new Label();
+        private readonly Label historyStateLabel = new Label();
+        private readonly Label existingReviewerLabel = new Label();
+        private readonly Label decisionTimeLabel = new Label();
+        private readonly Label decisionStatusLabel = new Label();
+        private readonly Panel reviewInputPanel = new Panel();
         private readonly Panel bodyPanel = new Panel();
         private VisualResultsData current;
 
@@ -536,9 +689,12 @@ namespace EngiSentry.AutoCAD2021
             statusLabel.ForeColor = StatusColor(data.Status);
             noteLabel.Text = data.Note ?? string.Empty;
             noteLabel.Visible = !string.IsNullOrWhiteSpace(data.Note);
+            artifactPathLabel.Text = string.IsNullOrWhiteSpace(data.OutputPath) ? string.Empty : "QA artifact: " + data.OutputPath;
+            artifactPathLabel.Visible = !string.IsNullOrWhiteSpace(data.OutputPath);
             openOutputButton.Enabled = !string.IsNullOrWhiteSpace(data.OutputPath);
             zoomEvidenceButton.Visible = data.QaFindings != null && data.QaFindings.Count > 0;
             BuildMetrics(data.Metrics);
+            BuildDistanceGrid(data.DistanceRows);
             BuildGrid(data);
         }
 
@@ -581,7 +737,7 @@ namespace EngiSentry.AutoCAD2021
             metricsPanel.BackColor = Color.FromArgb(30, 31, 34);
             metricsPanel.SizeChanged += (sender, args) => { if (current != null) BuildMetrics(current.Metrics); };
 
-            Panel statusPanel = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(10, 3, 10, 3), BackColor = Color.FromArgb(30, 31, 34) };
+            Panel statusPanel = new Panel { Dock = DockStyle.Top, Height = 63, Padding = new Padding(10, 3, 10, 3), BackColor = Color.FromArgb(30, 31, 34) };
             statusLabel.Dock = DockStyle.Top;
             statusLabel.Height = 19;
             statusLabel.AutoEllipsis = true;
@@ -591,8 +747,14 @@ namespace EngiSentry.AutoCAD2021
             noteLabel.AutoEllipsis = true;
             noteLabel.TextAlign = ContentAlignment.MiddleLeft;
             noteLabel.ForeColor = Color.FromArgb(160, 166, 175);
+            artifactPathLabel.Dock = DockStyle.Bottom;
+            artifactPathLabel.Height = 19;
+            artifactPathLabel.AutoEllipsis = true;
+            artifactPathLabel.TextAlign = ContentAlignment.MiddleLeft;
+            artifactPathLabel.ForeColor = Color.FromArgb(160, 166, 175);
             statusPanel.Controls.Add(statusLabel);
             statusPanel.Controls.Add(noteLabel);
+            statusPanel.Controls.Add(artifactPathLabel);
 
             bodyPanel.Dock = DockStyle.Fill;
             bodyPanel.Padding = new Padding(10, 2, 10, 8);
@@ -606,18 +768,22 @@ namespace EngiSentry.AutoCAD2021
             bodyPanel.Controls.Add(detailGrid);
             bodyPanel.Controls.Add(gridLabel);
             reviewPanel.Dock = DockStyle.Bottom;
-            reviewPanel.Height = 166;
+            reviewPanel.Height = 360;
             reviewLabel.Dock = DockStyle.Top;
             reviewLabel.Height = 17;
             reviewLabel.Text = "ENGINEERING REVIEW";
             reviewLabel.ForeColor = Color.FromArgb(160, 166, 175);
             reviewLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
             reviewPanel.Padding = new Padding(0, 2, 0, 0);
+            reviewGrid.Dock = DockStyle.Top;
+            reviewGrid.Height = 110;
+            reviewPanel.Controls.Add(reviewInputPanel);
             reviewPanel.Controls.Add(reviewGrid);
             reviewPanel.Controls.Add(reviewLabel);
             reviewPanel.Visible = false;
             bodyPanel.Controls.Add(reviewPanel);
             ConfigureReviewGrid();
+            BuildReviewInputPanel();
 
             FlowLayoutPanel footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(6, 3, 6, 4), BackColor = Color.FromArgb(38, 40, 44), FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight, WrapContents = false, AutoScroll = true };
             openOutputButton.Text = "Open Output Folder";
@@ -666,6 +832,20 @@ namespace EngiSentry.AutoCAD2021
             detailGrid.ColumnHeadersHeight = 26;
             detailGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             detailGrid.SelectionChanged += DetailGridSelectionChanged;
+
+            distancePanel.Dock = DockStyle.Top;
+            distancePanel.Height = 122;
+            distanceLabel.Dock = DockStyle.Top;
+            distanceLabel.Height = 17;
+            distanceLabel.Text = "PROJECT DISTANCE CRITERIA";
+            distanceLabel.ForeColor = Color.FromArgb(160, 166, 175);
+            distanceLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
+            distanceGrid.Dock = DockStyle.Fill;
+            ConfigureDistanceGrid();
+            distancePanel.Controls.Add(distanceGrid);
+            distancePanel.Controls.Add(distanceLabel);
+            distancePanel.Visible = false;
+            bodyPanel.Controls.Add(distancePanel);
         }
 
         private void ConfigureReviewGrid()
@@ -688,6 +868,75 @@ namespace EngiSentry.AutoCAD2021
             reviewGrid.RowTemplate.Height = 25;
             reviewGrid.ColumnHeadersHeight = 26;
             reviewGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            reviewGrid.SelectionChanged += ReviewGridSelectionChanged;
+        }
+
+        private void BuildReviewInputPanel()
+        {
+            reviewInputPanel.Dock = DockStyle.Fill;
+            reviewInputPanel.Padding = new Padding(0, 4, 0, 0);
+            reviewerTextBox.Width = 180;
+            humanReviewComboBox.Width = 180;
+            humanReviewComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            humanReviewComboBox.Items.AddRange(new object[] { HumanEngineeringReviewDecisionStates.ReviewAccepted, HumanEngineeringReviewDecisionStates.ReviewRejected, HumanEngineeringReviewDecisionStates.NeedsClarification });
+            humanReviewComboBox.SelectedIndex = 0;
+            reviewCommentTextBox.Multiline = true;
+            reviewCommentTextBox.Height = 34;
+            reviewCommentTextBox.Width = 290;
+            saveReviewDecisionButton.Text = "Save Review Decision";
+            saveReviewDecisionButton.AutoSize = true;
+            saveReviewDecisionButton.Enabled = false;
+            saveReviewDecisionButton.Click += SaveReviewDecision;
+
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 8, Padding = new Padding(0, 2, 0, 0) };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            AddReviewInput(layout, "Reviewer", reviewerTextBox, 0, 0);
+            AddReviewInput(layout, "Human Review", humanReviewComboBox, 0, 1);
+            AddReviewInput(layout, "Comment", reviewCommentTextBox, 0, 2);
+            layout.Controls.Add(saveReviewDecisionButton, 2, 2);
+            layout.SetColumnSpan(saveReviewDecisionButton, 2);
+            layout.Controls.Add(existingReviewLabel, 0, 3);
+            layout.SetColumnSpan(existingReviewLabel, 4);
+            layout.Controls.Add(evidenceCurrentnessLabel, 0, 4);
+            layout.SetColumnSpan(evidenceCurrentnessLabel, 4);
+            layout.Controls.Add(historyStateLabel, 0, 5);
+            layout.SetColumnSpan(historyStateLabel, 4);
+            layout.Controls.Add(existingReviewerLabel, 0, 6);
+            layout.SetColumnSpan(existingReviewerLabel, 4);
+            layout.Controls.Add(decisionStatusLabel, 0, 7);
+            layout.SetColumnSpan(decisionStatusLabel, 4);
+            reviewInputPanel.Controls.Add(layout);
+            foreach (Label control in new[] { existingReviewLabel, evidenceCurrentnessLabel, historyStateLabel, existingReviewerLabel, decisionTimeLabel, decisionStatusLabel })
+            {
+                control.ForeColor = Color.FromArgb(190, 195, 202);
+                control.Dock = DockStyle.Fill;
+                control.AutoEllipsis = false;
+                control.TextAlign = ContentAlignment.MiddleLeft;
+            }
+            decisionStatusLabel.AutoSize = false;
+            decisionStatusLabel.AutoEllipsis = false;
+        }
+
+        private static void AddReviewInput(TableLayoutPanel layout, string label, Control control, int column, int row)
+        {
+            var panel = new Panel { Dock = DockStyle.Fill };
+            var caption = new Label { Text = label + ":", Dock = DockStyle.Left, Width = 105, ForeColor = Color.FromArgb(168, 174, 184), TextAlign = ContentAlignment.MiddleLeft };
+            control.Dock = DockStyle.Fill;
+            panel.Controls.Add(control);
+            panel.Controls.Add(caption);
+            layout.Controls.Add(panel, column, row);
+            layout.SetColumnSpan(panel, 2);
         }
 
         private void BuildMetrics(IEnumerable<VisualMetric> metrics)
@@ -773,6 +1022,51 @@ namespace EngiSentry.AutoCAD2021
             UpdateZoomEvidenceButtonState();
         }
 
+        private void ConfigureDistanceGrid()
+        {
+            distanceGrid.AllowUserToAddRows = false;
+            distanceGrid.AllowUserToDeleteRows = false;
+            distanceGrid.AllowUserToResizeRows = false;
+            distanceGrid.BackgroundColor = Color.FromArgb(30, 31, 34);
+            distanceGrid.BorderStyle = BorderStyle.None;
+            distanceGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold) };
+            distanceGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False };
+            distanceGrid.EnableHeadersVisualStyles = false;
+            distanceGrid.ReadOnly = true;
+            distanceGrid.RowHeadersVisible = false;
+            distanceGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            distanceGrid.ColumnHeadersHeight = 26;
+            distanceGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        }
+
+        private void BuildDistanceGrid(IEnumerable<VisualDistanceRow> rows)
+        {
+            distanceGrid.Columns.Clear();
+            distanceGrid.Rows.Clear();
+            List<VisualDistanceRow> values = (rows ?? Enumerable.Empty<VisualDistanceRow>()).ToList();
+            distancePanel.Visible = values.Count > 0;
+            if (values.Count == 0) return;
+            AddDistanceColumn("Check", 230);
+            AddDistanceColumn("Minimum", 105);
+            AddDistanceColumn("Observed", 115);
+            AddDistanceColumn("Status", 145);
+            AddDistanceColumn("Interpretation", 420);
+            foreach (VisualDistanceRow value in values) distanceGrid.Rows.Add(value.Name, value.Minimum, value.Observed, value.Status, value.Interpretation);
+        }
+
+        private void AddDistanceColumn(string name, int width)
+        {
+            distanceGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = name,
+                MinimumWidth = 55,
+                FillWeight = width,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+        }
+
         private void BuildReviewGrid(IEnumerable<StandardAuthorityReviewItem> items)
         {
             reviewGrid.Columns.Clear();
@@ -789,7 +1083,9 @@ namespace EngiSentry.AutoCAD2021
             {
                 int row = reviewGrid.Rows.Add(item.RuleId, item.DecisionState, item.EffectiveEnforcementMode, ReviewEvidence(item));
                 reviewGrid.Rows[row].Height = 36;
+                reviewGrid.Rows[row].Tag = item;
             }
+            UpdateReviewDecisionPanel();
         }
 
         private void AddReviewColumn(string name, int width)
@@ -809,6 +1105,132 @@ namespace EngiSentry.AutoCAD2021
             return string.Join(" | ", item.Clauses.Select(clause =>
                 clause.ClauseId + " / " + clause.SourceId + " / " + clause.PolicyId + " / " + clause.PolicyClauseId +
                 " / " + clause.AuthorityClass + " / " + clause.EnforcementMode + " / " + clause.Rationale));
+        }
+
+        private void ReviewGridSelectionChanged(object sender, EventArgs e)
+        {
+            UpdateReviewDecisionPanel();
+        }
+
+        private void UpdateReviewDecisionPanel()
+        {
+            saveReviewDecisionButton.Enabled = false;
+            DataGridViewRow row = reviewGrid.CurrentRow;
+            StandardAuthorityReviewItem item = row == null ? null : row.Tag as StandardAuthorityReviewItem;
+            if (item == null)
+            {
+                existingReviewLabel.Text = "Existing human review: <none>";
+                evidenceCurrentnessLabel.Text = "Evidence: none";
+                historyStateLabel.Text = "History: none";
+                existingReviewerLabel.Text = "Reviewer: <none>";
+                return;
+            }
+
+            existingReviewLabel.Text = "Existing human review: <none>";
+            evidenceCurrentnessLabel.Text = "Evidence: none";
+            historyStateLabel.Text = "History: none";
+            existingReviewerLabel.Text = "Reviewer: <none> | Decision time: <none>";
+            if (current == null || current.StandardsReviewPackage == null || string.IsNullOrWhiteSpace(current.StandardsReviewPackagePath) || string.IsNullOrWhiteSpace(current.StandardsReviewPackageSha256))
+            {
+                decisionStatusLabel.Text = "Decision persistence unavailable: review package context is missing.";
+                return;
+            }
+
+            try
+            {
+                string directory = Path.GetDirectoryName(current.StandardsReviewPackagePath);
+                List<HumanEngineeringReviewDecisionRecord> records = HumanEngineeringReviewDecisionArtifactCatalog.Load(directory, current.StandardsReviewPackage.DrawingName);
+                HumanEngineeringReviewDecisionHistoryResolution history = HumanEngineeringReviewDecisionHistoryResolver.Resolve(records);
+                HumanEngineeringReviewDecisionHistoryEntry activeEntry = history.Entries.SingleOrDefault(entry => entry.RuleId == item.RuleId && entry.State == HumanEngineeringReviewDecisionHistoryStates.Active);
+                if (activeEntry == null)
+                {
+                    decisionStatusLabel.Text = "No prior human review decision.";
+                    saveReviewDecisionButton.Enabled = true;
+                    return;
+                }
+
+                HumanEngineeringReviewDecisionRecord activeDecision = records.Single(record => record.DecisionRecordId == activeEntry.DecisionRecordId);
+                HumanEngineeringReviewDecisionEvaluation evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(activeDecision, current.StandardsReviewPackage, current.StandardsReviewPackageSha256);
+                existingReviewLabel.Text = "Existing human review: " + activeDecision.HumanReviewState;
+                evidenceCurrentnessLabel.Text = "Evidence: " + evaluation.Status;
+                historyStateLabel.Text = "History: " + activeEntry.State;
+                existingReviewerLabel.Text = "Reviewer: " + activeDecision.ReviewerDisplayName + " | Decision time: " + activeDecision.DecisionTimestampUtc.ToString("u", CultureInfo.InvariantCulture);
+                decisionStatusLabel.Text = evaluation.Reasons.Count == 0 ? "Existing decision is current." : "Existing decision is stale: " + string.Join(", ", evaluation.Reasons);
+                saveReviewDecisionButton.Enabled = true;
+                humanReviewComboBox.SelectedItem = activeDecision.HumanReviewState;
+            }
+            catch (Exception exception)
+            {
+                decisionStatusLabel.Text = "Decision history unavailable: " + exception.Message;
+            }
+        }
+
+        private void SaveReviewDecision(object sender, EventArgs e)
+        {
+            try
+            {
+                DataGridViewRow row = reviewGrid.CurrentRow;
+                StandardAuthorityReviewItem item = row == null ? null : row.Tag as StandardAuthorityReviewItem;
+                if (item == null || current == null || current.Document == null)
+                {
+                    SetNote("Select an engineering review item with a valid active document.");
+                    return;
+                }
+                if (current.StandardsReviewPackage == null || string.IsNullOrWhiteSpace(current.StandardsReviewPackagePath) || string.IsNullOrWhiteSpace(current.StandardsReviewPackageSha256))
+                {
+                    SetNote("Review decision persistence is unavailable because the review package context is missing.");
+                    return;
+                }
+                Document activeDocument = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager == null
+                    ? null
+                    : Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
+                if (activeDocument == null || !object.ReferenceEquals(activeDocument, current.Document))
+                {
+                    SetNote("The active AutoCAD document no longer matches the drawing reviewed by ES_PLOTQA. Reactivate that drawing or rerun ES_PLOTQA.");
+                    return;
+                }
+                string activeDrawingName = Path.GetFileName(activeDocument.Name);
+                if (!string.Equals(activeDrawingName, current.StandardsReviewPackage.DrawingName, StringComparison.Ordinal))
+                {
+                    SetNote("The active document does not match the captured review package drawing.");
+                    return;
+                }
+                int dbmodBefore = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture);
+                string persistedHash = HumanEngineeringReviewDecisionFileStore.ComputeSha256(current.StandardsReviewPackagePath);
+                if (!string.Equals(persistedHash, current.StandardsReviewPackageSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    SetNote("Review package changed since ES_PLOTQA; rerun ES_PLOTQA before recording a decision.");
+                    return;
+                }
+                string reviewer = (reviewerTextBox.Text ?? string.Empty).Trim();
+                string humanReviewState = humanReviewComboBox.SelectedItem == null ? string.Empty : humanReviewComboBox.SelectedItem.ToString();
+                if (string.IsNullOrWhiteSpace(reviewer) || (humanReviewState != HumanEngineeringReviewDecisionStates.ReviewAccepted && humanReviewState != HumanEngineeringReviewDecisionStates.ReviewRejected && humanReviewState != HumanEngineeringReviewDecisionStates.NeedsClarification))
+                {
+                    SetNote("Reviewer and a valid human review state are required.");
+                    return;
+                }
+                string directory = Path.GetDirectoryName(current.StandardsReviewPackagePath);
+                List<HumanEngineeringReviewDecisionRecord> records = HumanEngineeringReviewDecisionArtifactCatalog.Load(directory, current.StandardsReviewPackage.DrawingName);
+                HumanEngineeringReviewDecisionHistoryResolution history = HumanEngineeringReviewDecisionHistoryResolver.Resolve(records);
+                HumanEngineeringReviewDecisionHistoryEntry activeEntry = history.Entries.SingleOrDefault(entry => entry.RuleId == item.RuleId && entry.State == HumanEngineeringReviewDecisionHistoryStates.Active);
+                DateTime decisionTimestampUtc = DateTime.UtcNow;
+                HumanEngineeringReviewDecisionRecord decision = HumanEngineeringReviewDecisionBuilder.Create(current.StandardsReviewPackage, persistedHash, item.RuleId, humanReviewState, reviewer, decisionTimestampUtc, authenticatedReviewerIdentity: null, comment: string.IsNullOrWhiteSpace(reviewCommentTextBox.Text) ? null : reviewCommentTextBox.Text.Trim(), supersedesDecisionRecordId: activeEntry == null ? null : activeEntry.DecisionRecordId);
+                DialogResult confirmation = MessageBox.Show("Rule: " + item.RuleId + "\nHuman Review: " + humanReviewState + "\nReviewer: " + reviewer + "\n\nThis records an immutable human review decision.\nIt does not approve or activate an engineering rule.", "Confirm Review Decision", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+                if (confirmation != DialogResult.OK) return;
+                string decisionPath = HumanEngineeringReviewDecisionFileStore.Write(decision, directory);
+                int dbmodAfter = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture);
+                if (dbmodBefore != dbmodAfter)
+                {
+                    SetNote("Review decision workflow changed DBMOD; no drawing save was performed.");
+                    return;
+                }
+                SetNote("Immutable human review decision saved: " + decisionPath);
+                UpdateReviewDecisionPanel();
+            }
+            catch (Exception exception)
+            {
+                SetNote("Review decision was not saved: " + exception.Message);
+            }
         }
 
         private static string RevisionChangeLabel(RevisionChangeRecord change)

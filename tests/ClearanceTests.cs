@@ -13,6 +13,7 @@ namespace EngiSentry.Tests
     {
         internal static void Run()
         {
+            RunP102C1Presentation();
             List<KnownQaRule> catalog = Catalog();
             ProfileResolution defaults = ProfileResolver.Resolve(catalog, new EngineeringStandardProfile[0]);
             Assert(defaults.EffectiveRuleSettings.Count == 17 && defaults.EffectiveRuleSettings.Count(x => x.Enabled) == 15 && !Setting(defaults, "PP-CLEAR-001").Enabled && !Setting(defaults, "PP-CLEAR-002").Enabled, "M5.0 default rule enablement changed.");
@@ -446,7 +447,531 @@ namespace EngiSentry.Tests
             RunP52();
             RunP53();
             RunP54();
+            RunP91();
+            RunP92A();
+            RunP92B();
+            RunP92C1();
+            RunP92C2A();
+            RunP92C2B();
+            RunP92C2C();
         }
+
+        private static void RunP91()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.equipment.security-fence.30m");
+            DateTime timestamp = new DateTime(2026, 9, 9, 12, 0, 0, DateTimeKind.Utc).AddTicks(1234);
+            EngineeringDistanceApprovalDecision approved = new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "APR-P91-001" };
+            EngineeringDistanceApprovalRecord first = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project\\", road, context.ClauseRegistry, context.SourceRegistry, approved, "P9.1 Test Approver", null, timestamp, "P9.1 deterministic approval");
+            EngineeringDistanceApprovalRecord same = EngineeringDistanceApprovalRecordBuilder.Create("c:\\p91\\project", road, context.ClauseRegistry, context.SourceRegistry, approved, "P9.1 Test Approver", null, timestamp, "P9.1 deterministic approval");
+            EngineeringDistanceApprovalRecord fenceRecord = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", fence, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = fence.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "APR-P91-002" }, "P9.1 Test Approver", null, timestamp, null, first.ApprovalRecordId);
+            Assert(first.CandidateBinding.CandidateId == road.CandidateId && first.CandidateBinding.RuleId == road.RuleId && first.CandidateBinding.ProposedMinimumDistanceMeters == 3m && first.CandidateBinding.RequiredMeasurementBasisKey == "AccessRoadEdge" && first.CandidateBinding.RequiredApplicabilityKey == "ProcessingEquipment" && first.CandidateBinding.ClauseIds.SequenceEqual(road.ClauseIds.OrderBy(x => x, StringComparer.Ordinal)), "P9.1 road candidate binding changed.");
+            Assert(first.EvidenceBindings.Select(x => x.ClauseId + "|" + x.SourceId + "|" + x.SourceSha256).SequenceEqual(new[] { "ips.e-pr-190.8.2.3|ips.e-pr-190.rev1.2009|FC0FF48E0CD3A4658BD6A19DE285A0D9C383BAF4484CE9A9156CE44EAAF4E152", "trc.pcd-pd-135.3.3.9.b|trc.pcd-pd-135.rev1|A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" }), "P9.1 road source evidence changed.");
+            Assert(fenceRecord.CandidateBinding.CandidateId == fence.CandidateId && fenceRecord.CandidateBinding.ProposedMinimumDistanceMeters == 30m && fenceRecord.SupersedesApprovalRecordId == first.ApprovalRecordId && fenceRecord.EvidenceBindings.Select(x => x.ClauseId + "|" + x.SourceId + "|" + x.SourceSha256).SequenceEqual(new[] { "ips.e-pr-190.f.11.2|ips.e-pr-190.rev1.2009|FC0FF48E0CD3A4658BD6A19DE285A0D9C383BAF4484CE9A9156CE44EAAF4E152", "trc.pcd-pd-135.3.3.10.a|trc.pcd-pd-135.rev1|A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" }), "P9.1 fence source evidence changed.");
+            Assert(first.ApprovalRecordId == same.ApprovalRecordId && first.CandidateBinding.CandidateDefinitionSha256 == same.CandidateBinding.CandidateDefinitionSha256 && first.DecisionTimestampUtc.Kind == DateTimeKind.Utc && first.DecisionTimestampUtc.Ticks % TimeSpan.TicksPerMillisecond == 0, "P9.1 deterministic identity or timestamp normalization failed.");
+            Assert(first.EvidenceBindings.All(x => x.SourceSha256.Length == 64) && first.EvidenceBindings.SequenceEqual(first.EvidenceBindings.OrderBy(x => x.ClauseId, StringComparer.Ordinal).ThenBy(x => x.SourceId, StringComparer.Ordinal).ThenBy(x => x.SourceSha256, StringComparer.Ordinal)), "P9.1 evidence ordering or SHA binding failed.");
+            EngineeringDistanceApprovalRecord changed = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "REFERENCE_ONLY" }, "P9.1 Test Approver", null, timestamp, "P9.1 changed decision");
+            Assert(changed.ApprovalRecordId != first.ApprovalRecordId, "P9.1 changed logical record did not change ApprovalRecordId.");
+            string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "EngiSentry-P91-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                string path = EngineeringDistanceApprovalRecordFileStore.Write(directory, first);
+                byte[] bytes = System.IO.File.ReadAllBytes(path);
+                EngineeringDistanceApprovalRecord read = EngineeringDistanceApprovalRecordFileStore.Read(path);
+                Assert(bytes.Length >= 3 && !(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) && read.ApprovalRecordId == first.ApprovalRecordId && read.DecisionTimestampUtc == first.DecisionTimestampUtc && EngineeringDistanceApprovalRecordFileStore.ComputeSha256(path).Length == 64, "P9.1 persistence round-trip or BOM-free output failed.");
+                bool overwrite = false; try { EngineeringDistanceApprovalRecordFileStore.Write(directory, first); } catch (System.IO.IOException) { overwrite = true; } Assert(overwrite, "P9.1 CreateNew did not reject overwrite.");
+                string json = System.IO.File.ReadAllText(path);
+                string fingerprintPath = System.IO.Path.Combine(directory, "candidate-fingerprint-tampered.json");
+                System.IO.File.WriteAllText(fingerprintPath, json.Replace(first.CandidateBinding.CandidateDefinitionSha256, new string('0', 64)), new System.Text.UTF8Encoding(false));
+                bool fingerprintTampered = false; try { EngineeringDistanceApprovalRecordFileStore.Read(fingerprintPath); } catch (EngineeringDistanceApprovalRecordValidationException) { fingerprintTampered = true; } catch (System.IO.InvalidDataException) { fingerprintTampered = true; } Assert(fingerprintTampered, "P9.1 tampered candidate fingerprint was accepted.");
+                string replacementId = first.ApprovalRecordId == new string('F', 64) ? new string('E', 64) : new string('F', 64);
+                string recordIdPath = System.IO.Path.Combine(directory, "approval-record-id-tampered.json");
+                System.IO.File.WriteAllText(recordIdPath, json.Replace(first.ApprovalRecordId, replacementId), new System.Text.UTF8Encoding(false));
+                bool recordIdTampered = false; try { EngineeringDistanceApprovalRecordFileStore.Read(recordIdPath); } catch (System.IO.InvalidDataException) { recordIdTampered = true; } Assert(recordIdTampered, "P9.1 tampered ApprovalRecordId was accepted.");
+            }
+            finally { if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); }
+            bool blankApprover = false; try { EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", road, context.ClauseRegistry, context.SourceRegistry, approved, string.Empty, null, timestamp); } catch (EngineeringDistanceApprovalRecordValidationException) { blankApprover = true; } Assert(blankApprover, "P9.1 accepted a blank approver.");
+            bool reviewAccepted = false; try { EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "REVIEW_ACCEPTED" }, "P9.1 Test Approver", null, timestamp); } catch (EngineeringDistanceApprovalRecordValidationException) { reviewAccepted = true; } Assert(reviewAccepted, "P9.1 accepted P8 review state as approval.");
+            bool unknownStatus = false; try { EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "UNKNOWN_STATUS" }, "P9.1 Test Approver", null, timestamp); } catch (EngineeringDistanceApprovalRecordValidationException) { unknownStatus = true; } Assert(unknownStatus, "P9.1 accepted an unknown approval state.");
+            bool missingReference = false; try { EngineeringDistanceApprovalRecordBuilder.Create("C:\\P91\\Project", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "APPROVED" }, "P9.1 Test Approver", null, timestamp); } catch (EngineeringDistanceApprovalRecordValidationException) { missingReference = true; } Assert(missingReference, "P9.1 APPROVED record did not require ApprovalReference.");
+            first.SupersedesApprovalRecordId = first.ApprovalRecordId;
+            bool self = false; try { EngineeringDistanceApprovalRecordValidator.Validate(first); } catch (EngineeringDistanceApprovalRecordValidationException) { self = true; } Assert(self, "P9.1 self-supersession was accepted.");
+        }
+
+        private static void RunP92A()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.equipment.security-fence.30m");
+            DateTime timestamp = new DateTime(2026, 9, 9, 13, 0, 0, DateTimeKind.Utc);
+            EngineeringDistanceApprovalRecord a = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92A-A" }, "Approver", null, timestamp, "A");
+            EngineeringDistanceApprovalRecord b = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "REJECTED" }, "Approver", null, timestamp.AddMilliseconds(1), "B", a.ApprovalRecordId);
+            EngineeringDistanceApprovalRecord c = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp.AddMilliseconds(2), "C", b.ApprovalRecordId);
+            EngineeringDistanceApprovalHistoryResolution chain = EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { c, a, b });
+            Assert(chain.Entries.Single(x => x.ApprovalRecordId == a.ApprovalRecordId).State == EngineeringDistanceApprovalHistoryStates.Superseded && chain.Entries.Single(x => x.ApprovalRecordId == b.ApprovalRecordId).State == EngineeringDistanceApprovalHistoryStates.Superseded && chain.Entries.Single(x => x.ApprovalRecordId == c.ApprovalRecordId).State == EngineeringDistanceApprovalHistoryStates.Active, "P9.2A append-only history chain failed.");
+            EngineeringDistanceApprovalCurrentnessResult current = EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "c:\\p92a\\", road, context.ClauseRegistry, context.SourceRegistry);
+            Assert(current.Status == EngineeringDistanceApprovalCurrentnessStates.Current && current.Reasons.Count == 0, "P9.2A current approval was not current.");
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A-OTHER", road, context.ClauseRegistry, context.SourceRegistry).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.ProjectScopeChanged }), "P9.2A project currentness reason failed.");
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A", null, context.ClauseRegistry, context.SourceRegistry).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.CandidateMissing }), "P9.2A missing candidate reason failed.");
+            EngineeringDistanceCandidateDefinition changedValue = CopyP92Candidate(road); changedValue.ProposedMinimumDistanceMeters = 4m;
+            EngineeringDistanceCandidateDefinition changedRule = CopyP92Candidate(road); changedRule.RuleId = "changed.rule";
+            EngineeringDistanceCandidateDefinition changedBasis = CopyP92Candidate(road); changedBasis.RequiredMeasurementBasisKey = "RoadCenterline";
+            EngineeringDistanceCandidateDefinition changedApplicability = CopyP92Candidate(road); changedApplicability.RequiredApplicabilityKey = "Equipment";
+            EngineeringDistanceCandidateDefinition changedClauses = CopyP92Candidate(road); changedClauses.ClauseIds = new List<string> { road.ClauseIds[0] };
+            foreach (EngineeringDistanceCandidateDefinition changed in new[] { changedValue, changedRule, changedBasis, changedApplicability }) Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A", changed, context.ClauseRegistry, context.SourceRegistry).Reasons.Contains(EngineeringDistanceApprovalCurrentnessReasons.CandidateDefinitionChanged), "P9.2A candidate change was not stale.");
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A", changedClauses, context.ClauseRegistry, context.SourceRegistry).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.CandidateDefinitionChanged, EngineeringDistanceApprovalCurrentnessReasons.EvidenceBindingsChanged }), "P9.2A clause-set stale reasons were not exact or deterministic.");
+            StandardSourceRegistry changedShaSources = StandardSourceRegistry.Create(context.SourceRegistry.Sources.Select(x => new StandardSourceDefinition { SourceId = x.SourceId, DocumentNumber = x.DocumentNumber, Title = x.Title, Issuer = x.Issuer, RevisionOrEdition = x.RevisionOrEdition, SourceFileName = x.SourceFileName, SourceSha256 = x.SourceId == "trc.pcd-pd-135.rev1" ? new string('B', 64) : x.SourceSha256 }));
+            StandardClauseRegistry changedShaClauses = StandardClauseRegistry.Create(changedShaSources, context.ClauseRegistry.Clauses);
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A", road, changedShaClauses, changedShaSources).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.EvidenceBindingsChanged }), "P9.2A source SHA change was not stale.");
+            StandardSourceRegistry changedIdSources = StandardSourceRegistry.Create(context.SourceRegistry.Sources.Select(x => new StandardSourceDefinition { SourceId = x.SourceId == "trc.pcd-pd-135.rev1" ? "trc.pcd-pd-135.changed" : x.SourceId, DocumentNumber = x.DocumentNumber, Title = x.Title, Issuer = x.Issuer, RevisionOrEdition = x.RevisionOrEdition, SourceFileName = x.SourceFileName, SourceSha256 = x.SourceSha256 }));
+            StandardClauseRegistry changedIdClauses = StandardClauseRegistry.Create(changedIdSources, context.ClauseRegistry.Clauses.Select(x => new StandardClauseDefinition { ClauseId = x.ClauseId, SourceId = x.SourceId == "trc.pcd-pd-135.rev1" ? "trc.pcd-pd-135.changed" : x.SourceId, ClauseReference = x.ClauseReference, ClauseText = x.ClauseText, Heading = x.Heading, PageNumber = x.PageNumber }));
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A", road, changedIdClauses, changedIdSources).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.EvidenceBindingsChanged }), "P9.2A source ID change was not stale.");
+            EngineeringDistanceApprovalRecord fenceRecord = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", fence, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = fence.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92A-F" }, "Approver", null, timestamp, "F");
+            Assert(EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { fenceRecord }).Entries.Single().State == EngineeringDistanceApprovalHistoryStates.Active && EngineeringDistanceApprovalCurrentnessValidator.Evaluate(fenceRecord, "C:\\P92A", fence, context.ClauseRegistry, context.SourceRegistry).Status == EngineeringDistanceApprovalCurrentnessStates.Current && EngineeringDistanceApprovalCurrentnessValidator.Evaluate(fenceRecord, "C:\\P92A", fence, context.ClauseRegistry, context.SourceRegistry).Reasons.Count == 0, "P9.2A fence was not explicitly ACTIVE and CURRENT.");
+            Assert(EngineeringDistanceApprovalCurrentnessValidator.Evaluate(a, "C:\\P92A-OTHER", changedValue, changedShaClauses, changedShaSources).Reasons.SequenceEqual(new[] { EngineeringDistanceApprovalCurrentnessReasons.ProjectScopeChanged, EngineeringDistanceApprovalCurrentnessReasons.CandidateDefinitionChanged, EngineeringDistanceApprovalCurrentnessReasons.EvidenceBindingsChanged }), "P9.2A multi-reason stale ordering failed.");
+            EngineeringDistanceApprovalHistoryResolution independent = EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, fenceRecord, EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A-OTHER", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92A-P" }, "Approver", null, timestamp, "P") });
+            Assert(independent.Entries.Count == 3 && independent.Entries.All(x => x.State == EngineeringDistanceApprovalHistoryStates.Active), "P9.2A independent project/candidate heads failed.");
+            bool duplicate = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, a }); } catch (EngineeringDistanceApprovalHistoryValidationException) { duplicate = true; } Assert(duplicate, "P9.2A duplicate approval ID was accepted.");
+            bool missing = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp, null, new string('A', 64)) }); } catch (EngineeringDistanceApprovalHistoryValidationException) { missing = true; } Assert(missing, "P9.2A missing supersession target was accepted.");
+            bool crossProject = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A-OTHER", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp, null, a.ApprovalRecordId) }); } catch (EngineeringDistanceApprovalHistoryValidationException) { crossProject = true; } Assert(crossProject, "P9.2A cross-project supersession was accepted.");
+            bool crossCandidate = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", fence, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = fence.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp, null, a.ApprovalRecordId) }); } catch (EngineeringDistanceApprovalHistoryValidationException) { crossCandidate = true; } Assert(crossCandidate, "P9.2A cross-candidate supersession was accepted.");
+            bool branch = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, b, EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp.AddMilliseconds(3), "branch", a.ApprovalRecordId) }); } catch (EngineeringDistanceApprovalHistoryValidationException) { branch = true; } Assert(branch, "P9.2A supersession branch was accepted.");
+            bool multipleHeads = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { a, EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "PENDING" }, "Approver", null, timestamp.AddMilliseconds(4), "independent") }); } catch (EngineeringDistanceApprovalHistoryValidationException) { multipleHeads = true; } Assert(multipleHeads, "P9.2A multiple active heads were accepted.");
+            EngineeringDistanceApprovalRecord cycleA = new EngineeringDistanceApprovalRecord { SchemaVersion = a.SchemaVersion, ApprovalRecordId = new string('C', 64), ProjectDirectory = a.ProjectDirectory, CandidateBinding = a.CandidateBinding, Decision = a.Decision, ApproverDisplayName = a.ApproverDisplayName, DecisionTimestampUtc = a.DecisionTimestampUtc, EvidenceBindings = a.EvidenceBindings };
+            EngineeringDistanceApprovalRecord cycleB = new EngineeringDistanceApprovalRecord { SchemaVersion = a.SchemaVersion, ApprovalRecordId = new string('D', 64), ProjectDirectory = a.ProjectDirectory, CandidateBinding = a.CandidateBinding, Decision = a.Decision, ApproverDisplayName = a.ApproverDisplayName, DecisionTimestampUtc = a.DecisionTimestampUtc, EvidenceBindings = a.EvidenceBindings };
+            cycleA.SupersedesApprovalRecordId = cycleB.ApprovalRecordId; cycleB.SupersedesApprovalRecordId = cycleA.ApprovalRecordId;
+            bool cycle = false; try { EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { cycleA, cycleB }); } catch (EngineeringDistanceApprovalHistoryValidationException) { cycle = true; } Assert(cycle, "P9.2A supersession cycle was accepted.");
+            string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92A-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string absent = System.IO.Path.Combine(directory, "absent");
+            try { Assert(EngineeringDistanceApprovalArtifactCatalog.Load(absent, "C:\\P92A").Count == 0, "P9.2A absent catalog directory did not return empty."); EngineeringDistanceApprovalRecord otherProject = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92A-OTHER", road, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = road.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92A-O" }, "Approver", null, timestamp, "O"); EngineeringDistanceApprovalRecordFileStore.Write(directory, a); EngineeringDistanceApprovalRecordFileStore.Write(directory, fenceRecord); EngineeringDistanceApprovalRecordFileStore.Write(directory, otherProject); Assert(EngineeringDistanceApprovalArtifactCatalog.Load(directory, "C:\\P92A").Select(x => x.ApprovalRecordId).SequenceEqual(new[] { a, fenceRecord }.OrderBy(x => x.CandidateBinding.CandidateId, StringComparer.Ordinal).ThenBy(x => x.ApprovalRecordId, StringComparer.Ordinal).Select(x => x.ApprovalRecordId)), "P9.2A catalog ordering/filter failed."); }
+            finally { if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); }
+            string duplicateDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92AD-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            try { string original = EngineeringDistanceApprovalRecordFileStore.Write(duplicateDirectory, a); System.IO.File.Copy(original, System.IO.Path.Combine(duplicateDirectory, "duplicate.engineering-distance.approval.json")); bool duplicateArtifact = false; try { EngineeringDistanceApprovalArtifactCatalog.Load(duplicateDirectory, "C:\\P92A"); } catch (EngineeringDistanceApprovalArtifactCatalogException) { duplicateArtifact = true; } Assert(duplicateArtifact, "P9.2A catalog accepted duplicate ApprovalRecordId."); }
+            finally { if (System.IO.Directory.Exists(duplicateDirectory)) System.IO.Directory.Delete(duplicateDirectory, true); }
+            string malformedDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92AM-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            try { System.IO.Directory.CreateDirectory(malformedDirectory); System.IO.File.WriteAllText(System.IO.Path.Combine(malformedDirectory, "malformed.engineering-distance.approval.json"), "not-json"); bool malformed = false; try { EngineeringDistanceApprovalArtifactCatalog.Load(malformedDirectory, "C:\\P92A"); } catch (EngineeringDistanceApprovalArtifactCatalogException) { malformed = true; } Assert(malformed, "P9.2A catalog silently ignored malformed approval artifact."); }
+            finally { if (System.IO.Directory.Exists(malformedDirectory)) System.IO.Directory.Delete(malformedDirectory, true); }
+        }
+
+        private static EngineeringDistanceCandidateDefinition CopyP92Candidate(EngineeringDistanceCandidateDefinition source) => new EngineeringDistanceCandidateDefinition { CandidateId = source.CandidateId, PackId = source.PackId, RuleId = source.RuleId, Title = source.Title, MeasurementKind = source.MeasurementKind, ProposedMinimumDistanceMeters = source.ProposedMinimumDistanceMeters, RequiredMeasurementBasisKey = source.RequiredMeasurementBasisKey, RequiredApplicabilityKey = source.RequiredApplicabilityKey, ApprovalStatus = source.ApprovalStatus, ClauseIds = source.ClauseIds.ToList() };
+
+        private static void RunP92B()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            StandardAuthorityPolicyRegistry sourcePolicies = StandardAuthorityPolicyRegistry.Create(context.SourceRegistry, context.ClauseRegistry, new[] { new StandardAuthorityPolicyDefinition { PolicyId="p92b-pcd", SourceId="trc.pcd-pd-135.rev1", AuthorityClass=StandardAuthorityClasses.GoverningProject, EnforcementMode=StandardEnforcementModes.ConditionalReview, Rationale="test" }, new StandardAuthorityPolicyDefinition { PolicyId="p92b-ips", SourceId="ips.e-pr-190.rev1.2009", AuthorityClass=StandardAuthorityClasses.LegacyConflict, EnforcementMode=StandardEnforcementModes.NeverAutoEnforce, Rationale="test" } });
+            foreach (EngineeringDistanceCandidateDefinition candidate in EngineeringDistanceCandidateCatalog.BuiltInCandidates)
+            {
+                EngineeringDistanceApprovalRecord approval = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92B", candidate, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId=candidate.CandidateId, DecisionStatus="APPROVED", ApprovalReference="P92B-"+candidate.CandidateId }, "Approver", null, new DateTime(2026,9,10,12,0,0,DateTimeKind.Utc));
+                EngineeringDistanceApprovalHistoryEntry active = EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { approval }).Entries.Single();
+                EngineeringDistanceApprovalCurrentnessResult current = EngineeringDistanceApprovalCurrentnessValidator.Evaluate(approval,"C:\\P92B",candidate,context.ClauseRegistry,context.SourceRegistry);
+                Assert(EngineeringDistanceApprovalAuthorityResolver.Resolve(approval,active,current,EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new EngineeringDistanceApprovalAuthorityPolicyDefinition[0]),context.ClauseRegistry,context.SourceRegistry,sourcePolicies).State==EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy,"P9.2B no-policy state failed.");
+                EngineeringDistanceApprovalAuthorityPolicyDefinition unresolved = P92BPolicy(approval,StandardEnforcementModes.ConditionalReview,EngineeringDistanceApprovalLegacyConflictDispositions.Unresolved);
+                Assert(EngineeringDistanceApprovalAuthorityResolver.Resolve(approval,active,current,EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[]{unresolved}),context.ClauseRegistry,context.SourceRegistry,sourcePolicies).State==EngineeringDistanceApprovalAuthorityStates.LegacyConflictUnresolved,"P9.2B unresolved legacy state failed.");
+                EngineeringDistanceApprovalAuthorityPolicyDefinition conditional = P92BPolicy(approval,StandardEnforcementModes.ConditionalReview,EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+                EngineeringDistanceApprovalAuthorityResult conditionalResult = EngineeringDistanceApprovalAuthorityResolver.Resolve(approval,active,current,EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[]{conditional}),context.ClauseRegistry,context.SourceRegistry,sourcePolicies);
+                Assert(conditionalResult.State==EngineeringDistanceApprovalAuthorityStates.GoverningProjectConditional && conditionalResult.AuthorityClass==StandardAuthorityClasses.GoverningProject && conditionalResult.EffectiveEnforcementMode==StandardEnforcementModes.ConditionalReview && conditionalResult.PolicyId==conditional.PolicyId && conditionalResult.AuthorityBasisReference==conditional.AuthorityBasisReference,"P9.2B conditional project authority provenance failed.");
+                EngineeringDistanceApprovalAuthorityPolicyDefinition deterministic = P92BPolicy(approval,StandardEnforcementModes.Deterministic,EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+                EngineeringDistanceApprovalAuthorityResult deterministicResult = EngineeringDistanceApprovalAuthorityResolver.Resolve(approval,active,current,EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[]{deterministic}),context.ClauseRegistry,context.SourceRegistry,sourcePolicies);
+                Assert(deterministicResult.State==EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic && deterministicResult.AuthorityClass==StandardAuthorityClasses.GoverningProject && deterministicResult.EffectiveEnforcementMode==StandardEnforcementModes.Deterministic && deterministicResult.PolicyId==deterministic.PolicyId && deterministicResult.AuthorityBasisReference==deterministic.AuthorityBasisReference,"P9.2B deterministic project authority provenance failed.");
+            }
+
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceApprovalRecord roadApproval = P92BApproval("C:\\P92B", road, context, "APPROVED", "P92B-C2", "Display Only", null);
+            EngineeringDistanceApprovalHistoryEntry roadActive = EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { roadApproval }).Entries.Single();
+            EngineeringDistanceApprovalCurrentnessResult roadCurrent = EngineeringDistanceApprovalCurrentnessValidator.Evaluate(roadApproval, "C:\\P92B", road, context.ClauseRegistry, context.SourceRegistry);
+            EngineeringDistanceApprovalAuthorityPolicyDefinition policy = P92BPolicy(roadApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+            EngineeringDistanceApprovalAuthorityPolicyRegistry registry = EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { policy });
+            EngineeringDistanceApprovalAuthorityResult resolved = P92BResolve(roadApproval, roadActive, roadCurrent, registry, context, sourcePolicies);
+            Assert(resolved.State == EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic && resolved.AuthorityClass == StandardAuthorityClasses.GoverningProject, "P9.2B C2 valid deterministic authority was not resolved.");
+
+            EngineeringDistanceApprovalHistoryEntry superseded = new EngineeringDistanceApprovalHistoryEntry { ApprovalRecordId = roadApproval.ApprovalRecordId, ProjectDirectory = roadApproval.ProjectDirectory, CandidateId = roadApproval.CandidateBinding.CandidateId, State = EngineeringDistanceApprovalHistoryStates.Superseded, SupersededByApprovalRecordId = new string('B', 64) };
+            EngineeringDistanceApprovalAuthorityResult supersededResult = P92BResolve(roadApproval, superseded, roadCurrent, registry, context, sourcePolicies);
+            Assert(supersededResult.State == EngineeringDistanceApprovalAuthorityStates.InactiveApproval && supersededResult.AuthorityClass != StandardAuthorityClasses.GoverningProject, "P9.2B C2 superseded approval was not blocked.");
+            foreach (string status in new[] { "PENDING", "REJECTED", "REFERENCE_ONLY" })
+            {
+                EngineeringDistanceApprovalRecord nonApproved = P92BApproval("C:\\P92B", road, context, status, null, "Approver", null);
+                EngineeringDistanceApprovalAuthorityResult result = P92BResolve(nonApproved, EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { nonApproved }).Entries.Single(), EngineeringDistanceApprovalCurrentnessValidator.Evaluate(nonApproved, "C:\\P92B", road, context.ClauseRegistry, context.SourceRegistry), EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new EngineeringDistanceApprovalAuthorityPolicyDefinition[0]), context, sourcePolicies);
+                Assert(result.State == EngineeringDistanceApprovalAuthorityStates.NotApproved && result.AuthorityClass != StandardAuthorityClasses.GoverningProject, "P9.2B C2 non-approved state was not blocked: " + status);
+            }
+            EngineeringDistanceApprovalCurrentnessResult stale = new EngineeringDistanceApprovalCurrentnessResult { Status = EngineeringDistanceApprovalCurrentnessStates.Stale, Reasons = new List<string> { EngineeringDistanceApprovalCurrentnessReasons.CandidateDefinitionChanged } };
+            EngineeringDistanceApprovalAuthorityResult staleResult = P92BResolve(roadApproval, roadActive, stale, registry, context, sourcePolicies);
+            Assert(staleResult.State == EngineeringDistanceApprovalAuthorityStates.StaleApproval && staleResult.AuthorityClass != StandardAuthorityClasses.GoverningProject, "P9.2B C2 stale approval was not blocked.");
+
+            EngineeringDistanceApprovalAuthorityPolicyDefinition wrongProject = P92BCopyPolicy(policy); wrongProject.ProjectDirectory = "C:\\P92B-OTHER";
+            EngineeringDistanceApprovalAuthorityPolicyDefinition wrongCandidate = P92BCopyPolicy(policy); wrongCandidate.CandidateId = "candidate.other";
+            EngineeringDistanceApprovalAuthorityPolicyDefinition wrongRecord = P92BCopyPolicy(policy); wrongRecord.ApprovalRecordId = new string('A', 64);
+            EngineeringDistanceApprovalAuthorityPolicyDefinition wrongReference = P92BCopyPolicy(policy); wrongReference.ApprovalReference = "OTHER-REFERENCE";
+            Assert(P92BResolve(roadApproval, roadActive, roadCurrent, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { wrongProject }), context, sourcePolicies).State == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy, "P9.2B C2 wrong project policy was selected.");
+            Assert(P92BResolve(roadApproval, roadActive, roadCurrent, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { wrongCandidate }), context, sourcePolicies).State == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy, "P9.2B C2 wrong candidate policy was selected.");
+            Assert(P92BResolve(roadApproval, roadActive, roadCurrent, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { wrongRecord }), context, sourcePolicies).State == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy, "P9.2B C2 wrong approval-record policy was selected.");
+            Assert(P92BResolve(roadApproval, roadActive, roadCurrent, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { wrongReference }), context, sourcePolicies).State == EngineeringDistanceApprovalAuthorityStates.AuthorityPolicyMismatch, "P9.2B C2 approval-reference mismatch was not blocked.");
+
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.PolicyId = ""), "blank PolicyId");
+            P92BAssertPolicyRejected(new[] { P92BCopyPolicy(policy), P92BCopyPolicy(policy, x => x.ApprovalRecordId = new string('E', 64)) }, "duplicate PolicyId");
+            P92BAssertPolicyRejected(new[] { P92BCopyPolicy(policy), P92BCopyPolicy(policy, x => x.PolicyId = "duplicate") }, "duplicate exact key");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.CandidateId = ""), "blank CandidateId");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.ApprovalRecordId = "not-a-sha"), "invalid ApprovalRecordId");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.ApprovalReference = ""), "blank ApprovalReference");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.AuthorityBasisReference = ""), "blank AuthorityBasisReference");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.Rationale = ""), "blank Rationale");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.EnforcementMode = StandardEnforcementModes.Advisory), "advisory enforcement");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.EnforcementMode = StandardEnforcementModes.NeverAutoEnforce), "never-auto enforcement");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.EnforcementMode = "UNSUPPORTED"), "unsupported enforcement");
+            P92BAssertPolicyRejected(P92BCopyPolicy(policy, x => x.LegacyConflictDisposition = "UNSUPPORTED"), "unsupported legacy disposition");
+            Assert(EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { P92BCopyPolicy(policy, x => x.EnforcementMode = StandardEnforcementModes.ConditionalReview), P92BCopyPolicy(policy, x => { x.PolicyId = "p92b-distinct"; x.ApprovalRecordId = new string('C', 64); x.LegacyConflictDisposition = EngineeringDistanceApprovalLegacyConflictDispositions.Unresolved; }) }).Policies.Count == 2, "P9.2B C2 accepted policy values were rejected.");
+
+            P92BAssertQuarantineHardBlock();
+            EngineeringDistanceApprovalAuthorityResult displayOnly = P92BResolve(roadApproval, roadActive, roadCurrent, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new EngineeringDistanceApprovalAuthorityPolicyDefinition[0]), context, sourcePolicies);
+            EngineeringDistanceApprovalRecord identityOnly = P92BApproval("C:\\P92B", road, context, "APPROVED", "P92B-C2-IDENTITY", "Other Display", "other-authenticated-identity");
+            Assert(displayOnly.State == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy && P92BResolve(identityOnly, EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { identityOnly }).Entries.Single(), EngineeringDistanceApprovalCurrentnessValidator.Evaluate(identityOnly, "C:\\P92B", road, context.ClauseRegistry, context.SourceRegistry), EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new EngineeringDistanceApprovalAuthorityPolicyDefinition[0]), context, sourcePolicies).State == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy, "P9.2B C2 reviewer identity granted authority without policy.");
+
+            string approvalId = roadApproval.ApprovalRecordId; string approvalContent = EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(roadApproval); string historyState = roadActive.State; string historyProject = roadActive.ProjectDirectory; string historyCandidate = roadActive.CandidateId; string? historySupersededBy = roadActive.SupersededByApprovalRecordId; string currentState = roadCurrent.Status; string currentReasons = string.Join("|", roadCurrent.Reasons); EngineeringDistanceApprovalAuthorityPolicyDefinition originalPolicy = P92BCopyPolicy(policy); string originalRationale = policy.Rationale;
+            P92BResolve(roadApproval, roadActive, roadCurrent, registry, context, sourcePolicies);
+            Assert(roadApproval.ApprovalRecordId == approvalId && EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(roadApproval) == approvalContent && roadActive.ApprovalRecordId == approvalId && roadActive.State == historyState && roadActive.ProjectDirectory == historyProject && roadActive.CandidateId == historyCandidate && roadActive.SupersededByApprovalRecordId == historySupersededBy && roadCurrent.Status == currentState && string.Join("|", roadCurrent.Reasons) == currentReasons && policy.PolicyId == originalPolicy.PolicyId && policy.ProjectDirectory == originalPolicy.ProjectDirectory && policy.CandidateId == originalPolicy.CandidateId && policy.ApprovalRecordId == originalPolicy.ApprovalRecordId && policy.ApprovalReference == originalPolicy.ApprovalReference && policy.AuthorityBasisReference == originalPolicy.AuthorityBasisReference && policy.EnforcementMode == originalPolicy.EnforcementMode && policy.LegacyConflictDisposition == originalPolicy.LegacyConflictDisposition && policy.Rationale == originalRationale, "P9.2B C2 resolver mutated caller inputs.");
+            policy.Rationale = "mutated caller";
+            EngineeringDistanceApprovalAuthorityPolicyDefinition registryPolicy = registry.Policies.Single();
+            Assert(registryPolicy.Rationale == originalRationale, "P9.2B C2 registry did not isolate its input policy.");
+            registryPolicy.Rationale = "mutated output";
+            Assert(registry.Policies.Single().Rationale == originalRationale, "P9.2B C2 registry did not isolate returned policy copies.");
+        }
+
+        private static EngineeringDistanceApprovalAuthorityPolicyDefinition P92BPolicy(EngineeringDistanceApprovalRecord approval,string mode,string disposition) => new EngineeringDistanceApprovalAuthorityPolicyDefinition { PolicyId="p92b-"+approval.ApprovalRecordId, ProjectDirectory=approval.ProjectDirectory, CandidateId=approval.CandidateBinding.CandidateId, ApprovalRecordId=approval.ApprovalRecordId, ApprovalReference=approval.Decision.ApprovalReference!, AuthorityBasisReference="PROJECT-GOV-1", EnforcementMode=mode, LegacyConflictDisposition=disposition, Rationale="controlled project authority" };
+
+        private static EngineeringDistanceApprovalRecord P92BApproval(string project, EngineeringDistanceCandidateDefinition candidate, ProjectEngineeringDistanceReferenceContext context, string status, string? reference, string displayName, string? identity) => EngineeringDistanceApprovalRecordBuilder.Create(project, candidate, context.ClauseRegistry, context.SourceRegistry, new EngineeringDistanceApprovalDecision { CandidateId = candidate.CandidateId, DecisionStatus = status, ApprovalReference = reference }, displayName, identity, new DateTime(2026, 9, 10, 13, 0, 0, DateTimeKind.Utc));
+
+        private static EngineeringDistanceApprovalAuthorityResult P92BResolve(EngineeringDistanceApprovalRecord approval, EngineeringDistanceApprovalHistoryEntry history, EngineeringDistanceApprovalCurrentnessResult currentness, EngineeringDistanceApprovalAuthorityPolicyRegistry policies, ProjectEngineeringDistanceReferenceContext context, StandardAuthorityPolicyRegistry sourcePolicies) => EngineeringDistanceApprovalAuthorityResolver.Resolve(approval, history, currentness, policies, context.ClauseRegistry, context.SourceRegistry, sourcePolicies);
+
+        private static EngineeringDistanceApprovalAuthorityPolicyDefinition P92BCopyPolicy(EngineeringDistanceApprovalAuthorityPolicyDefinition source, Action<EngineeringDistanceApprovalAuthorityPolicyDefinition>? mutate = null) { EngineeringDistanceApprovalAuthorityPolicyDefinition copy = new EngineeringDistanceApprovalAuthorityPolicyDefinition { PolicyId=source.PolicyId, ProjectDirectory=source.ProjectDirectory, CandidateId=source.CandidateId, ApprovalRecordId=source.ApprovalRecordId, ApprovalReference=source.ApprovalReference, AuthorityBasisReference=source.AuthorityBasisReference, EnforcementMode=source.EnforcementMode, LegacyConflictDisposition=source.LegacyConflictDisposition, Rationale=source.Rationale }; if (mutate != null) mutate(copy); return copy; }
+
+        private static void P92BAssertPolicyRejected(EngineeringDistanceApprovalAuthorityPolicyDefinition policy, string scenario) => P92BAssertPolicyRejected(new[] { policy }, scenario);
+        private static void P92BAssertPolicyRejected(IEnumerable<EngineeringDistanceApprovalAuthorityPolicyDefinition> policies, string scenario) { try { EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(policies); } catch (EngineeringDistanceApprovalAuthorityPolicyRegistryValidationException) { return; } throw new InvalidOperationException("P9.2B C2 policy registry accepted " + scenario + "."); }
+
+        private static void P92BAssertQuarantineHardBlock()
+        {
+            StandardSourceRegistry sources = StandardSourceRegistry.Create(new[] { new StandardSourceDefinition { SourceId = "p92b.quarantined", DocumentNumber = "P92B-Q", Title = "Quarantined", Issuer = "Test", RevisionOrEdition = "1", SourceSha256 = new string('D', 64) } });
+            StandardClauseRegistry clauses = StandardClauseRegistry.Create(sources, new[] { new StandardClauseDefinition { ClauseId = "p92b.quarantined.1", SourceId = "p92b.quarantined", ClauseReference = "1", ClauseText = "Synthetic quarantine evidence" } });
+            EngineeringDistanceCandidateDefinition candidate = new EngineeringDistanceCandidateDefinition { CandidateId = "candidate.p92b.quarantined", PackId = "pack.p92b.quarantined", RuleId = "rule.p92b.quarantined", Title = "Synthetic quarantine candidate", MeasurementKind = "EquipmentToRoad2D", ProposedMinimumDistanceMeters = 1m, RequiredMeasurementBasisKey = "AccessRoadEdge", RequiredApplicabilityKey = "ProcessingEquipment", ApprovalStatus = "PENDING_ENGINEERING_APPROVAL", ClauseIds = new List<string> { "p92b.quarantined.1" } };
+            EngineeringDistanceApprovalRecord approval = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92B-Q", candidate, clauses, sources, new EngineeringDistanceApprovalDecision { CandidateId = candidate.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92B-Q" }, "Approver", null, new DateTime(2026, 9, 10, 14, 0, 0, DateTimeKind.Utc));
+            EngineeringDistanceApprovalHistoryEntry active = EngineeringDistanceApprovalHistoryResolver.Resolve(new[] { approval }).Entries.Single();
+            EngineeringDistanceApprovalCurrentnessResult current = EngineeringDistanceApprovalCurrentnessValidator.Evaluate(approval, "C:\\P92B-Q", candidate, clauses, sources);
+            EngineeringDistanceApprovalAuthorityPolicyDefinition policy = P92BPolicy(approval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+            StandardAuthorityPolicyRegistry sourcePolicies = StandardAuthorityPolicyRegistry.Create(sources, clauses, new[] { new StandardAuthorityPolicyDefinition { PolicyId = "p92b-quarantine", SourceId = "p92b.quarantined", AuthorityClass = StandardAuthorityClasses.Quarantined, EnforcementMode = StandardEnforcementModes.NeverAutoEnforce, Rationale = "synthetic quarantine" } });
+            EngineeringDistanceApprovalAuthorityResult result = EngineeringDistanceApprovalAuthorityResolver.Resolve(approval, active, current, EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { policy }), clauses, sources, sourcePolicies);
+            Assert(result.State == EngineeringDistanceApprovalAuthorityStates.SourceQuarantined && result.AuthorityClass != StandardAuthorityClasses.GoverningProject && result.State != EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic, "P9.2B C2 project authority bypassed a quarantined source.");
+        }
+
+        private static void RunP92C2A()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceApprovalRecord approval = P92BApproval("C:\\P92C2A", road, context, "APPROVED", "P92C2A-ROAD", "Approver", null);
+            EngineeringDistanceApprovalAuthorityPolicyDefinition policy = P92BPolicy(approval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+            using (System.Security.Cryptography.RSA signer = System.Security.Cryptography.RSA.Create(2048))
+            using (System.Security.Cryptography.RSA untrustedSigner = System.Security.Cryptography.RSA.Create(2048))
+            {
+                EngineeringDistanceApprovalAuthorityTrustedKeyDefinition originalKey = P92C2ATrustedKey(signer, "issuer.p92c2a", "key.1");
+                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trusted = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { originalKey });
+                originalKey.IssuerId = "changed";
+                Assert(trusted.TrustedKeys.Single().IssuerId == "issuer.p92c2a", "P9.2C2A trusted-key input isolation failed.");
+                trusted.TryGet("issuer.p92c2a", "key.1", out EngineeringDistanceApprovalAuthorityTrustedKeyDefinition? returnedKey);
+                returnedKey!.KeyId = "changed";
+                Assert(trusted.TrustedKeys.Single().KeyId == "key.1", "P9.2C2A trusted-key output isolation failed.");
+
+                EngineeringDistanceApprovalAuthorityPolicyArtifact artifact = P92C2AArtifact(signer, policy, "issuer.p92c2a", "key.1", new DateTime(2026, 9, 10, 18, 0, 0, DateTimeKind.Utc));
+                EngineeringDistanceApprovalAuthorityPolicyArtifact verified = EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(artifact, trusted);
+                Assert(verified.PolicyArtifactId == EngineeringDistanceApprovalAuthorityPolicyArtifactCanonicalizer.ComputePolicyArtifactId(artifact) && verified.Policy!.PolicyId == policy.PolicyId && EngineeringDistanceApprovalAuthorityPolicyRegistry.Create(new[] { verified.Policy }).Policies.Single().PolicyId == policy.PolicyId, "P9.2C2A valid signed policy was not accepted or projected.");
+                string artifactIdentity = artifact.PolicyArtifactId + "|" + artifact.Policy!.PolicyId + "|" + artifact.SignatureBase64;
+                verified.Policy!.PolicyId = "changed";
+                Assert(artifactIdentity == artifact.PolicyArtifactId + "|" + artifact.Policy!.PolicyId + "|" + artifact.SignatureBase64, "P9.2C2A artifact validation mutated caller-owned content.");
+
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.Policy!.PolicyId = "changed"), trusted), "PolicyId tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.Policy!.ApprovalRecordId = new string('A', 64)), trusted), "ApprovalRecordId tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.Policy!.ApprovalReference = "changed"), trusted), "ApprovalReference tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.Policy!.AuthorityBasisReference = "changed"), trusted), "AuthorityBasisReference tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.Policy!.ProjectDirectory = "C:\\OTHER"), trusted), "ProjectDirectory tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.IssuerId = "issuer.other"), trusted), "IssuerId tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.KeyId = "key.other"), trusted), "KeyId tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.SignatureAlgorithm = "OTHER"), trusted), "SignatureAlgorithm tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.SignatureBase64 = Convert.ToBase64String(new byte[] { 1, 2, 3 })), trusted), "signature tamper");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AArtifact(untrustedSigner, policy, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc), trusted), "untrusted signing key");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AArtifact(signer, policy, "issuer.unknown", "key.1", artifact.IssuedAtUtc), trusted), "unknown issuer");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AArtifact(signer, policy, "issuer.p92c2a", "key.unknown", artifact.IssuedAtUtc), trusted), "unknown key");
+                EngineeringDistanceApprovalAuthorityPolicyDefinition nonNormalized = P92BCopyPolicy(policy); nonNormalized.ProjectDirectory = "C:\\P92C2A\\";
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AArtifact(signer, nonNormalized, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc), trusted), "non-normalized project");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.PolicyArtifactId = new string('A', 64)), trusted), "wrong PolicyArtifactId");
+                P92C2AReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.Validate(P92C2AAlter(artifact, x => x.SignatureBase64 = string.Empty), trusted), "unsigned artifact");
+                bool smallKey = false; using (System.Security.Cryptography.RSA small = System.Security.Cryptography.RSA.Create(1024)) { try { EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { P92C2ATrustedKey(small, "issuer.small", "key.1") }); } catch (EngineeringDistanceApprovalAuthorityTrustedIssuerRegistryValidationException) { smallKey = true; } }
+                bool duplicateKey = false; try { EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { P92C2ATrustedKey(signer, "issuer.p92c2a", "key.1"), P92C2ATrustedKey(signer, "issuer.p92c2a", "key.1") }); } catch (EngineeringDistanceApprovalAuthorityTrustedIssuerRegistryValidationException) { duplicateKey = true; }
+                Assert(smallKey && duplicateKey, "P9.2C2A trusted-key size or duplicate validation failed.");
+
+                string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92C2A-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                try
+                {
+                    Assert(EngineeringDistanceApprovalAuthorityTrustStore.Load(System.IO.Path.Combine(root, "absent.json")).TrustedKeys.Count == 0 && EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(System.IO.Path.Combine(root, "absent"), policy.ProjectDirectory, trusted).Artifacts.Count == 0, "P9.2C2A absent trust store or catalog did not fail closed to empty.");
+                    System.IO.Directory.CreateDirectory(root);
+                    string malformedTrust = System.IO.Path.Combine(root, "malformed-trust.json"); System.IO.File.WriteAllText(malformedTrust, "not-json");
+                    bool malformedTrustRejected = false; try { EngineeringDistanceApprovalAuthorityTrustStore.Load(malformedTrust); } catch (EngineeringDistanceApprovalAuthorityTrustStoreException) { malformedTrustRejected = true; }
+                    Assert(malformedTrustRejected, "P9.2C2A malformed trust store was accepted.");
+
+                    string catalogDirectory = System.IO.Path.Combine(root, "catalog"); System.IO.Directory.CreateDirectory(catalogDirectory);
+                    EngineeringDistanceApprovalAuthorityPolicyDefinition otherPolicy = P92BCopyPolicy(policy); otherPolicy.ProjectDirectory = "C:\\P92C2A-OTHER";
+                    P92C2AWrite(System.IO.Path.Combine(catalogDirectory, "other" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), P92C2AArtifact(signer, otherPolicy, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc));
+                    P92C2AWrite(System.IO.Path.Combine(catalogDirectory, "valid" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), artifact);
+                    EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog catalog = EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(catalogDirectory, policy.ProjectDirectory, trusted);
+                    EngineeringDistanceApprovalAuthorityPolicyDefinition projected = catalog.Policies.Single(); projected.Rationale = "changed";
+                    Assert(catalog.Artifacts.Count == 1 && catalog.Policies.Single().Rationale == policy.Rationale && catalog.CreatePolicyRegistry().Policies.Single().PolicyId == policy.PolicyId, "P9.2C2A verified catalog projection was not detached.");
+
+                    string malformedDirectory = System.IO.Path.Combine(root, "malformed"); System.IO.Directory.CreateDirectory(malformedDirectory); System.IO.File.WriteAllText(System.IO.Path.Combine(malformedDirectory, "bad" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), "not-json");
+                    P92C2ACatalogReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(malformedDirectory, policy.ProjectDirectory, trusted), "malformed artifact");
+                    string duplicateIdDirectory = System.IO.Path.Combine(root, "duplicate-id"); System.IO.Directory.CreateDirectory(duplicateIdDirectory); P92C2AWrite(System.IO.Path.Combine(duplicateIdDirectory, "one" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), artifact); P92C2AWrite(System.IO.Path.Combine(duplicateIdDirectory, "two" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), artifact); P92C2ACatalogReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(duplicateIdDirectory, policy.ProjectDirectory, trusted), "duplicate artifact ID");
+                    string duplicatePolicyDirectory = System.IO.Path.Combine(root, "duplicate-policy"); System.IO.Directory.CreateDirectory(duplicatePolicyDirectory); EngineeringDistanceApprovalAuthorityPolicyDefinition secondPolicy = P92BCopyPolicy(policy); secondPolicy.PolicyId = policy.PolicyId + "-second"; P92C2AWrite(System.IO.Path.Combine(duplicatePolicyDirectory, "one" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), artifact); P92C2AWrite(System.IO.Path.Combine(duplicatePolicyDirectory, "two" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), P92C2AArtifact(signer, secondPolicy, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc.AddMilliseconds(1))); P92C2ACatalogReject(() => EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(duplicatePolicyDirectory, policy.ProjectDirectory, trusted), "duplicate policy key");
+                    string orderingDirectory = System.IO.Path.Combine(root, "ordering"); System.IO.Directory.CreateDirectory(orderingDirectory);
+                    EngineeringDistanceApprovalAuthorityPolicyDefinition a = P92BCopyPolicy(policy); a.PolicyId = "policy.a"; a.CandidateId = "candidate.a"; a.ApprovalRecordId = new string('A', 64);
+                    EngineeringDistanceApprovalAuthorityPolicyDefinition z = P92BCopyPolicy(policy); z.PolicyId = "policy.z"; z.CandidateId = "candidate.z"; z.ApprovalRecordId = new string('B', 64);
+                    P92C2AWrite(System.IO.Path.Combine(orderingDirectory, "z" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), P92C2AArtifact(signer, z, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc.AddMilliseconds(2)));
+                    P92C2AWrite(System.IO.Path.Combine(orderingDirectory, "a" + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), P92C2AArtifact(signer, a, "issuer.p92c2a", "key.1", artifact.IssuedAtUtc.AddMilliseconds(3)));
+                    Assert(EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(orderingDirectory, policy.ProjectDirectory, trusted).Policies.Select(x => x.CandidateId).SequenceEqual(new[] { "candidate.a", "candidate.z" }), "P9.2C2A catalog ordering was not deterministic.");
+                }
+                finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            }
+        }
+
+        private static EngineeringDistanceApprovalAuthorityTrustedKeyDefinition P92C2ATrustedKey(System.Security.Cryptography.RSA rsa, string issuerId, string keyId) { System.Security.Cryptography.RSAParameters parameters = rsa.ExportParameters(false); return new EngineeringDistanceApprovalAuthorityTrustedKeyDefinition { IssuerId = issuerId, KeyId = keyId, SignatureAlgorithm = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.SignatureAlgorithm, RsaModulusBase64 = Convert.ToBase64String(parameters.Modulus!), RsaExponentBase64 = Convert.ToBase64String(parameters.Exponent!) }; }
+        private static EngineeringDistanceApprovalAuthorityPolicyArtifact P92C2AArtifact(System.Security.Cryptography.RSA signer, EngineeringDistanceApprovalAuthorityPolicyDefinition policy, string issuerId, string keyId, DateTime issuedAtUtc) { var artifact = new EngineeringDistanceApprovalAuthorityPolicyArtifact { SchemaVersion = EngineeringDistanceApprovalAuthorityPolicyArtifactValidator.SchemaVersion, IssuerId = issuerId, KeyId = keyId, IssuedAtUtc = new DateTime(issuedAtUtc.Ticks - issuedAtUtc.Ticks % TimeSpan.TicksPerMillisecond, DateTimeKind.Utc), SignatureAlgorithm = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.SignatureAlgorithm, Policy = P92BCopyPolicy(policy) }; artifact.PolicyArtifactId = EngineeringDistanceApprovalAuthorityPolicyArtifactCanonicalizer.ComputePolicyArtifactId(artifact); artifact.SignatureBase64 = Convert.ToBase64String(signer.SignData(EngineeringDistanceApprovalAuthorityPolicyArtifactCanonicalizer.CreateUnsignedPayloadBytes(artifact), System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1)); return artifact; }
+        private static EngineeringDistanceApprovalAuthorityPolicyArtifact P92C2AAlter(EngineeringDistanceApprovalAuthorityPolicyArtifact source, Action<EngineeringDistanceApprovalAuthorityPolicyArtifact> mutate) { var copy = new EngineeringDistanceApprovalAuthorityPolicyArtifact { SchemaVersion = source.SchemaVersion, PolicyArtifactId = source.PolicyArtifactId, IssuerId = source.IssuerId, KeyId = source.KeyId, IssuedAtUtc = source.IssuedAtUtc, SignatureAlgorithm = source.SignatureAlgorithm, Policy = P92BCopyPolicy(source.Policy!), SignatureBase64 = source.SignatureBase64 }; mutate(copy); return copy; }
+        private static void P92C2AWrite(string path, EngineeringDistanceApprovalAuthorityPolicyArtifact artifact) { using (var stream = new System.IO.FileStream(path, System.IO.FileMode.CreateNew, System.IO.FileAccess.Write, System.IO.FileShare.None)) new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(EngineeringDistanceApprovalAuthorityPolicyArtifact)).WriteObject(stream, artifact); }
+        private static void P92C2AReject(Action action, string scenario) { try { action(); } catch (EngineeringDistanceApprovalAuthorityPolicyArtifactValidationException) { return; } throw new InvalidOperationException("P9.2C2A accepted " + scenario + "."); }
+        private static void P92C2ACatalogReject(Action action, string scenario) { try { action(); } catch (EngineeringDistanceApprovalAuthorityPolicyArtifactCatalogException) { return; } throw new InvalidOperationException("P9.2C2A catalog accepted " + scenario + "."); }
+
+        private static void RunP92C2B()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            StandardAuthorityPolicyRegistry standardPolicies = StandardAuthorityPolicyRegistry.Create(context.SourceRegistry, context.ClauseRegistry, new[] { new StandardAuthorityPolicyDefinition { PolicyId = "p92c2b-pcd", SourceId = "trc.pcd-pd-135.rev1", AuthorityClass = StandardAuthorityClasses.GoverningProject, EnforcementMode = StandardEnforcementModes.ConditionalReview, Rationale = "test" }, new StandardAuthorityPolicyDefinition { PolicyId = "p92c2b-ips", SourceId = "ips.e-pr-190.rev1.2009", AuthorityClass = StandardAuthorityClasses.LegacyConflict, EnforcementMode = StandardEnforcementModes.NeverAutoEnforce, Rationale = "test" } });
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.equipment.security-fence.30m");
+            ProjectDistanceCriteria criteria = new ProjectDistanceCriteria { SchemaVersion = 2, ProjectDirectory = "C:\\P92C2B", AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 30m, UnitBoundaryMinimumMeters = 15m };
+            IReadOnlyList<EngineeringDistanceRuleDefinition> rules = ProjectDistanceRuleBinder.Create(criteria);
+            EngineeringDistanceApprovalRecord roadApproval = P92BApproval(criteria.ProjectDirectory, road, context, "APPROVED", "P92C2B-ROAD", "Approver", null);
+            EngineeringDistanceApprovalRecord fenceApproval = P92BApproval(criteria.ProjectDirectory, fence, context, "APPROVED", "P92C2B-FENCE", "Approver", null);
+            using (System.Security.Cryptography.RSA signer = System.Security.Cryptography.RSA.Create(2048))
+            {
+                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trusted = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { P92C2ATrustedKey(signer, "issuer.p92c2b", "key.1") });
+                string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92C2B-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                try
+                {
+                    EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog verified = P92C2BCatalog(root, "valid", criteria.ProjectDirectory, trusted, signer, P92BPolicy(roadApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision), P92BPolicy(fenceApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision));
+                    ProjectDistanceGovernanceAggregateResult aggregate = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence, road }, new[] { fenceApproval, roadApproval }, verified, context.ClauseRegistry, context.SourceRegistry, standardPolicies);
+                    ProjectDistanceGovernanceAggregateItem roadItem = aggregate.Items.Single(x => x.CandidateId == road.CandidateId);
+                    ProjectDistanceGovernanceAggregateItem fenceItem = aggregate.Items.Single(x => x.CandidateId == fence.CandidateId);
+                    Assert(aggregate.ProjectDirectory == "C:\\P92C2B" && aggregate.Items.Select(x => x.CandidateId).SequenceEqual(new[] { road.CandidateId, fence.CandidateId }.OrderBy(x => x, StringComparer.Ordinal)) && roadItem.AuthorityState == EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic && roadItem.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.SemanticScopeConflict && roadItem.Resolution.State != ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible, "P9.2C2B real Road semantic-scope conflict failed.");
+                    Assert(fenceItem.AuthorityState == EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic && fenceItem.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible && fenceItem.ProjectRuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId && fenceItem.Resolution.GovernanceProvenance != null && fenceItem.Resolution.GovernanceProvenance.ProjectRuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId && fenceItem.ApprovalRecordId == fenceApproval.ApprovalRecordId && fenceItem.HistoryState == EngineeringDistanceApprovalHistoryStates.Active && fenceItem.CurrentnessState == EngineeringDistanceApprovalCurrentnessStates.Current && fenceItem.VerifiedPolicyArtifactId != null && fenceItem.VerifiedPolicyIssuerId == "issuer.p92c2b" && fenceItem.VerifiedPolicyKeyId == "key.1", "P9.2C2B real Fence authority, provenance, or verified-policy trace failed.");
+                    Assert(rules.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId).RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.UnitBoundary && aggregate.Items.All(x => x.ProjectRuleId != ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId), "P9.2C2B UnitBoundary entered the governed aggregate path.");
+
+                    ProjectDistanceCriteria changedCriteria = new ProjectDistanceCriteria { SchemaVersion = 2, ProjectDirectory = criteria.ProjectDirectory, AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 25m, UnitBoundaryMinimumMeters = 15m };
+                    Assert(ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, ProjectDistanceRuleBinder.Create(changedCriteria), new[] { fence }, new[] { fenceApproval }, P92C2BCatalog(root, "value", criteria.ProjectDirectory, trusted, signer, P92BPolicy(fenceApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single().Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ValueConflict, "P9.2C2B differing Fence value did not remain a conflict.");
+                    EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog empty = P92C2BCatalog(root, "empty", criteria.ProjectDirectory, trusted, signer);
+                    ProjectDistanceGovernanceAggregateItem noApproval = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single();
+                    Assert(noApproval.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly && noApproval.ApprovalRecordId == null && noApproval.HistoryState == null && noApproval.CurrentnessState == null && noApproval.AuthorityState == null && noApproval.VerifiedPolicyArtifactId == null, "P9.2C2B no-approval behavior or trace changed.");
+                    ProjectDistanceGovernanceAggregateItem noPolicy = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { fenceApproval }, empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single();
+                    Assert(noPolicy.AuthorityState == EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy && noPolicy.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly && noPolicy.VerifiedPolicyArtifactId == null, "P9.2C2B no-policy behavior changed.");
+                    EngineeringDistanceApprovalRecord pending = P92BApproval(criteria.ProjectDirectory, fence, context, "PENDING", null, "Approver", null);
+                    ProjectDistanceGovernanceAggregateItem pendingItem = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { pending }, empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single();
+                    Assert(pendingItem.AuthorityState == EngineeringDistanceApprovalAuthorityStates.NotApproved && pendingItem.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly, "P9.2C2B pending approval was promoted.");
+                    EngineeringDistanceCandidateDefinition staleCandidate = CopyP92Candidate(fence); staleCandidate.ProposedMinimumDistanceMeters = 31m;
+                    ProjectDistanceGovernanceAggregateItem staleItem = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { staleCandidate }, new[] { fenceApproval }, P92C2BCatalog(root, "stale", criteria.ProjectDirectory, trusted, signer, P92BPolicy(fenceApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single();
+                    Assert(staleItem.CurrentnessState == EngineeringDistanceApprovalCurrentnessStates.Stale && staleItem.AuthorityState == EngineeringDistanceApprovalAuthorityStates.StaleApproval && staleItem.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly, "P9.2C2B stale approval was promoted.");
+                    ProjectDistanceGovernanceAggregateItem conditional = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { fenceApproval }, P92C2BCatalog(root, "conditional", criteria.ProjectDirectory, trusted, signer, P92BPolicy(fenceApproval, StandardEnforcementModes.ConditionalReview, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), context.ClauseRegistry, context.SourceRegistry, standardPolicies).Items.Single();
+                    Assert(conditional.AuthorityState == EngineeringDistanceApprovalAuthorityStates.GoverningProjectConditional && conditional.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.GovernedConditional, "P9.2C2B conditional authority was not retained as conditional.");
+
+                    ProjectDistanceGovernanceAggregateResult reversed = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules.Reverse(), new[] { road, fence }.Reverse(), new[] { roadApproval, fenceApproval }.Reverse(), verified, context.ClauseRegistry, context.SourceRegistry, standardPolicies);
+                    Assert(P92C2BIdentity(aggregate) == P92C2BIdentity(reversed), "P9.2C2B aggregate ordering or selection depended on input order.");
+                    string ruleIdentity = string.Join("|", rules.Select(x => x.RuleId + ":" + x.MinimumDistanceMeters + ":" + x.CriteriaProvenance!.ProjectDirectory)); string candidateIdentity = fence.CandidateId + "|" + fence.ProposedMinimumDistanceMeters + "|" + string.Join(",", fence.ClauseIds); string approvalIdentity = EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(fenceApproval); string artifactIdentity = string.Join("|", verified.Artifacts.Select(x => x.PolicyArtifactId));
+                    fenceItem.Resolution.State = "changed";
+                    Assert(ruleIdentity == string.Join("|", rules.Select(x => x.RuleId + ":" + x.MinimumDistanceMeters + ":" + x.CriteriaProvenance!.ProjectDirectory)) && candidateIdentity == fence.CandidateId + "|" + fence.ProposedMinimumDistanceMeters + "|" + string.Join(",", fence.ClauseIds) && approvalIdentity == EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(fenceApproval) && artifactIdentity == string.Join("|", verified.Artifacts.Select(x => x.PolicyArtifactId)), "P9.2C2B mutated caller-owned input evidence.");
+
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(null!, rules, new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "null project");
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve("relative", rules, new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "invalid project");
+                    EngineeringDistanceApprovalRecord otherApproval = P92BApproval("C:\\P92C2B-OTHER", fence, context, "APPROVED", "OTHER", "Approver", null);
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { otherApproval }, empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "other-project approval");
+                    EngineeringDistanceApprovalAuthorityPolicyDefinition otherPolicy = P92BPolicy(otherApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision);
+                    EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog otherCatalog = P92C2BCatalog(root, "other", otherApproval.ProjectDirectory, trusted, signer, otherPolicy);
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new EngineeringDistanceApprovalRecord[0], otherCatalog, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "other-project verified catalog");
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence, CopyP92Candidate(fence) }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "duplicate CandidateId");
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules.Where(x => x.RequiredMeasurementBasisKey != EngineeringDistanceEvidenceKeys.SecurityFence), new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "zero matching project rule");
+                    EngineeringDistanceRuleDefinition duplicateMatch = P92C2BRuleCopy(rules.Single(x => x.RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.SecurityFence)); duplicateMatch.RuleId = "project.duplicate";
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules.Concat(new[] { duplicateMatch }), new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "multiple matching project rules");
+                    EngineeringDistanceCandidateDefinition secondTarget = CopyP92Candidate(fence); secondTarget.CandidateId = "candidate.second"; secondTarget.PackId = "pack.second"; secondTarget.RuleId = "rule.second";
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence, secondTarget }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "duplicate project-rule target");
+                    EngineeringDistanceRuleDefinition invalidRule = P92C2BRuleCopy(rules.Single(x => x.RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.SecurityFence)); invalidRule.CriteriaProvenance = null;
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, new[] { invalidRule }, new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "missing CriteriaProvenance");
+                    EngineeringDistanceRuleDefinition wrongProjectRule = P92C2BRuleCopy(rules.Single(x => x.RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.SecurityFence)); wrongProjectRule.CriteriaProvenance!.ProjectDirectory = "C:\\P92C2B-OTHER";
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, new[] { wrongProjectRule }, new[] { fence }, new EngineeringDistanceApprovalRecord[0], empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "project-rule ProjectDirectory mismatch");
+                    P92C2BAggregateReject(() => ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { fenceApproval, fenceApproval }, empty, context.ClauseRegistry, context.SourceRegistry, standardPolicies), "malformed approval history");
+                }
+                finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            }
+            P92C2BQuarantine();
+        }
+
+        private static void RunP92C2C()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            StandardAuthorityPolicyRegistry runtimePolicies = ProjectEngineeringDistanceAuthorityPolicyCatalog.Create(context.SourceRegistry, context.ClauseRegistry);
+            StandardAuthorityPolicyRegistry plotPlanPolicies = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create().PolicyRegistry;
+            Assert(runtimePolicies.Policies.Count == 2 && runtimePolicies.Policies.All(x => x.ClauseId == null) && runtimePolicies.Policies.All(x => plotPlanPolicies.Policies.Any(y => y.PolicyId == x.PolicyId && y.SourceId == x.SourceId && y.AuthorityClass == x.AuthorityClass && y.EnforcementMode == x.EnforcementMode && y.Rationale == x.Rationale)), "P9.2C2C source-wide project authority policies differ from the accepted plot-plan policies.");
+
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.equipment.security-fence.30m");
+            ProjectDistanceCriteria criteria = new ProjectDistanceCriteria { SchemaVersion = 2, ProjectDirectory = "C:\\P92C2C", AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 30m, UnitBoundaryMinimumMeters = 15m };
+            IReadOnlyList<EngineeringDistanceRuleDefinition> rules = ProjectDistanceRuleBinder.Create(criteria);
+            EngineeringDistanceApprovalRecord roadApproval = P92BApproval(criteria.ProjectDirectory, road, context, "APPROVED", "P92C2C-ROAD", "Approver", null);
+            EngineeringDistanceApprovalRecord fenceApproval = P92BApproval(criteria.ProjectDirectory, fence, context, "APPROVED", "P92C2C-FENCE", "Approver", null);
+            using (System.Security.Cryptography.RSA signer = System.Security.Cryptography.RSA.Create(2048))
+            {
+                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trusted = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { P92C2ATrustedKey(signer, "issuer.p92c2b", "key.1") });
+                string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92C2C-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                try
+                {
+                    EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog deterministic = P92C2BCatalog(root, "deterministic", criteria.ProjectDirectory, trusted, signer, P92BPolicy(roadApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision), P92BPolicy(fenceApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision));
+                    ProjectDistanceGovernanceAggregateResult aggregate = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, EngineeringDistanceCandidateCatalog.BuiltInCandidates, new[] { roadApproval, fenceApproval }, deterministic, context.ClauseRegistry, context.SourceRegistry, runtimePolicies);
+                    Assert(aggregate.Items.Count == 2 && aggregate.Items.Single(x => x.CandidateId == road.CandidateId).Resolution.State == ProjectDistanceGovernedRuleResolutionStates.SemanticScopeConflict && aggregate.Items.Single(x => x.CandidateId == fence.CandidateId).Resolution.State == ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible && aggregate.Items.All(x => x.ProjectRuleId != ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId), "P9.2C2C governed candidate classification changed.");
+
+                    PlotPlanModel plot = EvaluationPlot("Meters", EvaluationMeasurement("p92c2c-road", "p92c2c-road", "Road", 2d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment), EvaluationMeasurement("p92c2c-fence", "p92c2c-fence", "Boundary", 29d, EngineeringDistanceEvidenceKeys.SecurityFence, EngineeringDistanceEvidenceKeys.Equipment), EvaluationMeasurement("p92c2c-unit", "p92c2c-unit", "Boundary", 14d, EngineeringDistanceEvidenceKeys.UnitBoundary, EngineeringDistanceEvidenceKeys.Equipment));
+                    QaReport legacy = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base());
+                    QaReport governed = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base(), aggregate);
+                    Assert(legacy.EngineeringDistanceSummary!.Governance == null && P92C2CQaIdentity(legacy) == P92C2CQaIdentity(governed) && governed.EngineeringDistanceSummary?.Governance != null && governed.Findings.All(x => x.StandardsProvenance == null), "P9.2C2C governance changed schema-v2 physical QA results or generated standards QA.");
+                    ProjectDistanceGovernanceAggregateResult governedGovernance = governed.EngineeringDistanceSummary?.Governance ?? throw new InvalidOperationException("P9.2C2C governed runtime summary governance is required.");
+                    Assert(governedGovernance.Items.Count == 2, "P9.2C2C governed runtime item count changed.");
+                    string governanceState = governedGovernance.Items.Single(x => x.CandidateId == fence.CandidateId).Resolution.State;
+                    aggregate.Items.Single(x => x.CandidateId == fence.CandidateId).Resolution.State = "changed";
+                    Assert(governedGovernance.Items.Single(x => x.CandidateId == fence.CandidateId).Resolution.State == governanceState, "P9.2C2C runtime summary retained mutable governance input.");
+                    using (var stream = new System.IO.MemoryStream())
+                    {
+                        new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(QaReport)).WriteObject(stream, governed);
+                        string json = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+                        Assert(json.Contains("Governance") && json.Contains("GOVERNED_COMPATIBLE"), "P9.2C2C governance summary was not serialized.");
+                    }
+
+                    ProjectDistanceCriteria changedCriteria = new ProjectDistanceCriteria { SchemaVersion = 2, ProjectDirectory = criteria.ProjectDirectory, AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 25m, UnitBoundaryMinimumMeters = 15m };
+                    ProjectDistanceGovernanceAggregateResult valueConflict = ProjectDistanceGovernanceAggregateResolver.Resolve(changedCriteria.ProjectDirectory, ProjectDistanceRuleBinder.Create(changedCriteria), new[] { fence }, new[] { fenceApproval }, P92C2BCatalog(root, "value", criteria.ProjectDirectory, trusted, signer, P92BPolicy(fenceApproval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), context.ClauseRegistry, context.SourceRegistry, runtimePolicies);
+                    QaReport valueGoverned = ProjectEngineeringDistanceRuntime.Evaluate(changedCriteria, EvaluationPlot("Meters", EvaluationMeasurement("p92c2c-value", "p92c2c-value", "Boundary", 24d, EngineeringDistanceEvidenceKeys.SecurityFence, EngineeringDistanceEvidenceKeys.Equipment)), P412Base(), valueConflict);
+                    Assert(valueGoverned.EngineeringDistanceSummary!.SecurityFenceMinimumMeters == 25m && valueGoverned.EngineeringDistanceSummary.Governance!.Items.Single().Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ValueConflict, "P9.2C2C conflicting approval changed the physical project rule or governance state.");
+
+                    ProjectDistanceGovernanceAggregateResult conditional = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new[] { fenceApproval }, P92C2BCatalog(root, "conditional", criteria.ProjectDirectory, trusted, signer, P92BPolicy(fenceApproval, StandardEnforcementModes.ConditionalReview, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), context.ClauseRegistry, context.SourceRegistry, runtimePolicies);
+                    ProjectDistanceGovernanceAggregateResult projectOnly = ProjectDistanceGovernanceAggregateResolver.Resolve(criteria.ProjectDirectory, rules, new[] { fence }, new EngineeringDistanceApprovalRecord[0], P92C2BCatalog(root, "none", criteria.ProjectDirectory, trusted, signer), context.ClauseRegistry, context.SourceRegistry, runtimePolicies);
+                    Assert(ProjectEngineeringDistanceRuntime.Evaluate(criteria, EvaluationPlot("Meters"), P412Base(), conditional).EngineeringDistanceSummary!.Governance!.Items.Single().Resolution.State == ProjectDistanceGovernedRuleResolutionStates.GovernedConditional && ProjectEngineeringDistanceRuntime.Evaluate(criteria, EvaluationPlot("Meters"), P412Base(), projectOnly).EngineeringDistanceSummary!.Governance!.Items.Single().Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly, "P9.2C2C conditional or ungoverned authority state was not preserved.");
+
+                    ProjectDistanceGovernanceAggregateItem invalid = aggregate.Items.Single(x => x.CandidateId == fence.CandidateId);
+                    ProjectDistanceGovernanceAggregateResult unitBoundary = new ProjectDistanceGovernanceAggregateResult { ProjectDirectory = criteria.ProjectDirectory, Items = new List<ProjectDistanceGovernanceAggregateItem> { new ProjectDistanceGovernanceAggregateItem { CandidateId = invalid.CandidateId, CandidateRuleId = invalid.CandidateRuleId, ProjectRuleId = ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId, Resolution = new ProjectDistanceGovernedRuleResolution { CandidateId = invalid.CandidateId, ProjectRuleId = ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId } } } };
+                    P92C2CRuntimeReject(() => ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base(), unitBoundary), "UnitBoundary governance");
+                    P92C2CRuntimeReject(() => ProjectEngineeringDistanceRuntime.Evaluate(new ProjectDistanceCriteria { SchemaVersion = 1, ProjectDirectory = criteria.ProjectDirectory, AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 30m }, plot, P412Base(), aggregate), "schema-v1 governance");
+                }
+                finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            }
+        }
+
+        private static string P92C2CQaIdentity(QaReport report) => report.OverallStatus + "|" + string.Join("|", report.RuleResults.Select(x => x.RuleId + ":" + x.Status + ":" + x.Severity)) + "|" + string.Join("|", report.Findings.Select(x => x.FindingId + ":" + x.RuleId + ":" + x.Severity));
+        private static void P92C2CRuntimeReject(Action action, string scenario) { try { action(); } catch (ProjectEngineeringDistanceRuntimeException) { return; } throw new InvalidOperationException("P9.2C2C accepted " + scenario + "."); }
+
+        private static EngineeringDistanceApprovalAuthorityVerifiedPolicyCatalog P92C2BCatalog(string root, string leaf, string project, EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trusted, System.Security.Cryptography.RSA signer, params EngineeringDistanceApprovalAuthorityPolicyDefinition[] policies)
+        {
+            string directory = System.IO.Path.Combine(root, leaf); System.IO.Directory.CreateDirectory(directory);
+            for (int index = 0; index < policies.Length; index++) P92C2AWrite(System.IO.Path.Combine(directory, index.ToString() + EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Suffix), P92C2AArtifact(signer, policies[index], "issuer.p92c2b", "key.1", new DateTime(2026, 9, 10, 19, 0, index, DateTimeKind.Utc)));
+            return EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.Load(directory, project, trusted);
+        }
+
+        private static string P92C2BIdentity(ProjectDistanceGovernanceAggregateResult result) => string.Join("|", result.Items.Select(x => x.CandidateId + ":" + x.ProjectRuleId + ":" + x.ApprovalRecordId + ":" + x.HistoryState + ":" + x.CurrentnessState + ":" + x.AuthorityState + ":" + x.Resolution.State + ":" + x.VerifiedPolicyArtifactId));
+        private static EngineeringDistanceRuleDefinition P92C2BRuleCopy(EngineeringDistanceRuleDefinition source) => new EngineeringDistanceRuleDefinition { RuleId = source.RuleId, MeasurementKind = source.MeasurementKind, MinimumDistanceMeters = source.MinimumDistanceMeters, RequiredMeasurementBasisKey = source.RequiredMeasurementBasisKey, RequiredApplicabilityKey = source.RequiredApplicabilityKey, CriteriaProvenance = source.CriteriaProvenance == null ? null : new EngineeringDistanceCriteriaProvenance { SourceKind = source.CriteriaProvenance.SourceKind, ProjectDirectory = source.CriteriaProvenance.ProjectDirectory, CriteriaSettingKey = source.CriteriaProvenance.CriteriaSettingKey, SchemaVersion = source.CriteriaProvenance.SchemaVersion, ConfiguredMinimumDistanceMeters = source.CriteriaProvenance.ConfiguredMinimumDistanceMeters } };
+        private static void P92C2BAggregateReject(Action action, string scenario) { try { action(); } catch (Exception exception) when (exception is ArgumentNullException || exception is EngineeringDistanceApprovalRecordValidationException || exception is ProjectDistanceGovernanceAggregateValidationException) { return; } throw new InvalidOperationException("P9.2C2B accepted " + scenario + "."); }
+
+        private static void P92C2BQuarantine()
+        {
+            StandardSourceRegistry sources = StandardSourceRegistry.Create(new[] { new StandardSourceDefinition { SourceId = "p92c2b.quarantine", DocumentNumber = "P92C2B-Q", Title = "Quarantine", Issuer = "Test", RevisionOrEdition = "1", SourceSha256 = new string('D', 64) } });
+            StandardClauseRegistry clauses = StandardClauseRegistry.Create(sources, new[] { new StandardClauseDefinition { ClauseId = "p92c2b.quarantine.1", SourceId = "p92c2b.quarantine", ClauseReference = "1", ClauseText = "Synthetic quarantine evidence" } });
+            StandardAuthorityPolicyRegistry standards = StandardAuthorityPolicyRegistry.Create(sources, clauses, new[] { new StandardAuthorityPolicyDefinition { PolicyId = "p92c2b.quarantine.policy", SourceId = "p92c2b.quarantine", AuthorityClass = StandardAuthorityClasses.Quarantined, EnforcementMode = StandardEnforcementModes.NeverAutoEnforce, Rationale = "quarantine" } });
+            EngineeringDistanceCandidateDefinition candidate = new EngineeringDistanceCandidateDefinition { CandidateId = "candidate.p92c2b.quarantine", PackId = "pack.p92c2b.quarantine", RuleId = "rule.p92c2b.quarantine", Title = "Synthetic quarantine candidate", MeasurementKind = "EquipmentToBoundary2D", ProposedMinimumDistanceMeters = 1m, RequiredMeasurementBasisKey = EngineeringDistanceEvidenceKeys.SecurityFence, RequiredApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment, ApprovalStatus = "PENDING_ENGINEERING_APPROVAL", ClauseIds = new List<string> { "p92c2b.quarantine.1" } };
+            EngineeringDistanceApprovalRecord approval = EngineeringDistanceApprovalRecordBuilder.Create("C:\\P92C2B-Q", candidate, clauses, sources, new EngineeringDistanceApprovalDecision { CandidateId = candidate.CandidateId, DecisionStatus = "APPROVED", ApprovalReference = "P92C2B-Q" }, "Approver", null, new DateTime(2026, 9, 10, 19, 30, 0, DateTimeKind.Utc));
+            EngineeringDistanceRuleDefinition rule = new EngineeringDistanceRuleDefinition { RuleId = "project.p92c2b.quarantine", MeasurementKind = candidate.MeasurementKind, MinimumDistanceMeters = candidate.ProposedMinimumDistanceMeters, RequiredMeasurementBasisKey = candidate.RequiredMeasurementBasisKey, RequiredApplicabilityKey = candidate.RequiredApplicabilityKey, CriteriaProvenance = new EngineeringDistanceCriteriaProvenance { SourceKind = "ProjectDistanceCriteria", ProjectDirectory = approval.ProjectDirectory, CriteriaSettingKey = "Synthetic", SchemaVersion = 2, ConfiguredMinimumDistanceMeters = 1m } };
+            using (System.Security.Cryptography.RSA signer = System.Security.Cryptography.RSA.Create(2048))
+            {
+                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trusted = EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry.Create(new[] { P92C2ATrustedKey(signer, "issuer.p92c2b", "key.1") });
+                string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "P92C2BQ-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+                try
+                {
+                    ProjectDistanceGovernanceAggregateItem item = ProjectDistanceGovernanceAggregateResolver.Resolve(approval.ProjectDirectory, new[] { rule }, new[] { candidate }, new[] { approval }, P92C2BCatalog(root, "policies", approval.ProjectDirectory, trusted, signer, P92BPolicy(approval, StandardEnforcementModes.Deterministic, EngineeringDistanceApprovalLegacyConflictDispositions.ResolvedByProjectDecision)), clauses, sources, standards).Items.Single();
+                    Assert(item.AuthorityState == EngineeringDistanceApprovalAuthorityStates.SourceQuarantined && item.Resolution.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly && item.Resolution.State != ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible, "P9.2C2B quarantined authority was promoted.");
+                }
+                finally { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            }
+        }
+
+        private static void RunP92C1()
+        {
+            ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+            ProjectDistanceCriteria criteria = new ProjectDistanceCriteria { SchemaVersion = 2, ProjectDirectory = "C:\\P92C1", AccessRoadEdgeMinimumMeters = 3m, SecurityFenceMinimumMeters = 30m, UnitBoundaryMinimumMeters = 15m };
+            IReadOnlyList<EngineeringDistanceRuleDefinition> projectRules = ProjectDistanceRuleBinder.Create(criteria);
+            EngineeringDistanceRuleDefinition roadRule = projectRules.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId);
+            EngineeringDistanceRuleDefinition fenceRule = projectRules.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId);
+            EngineeringDistanceRuleDefinition unitBoundaryRule = projectRules.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId);
+            EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.processing-equipment.access-road-edge.3m");
+            EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.CandidateId == "candidate.equipment.security-fence.30m");
+            EngineeringDistanceApprovalRecord roadApproval = P92BApproval("C:\\P92C1", road, context, "APPROVED", "P92C1-ROAD", "Approver", null);
+            EngineeringDistanceApprovalRecord fenceApproval = P92BApproval("C:\\P92C1", fence, context, "APPROVED", "P92C1-FENCE", "Approver", null);
+            EngineeringDistanceApprovalAuthorityResult roadDeterministic = P92CAuthority(roadApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic);
+            EngineeringDistanceApprovalAuthorityResult fenceDeterministic = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic);
+
+            ProjectDistanceGovernedRuleResolution roadResult = ProjectDistanceGovernedRuleResolver.Resolve(roadRule, road, roadApproval, roadDeterministic);
+            Assert(roadRule.MeasurementKind == road.MeasurementKind && roadRule.RequiredMeasurementBasisKey == road.RequiredMeasurementBasisKey && roadRule.RequiredApplicabilityKey == EngineeringDistanceEvidenceKeys.Equipment && road.RequiredApplicabilityKey == EngineeringDistanceEvidenceKeys.ProcessingEquipment && roadResult.State == ProjectDistanceGovernedRuleResolutionStates.SemanticScopeConflict && roadResult.State != ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible, "P9.2C1 Road scope mismatch was not fail-closed.");
+
+            ProjectDistanceGovernedRuleResolution fenceResult = ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, fenceDeterministic);
+            ProjectDistanceGovernanceProvenance fenceGovernance = fenceResult.GovernanceProvenance ?? throw new InvalidOperationException("P9.2C1 fence governance provenance was absent.");
+            Assert(fenceResult.State == ProjectDistanceGovernedRuleResolutionStates.GovernedCompatible && fenceResult.ProjectRuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId && fenceResult.ProjectRuleId != fence.RuleId && fenceRule.MeasurementKind == fence.MeasurementKind && fenceRule.RequiredMeasurementBasisKey == fence.RequiredMeasurementBasisKey && fenceRule.RequiredApplicabilityKey == fence.RequiredApplicabilityKey && fenceGovernance.ProjectRuleId == fenceRule.RuleId && fenceGovernance.CandidateId == fence.CandidateId && fenceGovernance.CandidateRuleId == fence.RuleId && fenceGovernance.ApprovalRecordId == fenceApproval.ApprovalRecordId && fenceGovernance.PolicyId == fenceDeterministic.PolicyId && fenceGovernance.AuthorityBasisReference == fenceDeterministic.AuthorityBasisReference && fenceGovernance.AuthorityState == fenceDeterministic.State && fenceGovernance.ApprovedMinimumDistanceMeters == 30m, "P9.2C1 compatible Fence resolution or detached provenance changed.");
+
+            EngineeringDistanceRuleDefinition changedFenceRule = P92CCloneRule(fenceRule); changedFenceRule.MinimumDistanceMeters = 25m; changedFenceRule.CriteriaProvenance!.ConfiguredMinimumDistanceMeters = 25m;
+            Assert(ProjectDistanceGovernedRuleResolver.Resolve(changedFenceRule, fence, fenceApproval, fenceDeterministic).State == ProjectDistanceGovernedRuleResolutionStates.ValueConflict, "P9.2C1 differing Fence values did not fail closed.");
+            EngineeringDistanceApprovalAuthorityResult fenceConditional = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectConditional);
+            Assert(ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, fenceConditional).State == ProjectDistanceGovernedRuleResolutionStates.GovernedConditional, "P9.2C1 conditional authority was not retained as non-executable review.");
+            ProjectDistanceGovernedRuleResolution projectOnly = ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, null, null);
+            Assert(projectOnly.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly && projectOnly.GovernanceProvenance == null, "P9.2C1 no-approval project-only resolution changed.");
+            foreach (string state in new[] { EngineeringDistanceApprovalAuthorityStates.NoAuthorityPolicy, EngineeringDistanceApprovalAuthorityStates.StaleApproval, EngineeringDistanceApprovalAuthorityStates.SourceQuarantined })
+            {
+                EngineeringDistanceApprovalAuthorityResult blocked = P92CAuthority(fenceApproval, state);
+                ProjectDistanceGovernedRuleResolution blockedResult = ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, blocked);
+                Assert(blockedResult.State == ProjectDistanceGovernedRuleResolutionStates.ProjectRuleOnly && blockedResult.AuthorityState == state && blockedResult.GovernanceProvenance == null, "P9.2C1 blocked authority was promoted: " + state);
+            }
+            Assert(EngineeringDistanceCandidateCatalog.BuiltInCandidates.All(x => x.RequiredMeasurementBasisKey != EngineeringDistanceEvidenceKeys.UnitBoundary) && unitBoundaryRule.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId, "P9.2C1 UnitBoundary entered governed activation.");
+
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, roadApproval, P92CAuthority(roadApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic)), "approval candidate mismatch");
+            EngineeringDistanceApprovalAuthorityResult candidateMismatch = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic); candidateMismatch.CandidateId = "candidate.other";
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, candidateMismatch), "authority candidate mismatch");
+            EngineeringDistanceApprovalAuthorityResult recordMismatch = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic); recordMismatch.ApprovalRecordId = new string('A', 64);
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, recordMismatch), "authority record mismatch");
+            EngineeringDistanceApprovalAuthorityResult projectMismatch = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic); projectMismatch.ProjectDirectory = "C:\\P92C1-OTHER";
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, projectMismatch), "authority project mismatch");
+            EngineeringDistanceRuleDefinition ruleProjectMismatch = P92CCloneRule(fenceRule); ruleProjectMismatch.CriteriaProvenance!.ProjectDirectory = "C:\\P92C1-OTHER";
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(ruleProjectMismatch, fence, fenceApproval, fenceDeterministic), "project-rule project mismatch");
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, null), "approval without authority");
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, null, fenceDeterministic), "authority without approval");
+            EngineeringDistanceApprovalAuthorityResult missingPolicy = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic); missingPolicy.PolicyId = null;
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, missingPolicy), "missing PolicyId");
+            EngineeringDistanceApprovalAuthorityResult missingBasis = P92CAuthority(fenceApproval, EngineeringDistanceApprovalAuthorityStates.GoverningProjectDeterministic); missingBasis.AuthorityBasisReference = null;
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, missingBasis), "missing AuthorityBasisReference");
+            EngineeringDistanceRuleDefinition missingCriteria = P92CCloneRule(fenceRule); missingCriteria.CriteriaProvenance = null;
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(missingCriteria, fence, fenceApproval, fenceDeterministic), "missing CriteriaProvenance");
+            EngineeringDistanceRuleDefinition invalidCriteria = P92CCloneRule(fenceRule); invalidCriteria.CriteriaProvenance!.SourceKind = "Other";
+            P92CAssertRejected(() => ProjectDistanceGovernedRuleResolver.Resolve(invalidCriteria, fence, fenceApproval, fenceDeterministic), "invalid CriteriaProvenance SourceKind");
+
+            string ruleIdentity = fenceRule.RuleId + "|" + fenceRule.MinimumDistanceMeters + "|" + fenceRule.RequiredMeasurementBasisKey + "|" + fenceRule.RequiredApplicabilityKey; string criteriaIdentity = fenceRule.CriteriaProvenance!.SourceKind + "|" + fenceRule.CriteriaProvenance.ProjectDirectory + "|" + fenceRule.CriteriaProvenance.CriteriaSettingKey + "|" + fenceRule.CriteriaProvenance.ConfiguredMinimumDistanceMeters; string candidateIdentity = fence.CandidateId + "|" + fence.RuleId + "|" + fence.ProposedMinimumDistanceMeters + "|" + string.Join("|", fence.ClauseIds); string approvalIdentity = EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(fenceApproval); string authorityIdentity = fenceDeterministic.State + "|" + fenceDeterministic.ProjectDirectory + "|" + fenceDeterministic.CandidateId + "|" + fenceDeterministic.ApprovalRecordId + "|" + fenceDeterministic.PolicyId + "|" + fenceDeterministic.AuthorityBasisReference;
+            ProjectDistanceGovernedRuleResolver.Resolve(fenceRule, fence, fenceApproval, fenceDeterministic);
+            Assert(ruleIdentity == fenceRule.RuleId + "|" + fenceRule.MinimumDistanceMeters + "|" + fenceRule.RequiredMeasurementBasisKey + "|" + fenceRule.RequiredApplicabilityKey && criteriaIdentity == fenceRule.CriteriaProvenance!.SourceKind + "|" + fenceRule.CriteriaProvenance.ProjectDirectory + "|" + fenceRule.CriteriaProvenance.CriteriaSettingKey + "|" + fenceRule.CriteriaProvenance.ConfiguredMinimumDistanceMeters && candidateIdentity == fence.CandidateId + "|" + fence.RuleId + "|" + fence.ProposedMinimumDistanceMeters + "|" + string.Join("|", fence.ClauseIds) && approvalIdentity == EngineeringDistanceApprovalRecordBuilder.ComputeApprovalRecordId(fenceApproval) && authorityIdentity == fenceDeterministic.State + "|" + fenceDeterministic.ProjectDirectory + "|" + fenceDeterministic.CandidateId + "|" + fenceDeterministic.ApprovalRecordId + "|" + fenceDeterministic.PolicyId + "|" + fenceDeterministic.AuthorityBasisReference, "P9.2C1 resolver mutated input evidence.");
+        }
+
+        private static EngineeringDistanceApprovalAuthorityResult P92CAuthority(EngineeringDistanceApprovalRecord approval, string state) => new EngineeringDistanceApprovalAuthorityResult { State = state, ProjectDirectory = approval.ProjectDirectory, CandidateId = approval.CandidateBinding.CandidateId, ApprovalRecordId = approval.ApprovalRecordId, PolicyId = "P92C1-POLICY", AuthorityBasisReference = "P92C1-BASIS" };
+
+        private static EngineeringDistanceRuleDefinition P92CCloneRule(EngineeringDistanceRuleDefinition source) => new EngineeringDistanceRuleDefinition { RuleId = source.RuleId, MeasurementKind = source.MeasurementKind, MinimumDistanceMeters = source.MinimumDistanceMeters, RequiredMeasurementBasisKey = source.RequiredMeasurementBasisKey, RequiredApplicabilityKey = source.RequiredApplicabilityKey, CriteriaProvenance = source.CriteriaProvenance == null ? null : new EngineeringDistanceCriteriaProvenance { SourceKind = source.CriteriaProvenance.SourceKind, ProjectDirectory = source.CriteriaProvenance.ProjectDirectory, CriteriaSettingKey = source.CriteriaProvenance.CriteriaSettingKey, SchemaVersion = source.CriteriaProvenance.SchemaVersion, ConfiguredMinimumDistanceMeters = source.CriteriaProvenance.ConfiguredMinimumDistanceMeters } };
+
+        private static void P92CAssertRejected(Action action, string scenario) { try { action(); } catch (ProjectDistanceGovernedRuleResolverValidationException) { return; } throw new InvalidOperationException("P9.2C1 resolver accepted " + scenario + "."); }
 
         private static void RunP54()
         {
@@ -749,6 +1274,72 @@ namespace EngiSentry.Tests
             }
             throw new InvalidOperationException("Expected Standard Authority Policy Registry validation failure.");
         }
+
+        private static void RunP102C1Presentation()
+        {
+            EngineeringDistanceRunSummary summary = new EngineeringDistanceRunSummary
+            {
+                AccessRoadEdgeMinimumMeters = 3m,
+                SecurityFenceMinimumMeters = 30m,
+                UnitBoundaryMinimumMeters = 15m,
+                Evaluations = new List<EngineeringDistanceRuleEvaluation>
+                {
+                    PresentationEvaluation(ProjectDistanceRuleBinder.EquipmentToRoadRuleId, "EquipmentToRoad2D", "PASS", "AccessRoadEdge"),
+                    PresentationEvaluation(ProjectDistanceRuleBinder.EquipmentToPlantRuleId, "EquipmentToBoundary2D", "VIOLATIONS", "SecurityFence"),
+                    PresentationEvaluation(ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId, "EquipmentToBoundary2D", "INSUFFICIENT_EVIDENCE", "UnitBoundary")
+                },
+                Governance = new ProjectDistanceGovernanceAggregateResult
+                {
+                    Items = new List<ProjectDistanceGovernanceAggregateItem>
+                    {
+                        new ProjectDistanceGovernanceAggregateItem
+                        {
+                            ProjectRuleId = ProjectDistanceRuleBinder.EquipmentToRoadRuleId,
+                            Resolution = new ProjectDistanceGovernedRuleResolution { State = "PROJECT_RULE_ONLY" }
+                        }
+                    }
+                }
+            };
+            PlotSpatialMeasurementModel measurements = new PlotSpatialMeasurementModel
+            {
+                EquipmentSpatialMeasurements = new List<EquipmentSpatialMeasurement>
+                {
+                    PresentationMeasurement("road-near", "placement-road", "Road", 91.5d, "AccessRoadEdge"),
+                    PresentationMeasurement("road-far", "placement-road", "Road", 100d, "AccessRoadEdge"),
+                    PresentationMeasurement("fence", "placement-fence", "Boundary", 25d, "SecurityFence")
+                }
+            };
+            IReadOnlyList<PlotPlanDistancePresentationRow> rows = PlotPlanDistancePresentation.Build(summary, measurements);
+            Assert(rows.Count == 3 && rows.Select(x => x.Name).SequenceEqual(new[] { "Equipment → Road", "Equipment → Plant / Security Fence", "Equipment → Unit Boundary" }), "P10.2 distance presentation rows or friendly labels changed.");
+            Assert(rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId).MinimumDistanceMeters == 3m && rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId).MinimumDistanceMeters == 30m && rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId).MinimumDistanceMeters == 15m, "P10.2 distance presentation criteria values changed.");
+            PlotPlanDistancePresentationRow pass = rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId);
+            PlotPlanDistancePresentationRow violations = rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId);
+            PlotPlanDistancePresentationRow insufficient = rows.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId);
+            Assert(pass.UnderlyingStatus == "PASS" && pass.Observed == "91.5 m (1 resolved)" && pass.Observed != "<not resolved>" && pass.Interpretation.IndexOf("Project criterion only", StringComparison.Ordinal) >= 0, "P10.2 PASS presentation did not use resolved measurement evidence.");
+            Assert(violations.UnderlyingStatus == "VIOLATIONS" && violations.Observed == "25 m (1 resolved)", "P10.2 VIOLATIONS presentation did not use resolved measurement evidence.");
+            Assert(insufficient.UnderlyingStatus == "INSUFFICIENT_EVIDENCE" && insufficient.Observed == "<not resolved>", "P10.2 insufficient-evidence presentation changed.");
+            Assert(rows.Select(x => x.RuleId).Distinct(StringComparer.Ordinal).Count() == 3, "P10.2 produced duplicate project distance rows.");
+        }
+
+        private static EngineeringDistanceRuleEvaluation PresentationEvaluation(string ruleId, string measurementKind, string status, string basis) => new EngineeringDistanceRuleEvaluation
+        {
+            RuleId = ruleId,
+            MeasurementKind = measurementKind,
+            Status = status,
+            RequiredMeasurementBasisKey = basis,
+            RequiredApplicabilityKey = "Equipment",
+            MetersPerDrawingUnit = 1d
+        };
+
+        private static EquipmentSpatialMeasurement PresentationMeasurement(string id, string placement, string subjectKind, double distance, string basis) => new EquipmentSpatialMeasurement
+        {
+            MeasurementId = id,
+            PlacementId = placement,
+            SubjectKind = subjectKind,
+            Distance2D = distance,
+            EngineeringMeasurementBasisKey = basis,
+            EngineeringApplicabilityKey = "Equipment"
+        };
 
         private static void RunP412()
         {

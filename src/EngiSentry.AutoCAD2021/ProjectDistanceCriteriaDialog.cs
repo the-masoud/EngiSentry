@@ -28,13 +28,13 @@ namespace EngiSentry.AutoCAD2021
             var roadLabel = new Label { Left = 16, Top = 68, Width = 315, Text = "Equipment → Road" };
             accessRoad = new TextBox { Left = 340, Top = 64, Width = 120, Text = criteria.AccessRoadEdgeMinimumMeters.ToString(CultureInfo.CurrentCulture) };
             var roadUnit = new Label { Left = 470, Top = 68, Width = 30, Text = "m" };
-            var fenceLabel = new Label { Left = 16, Top = 103, Width = 315, Text = "Equipment → Plant" };
+            var fenceLabel = new Label { Left = 16, Top = 103, Width = 315, Text = "Equipment → Plant / Security Fence" };
             securityFence = new TextBox { Left = 340, Top = 99, Width = 120, Text = criteria.SecurityFenceMinimumMeters.ToString(CultureInfo.CurrentCulture) };
             var fenceUnit = new Label { Left = 470, Top = 103, Width = 30, Text = "m" };
             var unitLabel = new Label { Left = 16, Top = 138, Width = 315, Text = "Equipment → Unit Boundary" };
             unitBoundary = new TextBox { Left = 340, Top = 134, Width = 120, Text = criteria.UnitBoundaryMinimumMeters.ToString(CultureInfo.CurrentCulture) };
             var unit = new Label { Left = 470, Top = 138, Width = 30, Text = "m" };
-            var note = new Label { Left = 16, Top = 166, Width = 535, Height = 40, Text = "These values may vary by project.\r\nConfirm them to continue, or edit them to match the governing project requirements." };
+            var note = new Label { Left = 16, Top = 166, Width = 535, Height = 40, Text = "Project criteria are stored outside the DWG.\r\nConfirm them to continue, or edit them to match the governing project requirements." };
             var save = new Button { Left = 330, Top = 216, Width = 120, Text = "Save & Continue", DialogResult = DialogResult.None };
             var cancel = new Button { Left = 460, Top = 216, Width = 90, Text = "Cancel", DialogResult = DialogResult.Cancel };
             save.Click += SaveClicked;

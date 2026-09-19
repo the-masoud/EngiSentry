@@ -13,15 +13,23 @@ namespace EngiSentry.Standards
             if (string.IsNullOrWhiteSpace(drawingName)) throw new ArgumentException("drawing name is required", nameof(drawingName));
             if (report.StandardsAuthority == null) throw new InvalidOperationException("Plot Plan QA report requires StandardsAuthority for review package creation.");
             if (report.ReviewProjection == null) throw new InvalidOperationException("Plot Plan QA report requires ReviewProjection for review package creation.");
+            DateTime normalizedScanTimestampUtc = NormalizeToPersistedUtcMillisecond(scanTimestampUtc);
 
             return new StandardAuthorityReviewPackage
             {
                 SchemaVersion = "1.0",
                 DrawingName = drawingName,
-                ScanTimestampUtc = scanTimestampUtc,
+                ScanTimestampUtc = normalizedScanTimestampUtc,
                 StandardsAuthority = CopyAuthority(report.StandardsAuthority),
                 ReviewProjection = CopyReviewProjection(report.ReviewProjection)
             };
+        }
+
+        private static DateTime NormalizeToPersistedUtcMillisecond(DateTime value)
+        {
+            DateTime utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+            long ticks = utc.Ticks - utc.Ticks % TimeSpan.TicksPerMillisecond;
+            return new DateTime(ticks, DateTimeKind.Utc);
         }
 
         private static PlotPlanStandardsAuthorityReport CopyAuthority(PlotPlanStandardsAuthorityReport source)

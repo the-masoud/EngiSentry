@@ -376,6 +376,11 @@ namespace EngiSentry.Tests
             RunP64();
             RunP71();
             RunP72();
+            RunP81();
+            RunP82();
+            RunP83();
+            RunP83H();
+            RunP85();
         }
 
         private static void RunP55(StandardSourceRegistry realSources, StandardClauseRegistry p36Clauses)
@@ -622,6 +627,440 @@ namespace EngiSentry.Tests
             flare.ClauseText = "mutated";
             flare.SourceSha256 = "mutated";
             Assert(firstReport.ReviewProjection!.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && firstReport.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single().ClauseText != "mutated" && second.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.pcd.flare").Clauses.Single().SourceSha256 != "mutated", "P7.2 package mutation isolation failed.");
+        }
+
+        private static void RunP81()
+        {
+            DateTime scanTimestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            DateTime decisionTimestamp = new DateTime(2026, 9, 9, 7, 1, 5, 398, DateTimeKind.Utc);
+            HumanEngineeringReviewDecisionRecord record = new HumanEngineeringReviewDecisionRecord
+            {
+                SchemaVersion = "1.0",
+                DecisionRecordId = "decision-001",
+                DrawingName = "PLOTPLAN-A0-E-FINAL.dwg",
+                ScanTimestampUtc = scanTimestamp,
+                ReviewPackageSha256 = new string('a', 64),
+                ReviewPackageSchemaVersion = "1.0",
+                RuleId = "runtime.plotplan.authority.pcd.flare",
+                AuthorityDecisionStateAtReview = StandardDecisionStates.SourceQuarantined,
+                EffectiveEnforcementModeAtReview = "SOURCE_QUARANTINED",
+                HumanReviewState = HumanEngineeringReviewDecisionStates.ReviewAccepted,
+                ReviewerDisplayName = "Synthetic reviewer",
+                DecisionTimestampUtc = decisionTimestamp,
+                EvidenceBindings = new List<HumanEngineeringReviewEvidenceBinding>
+                {
+                    new HumanEngineeringReviewEvidenceBinding { ClauseId = "trc.pcd-pd-135.3.4.13.b", SourceId = "trc.pcd-pd-135.rev1", SourceSha256 = "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" },
+                    new HumanEngineeringReviewEvidenceBinding { ClauseId = "trc.pcd-pd-135.3.4.13.c", SourceId = "trc.pcd-pd-135.rev1", SourceSha256 = "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E" }
+                }
+            };
+            HumanEngineeringReviewDecisionValidator.Validate(record);
+            foreach (string state in new[] { HumanEngineeringReviewDecisionStates.ReviewAccepted, HumanEngineeringReviewDecisionStates.ReviewRejected, HumanEngineeringReviewDecisionStates.NeedsClarification })
+            {
+                record.HumanReviewState = state;
+                HumanEngineeringReviewDecisionValidator.Validate(record);
+            }
+            Assert(record.AuthenticatedReviewerIdentity == null, "P8.1 authenticated reviewer identity was populated unexpectedly.");
+
+            string json = Json(record);
+            Assert(!json.Contains("AuthenticatedReviewerIdentity") && !json.Contains("SupersedesDecisionRecordId") && json.Contains("EvidenceBindings") && !json.Contains("MinimumDistanceMeters") && !json.Contains("ProposedMinimumDistanceMeters") && !json.Contains("EngineeringDistanceRuleDefinition"), "P8.1 decision serialization crossed the safety boundary.");
+
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, "APPROVED", "APPROVED was accepted as a human review state");
+            record.ReviewerDisplayName = "";
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "missing reviewer was accepted");
+            record.ReviewerDisplayName = "Synthetic reviewer";
+            record.EvidenceBindings[0].ClauseId = "";
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "missing ClauseId was accepted");
+            record.EvidenceBindings[0].ClauseId = "trc.pcd-pd-135.3.4.13.b";
+            record.EvidenceBindings[0].SourceId = "";
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "missing SourceId was accepted");
+            record.EvidenceBindings[0].SourceId = "trc.pcd-pd-135.rev1";
+            record.EvidenceBindings[0].SourceSha256 = "";
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "missing SourceSha256 was accepted");
+            record.EvidenceBindings[0].SourceSha256 = "A59E7C6C05832565AEED40D827A702A61E4CB9AF213E8AC95EE39711BF8D572E";
+            record.EvidenceBindings.Add(new HumanEngineeringReviewEvidenceBinding { ClauseId = record.EvidenceBindings[0].ClauseId, SourceId = record.EvidenceBindings[0].SourceId, SourceSha256 = record.EvidenceBindings[0].SourceSha256 });
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "duplicate evidence was accepted");
+            record.EvidenceBindings.RemoveAt(record.EvidenceBindings.Count - 1);
+            record.SupersedesDecisionRecordId = record.DecisionRecordId;
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "self-supersession was accepted");
+            record.SupersedesDecisionRecordId = null;
+            record.DecisionTimestampUtc = DateTime.SpecifyKind(record.DecisionTimestampUtc, DateTimeKind.Local);
+            ReviewInvalid(record, HumanEngineeringReviewDecisionStates.ReviewAccepted, null, "non-UTC timestamp was accepted");
+
+            PlotPlanStandardsAuthorityRuntimeContext context = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+            Assert(context.AuthorityResolution.Rules.Count == 4 && context.ExecutionGate.Rules.Count == 4 && context.ReviewProjection.ReviewItems.Count == 4 && context.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P8.1 changed P7 authority safety invariants.");
+        }
+
+        private static void ReviewInvalid(HumanEngineeringReviewDecisionRecord record, string state, string? overrideState, string message)
+        {
+            record.HumanReviewState = overrideState ?? state;
+            bool rejected = false;
+            try { HumanEngineeringReviewDecisionValidator.Validate(record); }
+            catch (HumanEngineeringReviewDecisionValidationException) { rejected = true; }
+            Assert(rejected, message);
+        }
+
+        private static void RunP82()
+        {
+            DateTime scanTimestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            DateTime decisionTimestamp = new DateTime(2026, 9, 9, 7, 1, 5, 398, DateTimeKind.Utc);
+            PlotPlanQaReport report = PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), new QaReport());
+            StandardAuthorityReviewPackage package = StandardAuthorityReviewPackageBuilder.Create(report, "PLOTPLAN-A0-E-FINAL.dwg", scanTimestamp);
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "EngiSentry-P8.2-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            try
+            {
+                string packagePath = Path.Combine(tempDirectory, "review.standards.review.json");
+                File.WriteAllText(packagePath, Json(package), Encoding.UTF8);
+                string packageHash = HumanEngineeringReviewDecisionFileStore.ComputeSha256(packagePath);
+                string changedPackageHash = HumanEngineeringReviewDecisionFileStore.ComputeSha256(packagePath);
+                File.WriteAllText(packagePath, Json(package) + " ", Encoding.UTF8);
+                changedPackageHash = HumanEngineeringReviewDecisionFileStore.ComputeSha256(packagePath);
+                Assert(packageHash != changedPackageHash && packageHash.Length == 64 && packageHash == packageHash.ToUpperInvariant(), "P8.2 exact package-byte SHA256 hashing failed.");
+                File.WriteAllText(packagePath, Json(package), Encoding.UTF8);
+
+                HumanEngineeringReviewDecisionRecord first = HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, "runtime.plotplan.authority.pcd.flare", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic reviewer", decisionTimestamp, comment: null);
+                HumanEngineeringReviewDecisionRecord same = HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, "runtime.plotplan.authority.pcd.flare", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic reviewer", decisionTimestamp, comment: null);
+                string[] expectedEvidence = package.ReviewProjection.ReviewItems.Single(item => item.RuleId == first.RuleId).Clauses.OrderBy(clause => clause.ClauseId, StringComparer.Ordinal).ThenBy(clause => clause.SourceId, StringComparer.Ordinal).ThenBy(clause => clause.SourceSha256, StringComparer.Ordinal).Select(clause => clause.ClauseId + ":" + clause.SourceId + ":" + clause.SourceSha256).ToArray();
+                string[] actualEvidence = first.EvidenceBindings.OrderBy(binding => binding.ClauseId, StringComparer.Ordinal).ThenBy(binding => binding.SourceId, StringComparer.Ordinal).ThenBy(binding => binding.SourceSha256, StringComparer.Ordinal).Select(binding => binding.ClauseId + ":" + binding.SourceId + ":" + binding.SourceSha256).ToArray();
+                Assert(first.DrawingName == package.DrawingName && first.ScanTimestampUtc == package.ScanTimestampUtc && first.ReviewPackageSchemaVersion == package.SchemaVersion && first.RuleId == "runtime.plotplan.authority.pcd.flare" && first.AuthorityDecisionStateAtReview == StandardDecisionStates.SourceQuarantined && first.EffectiveEnforcementModeAtReview == "NEVER_AUTO_ENFORCE" && expectedEvidence.SequenceEqual(actualEvidence), "P8.2 builder did not copy complete ordered evidence.");
+                Assert(first.DecisionRecordId == same.DecisionRecordId && first.DecisionRecordId.Length == 64 && first.DecisionRecordId == first.DecisionRecordId.ToUpperInvariant(), "P8.2 deterministic DecisionRecordId failed.");
+                Assert(first.EvidenceBindings.All(binding => !string.IsNullOrEmpty(binding.ClauseId) && !string.IsNullOrEmpty(binding.SourceId) && !string.IsNullOrEmpty(binding.SourceSha256)) && !Json(first).Contains("ClauseText") && !Json(first).Contains("90 meters") && !Json(first).Contains("MinimumDistanceMeters") && package.ReviewProjection.ReviewItems.Single(item => item.RuleId == first.RuleId).Clauses.Single().ClauseText!.Contains("90 meters"), "P8.2 decision evidence crossed the package safety boundary.");
+
+                StandardAuthorityReviewPackage syntheticPackage = StandardAuthorityReviewPackageBuilder.Create(report, "synthetic.dwg", scanTimestamp);
+                syntheticPackage.ReviewProjection.ReviewItems.Single(item => item.RuleId == "runtime.plotplan.authority.epr.legacy").Clauses = new List<StandardClauseAuthorityResolution>
+                {
+                    new StandardClauseAuthorityResolution { ClauseId = "synthetic.clause.b", SourceId = "synthetic.source.b", SourceSha256 = new string('B', 64) },
+                    new StandardClauseAuthorityResolution { ClauseId = "synthetic.clause.a", SourceId = "synthetic.source.a", SourceSha256 = new string('A', 64) }
+                };
+                HumanEngineeringReviewDecisionRecord syntheticDecision = HumanEngineeringReviewDecisionBuilder.Create(syntheticPackage, new string('C', 64), "runtime.plotplan.authority.epr.legacy", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic reviewer", decisionTimestamp);
+                Assert(syntheticDecision.EvidenceBindings.Count == 2 && syntheticDecision.EvidenceBindings.Select(binding => binding.ClauseId).SequenceEqual(new[] { "synthetic.clause.a", "synthetic.clause.b" }) && syntheticDecision.EvidenceBindings.Select(binding => binding.SourceId).SequenceEqual(new[] { "synthetic.source.a", "synthetic.source.b" }), "P8.2 multi-clause evidence ordering failed.");
+
+                Assert(first.DecisionRecordId != HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, first.RuleId, HumanEngineeringReviewDecisionStates.ReviewRejected, first.ReviewerDisplayName, decisionTimestamp).DecisionRecordId && first.DecisionRecordId != HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, first.RuleId, first.HumanReviewState, "Another reviewer", decisionTimestamp).DecisionRecordId && first.DecisionRecordId != HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, first.RuleId, first.HumanReviewState, first.ReviewerDisplayName, decisionTimestamp.AddMilliseconds(1)).DecisionRecordId && first.DecisionRecordId != HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, first.RuleId, first.HumanReviewState, first.ReviewerDisplayName, decisionTimestamp, comment: "Changed").DecisionRecordId, "P8.2 meaningful decision changes did not change the deterministic ID.");
+
+                StandardAuthorityReviewPackage changedEvidencePackage = StandardAuthorityReviewPackageBuilder.Create(report, "PLOTPLAN-A0-E-FINAL.dwg", scanTimestamp);
+                changedEvidencePackage.ReviewProjection.ReviewItems.Single(item => item.RuleId == first.RuleId).Clauses.Single().SourceSha256 = new string('B', 64);
+                HumanEngineeringReviewDecisionRecord changedEvidence = HumanEngineeringReviewDecisionBuilder.Create(changedEvidencePackage, packageHash, first.RuleId, first.HumanReviewState, first.ReviewerDisplayName, decisionTimestamp);
+                Assert(first.DecisionRecordId != changedEvidence.DecisionRecordId && package.ReviewProjection.ReviewItems.Single(item => item.RuleId == first.RuleId).Clauses.Single().SourceSha256 != new string('B', 64), "P8.2 evidence mutation or ID derivation was unsafe.");
+
+                string decisionDirectory = Path.Combine(tempDirectory, "decisions");
+                string decisionPath = HumanEngineeringReviewDecisionFileStore.Write(first, decisionDirectory);
+                byte[] originalDecisionBytes = File.ReadAllBytes(decisionPath);
+                Assert(originalDecisionBytes.Length > 0 && !(originalDecisionBytes.Length >= 3 && originalDecisionBytes[0] == 0xEF && originalDecisionBytes[1] == 0xBB && originalDecisionBytes[2] == 0xBF), "P8.2 production decision writer emitted a UTF-8 BOM.");
+                HumanEngineeringReviewDecisionRecord roundTrip = HumanEngineeringReviewDecisionFileStore.Read(decisionPath);
+                Assert(roundTrip.DecisionRecordId == first.DecisionRecordId && Json(roundTrip) == Json(first), "P8.2 decision write/read round-trip changed identity.");
+                bool createNewRejected = false;
+                try { HumanEngineeringReviewDecisionFileStore.Write(first, decisionDirectory); } catch (IOException) { createNewRejected = true; }
+                Assert(createNewRejected && originalDecisionBytes.SequenceEqual(File.ReadAllBytes(decisionPath)), "P8.2 decision persistence was not immutable CreateNew.");
+
+                string tamperedJson = File.ReadAllText(decisionPath).Replace("Synthetic reviewer", "Tampered reviewer");
+                File.WriteAllText(decisionPath, tamperedJson, new UTF8Encoding(false));
+                bool tamperRejected = false;
+                try { HumanEngineeringReviewDecisionFileStore.Read(decisionPath); } catch (InvalidDataException) { tamperRejected = true; }
+                Assert(tamperRejected, "P8.2 tampered decision content was accepted.");
+
+                string supersessionDirectory = Path.Combine(tempDirectory, "supersession");
+                string firstSupersessionPath = HumanEngineeringReviewDecisionFileStore.Write(first, supersessionDirectory);
+                byte[] firstSupersessionBytes = File.ReadAllBytes(firstSupersessionPath);
+                HumanEngineeringReviewDecisionRecord superseding = HumanEngineeringReviewDecisionBuilder.Create(package, packageHash, first.RuleId, HumanEngineeringReviewDecisionStates.NeedsClarification, first.ReviewerDisplayName, decisionTimestamp.AddMilliseconds(1), supersedesDecisionRecordId: first.DecisionRecordId);
+                HumanEngineeringReviewDecisionFileStore.Write(superseding, supersessionDirectory);
+                Assert(superseding.DecisionRecordId != first.DecisionRecordId && firstSupersessionBytes.SequenceEqual(File.ReadAllBytes(firstSupersessionPath)) && !Json(HumanEngineeringReviewDecisionFileStore.Read(firstSupersessionPath)).Contains("SupersededByDecisionRecordId"), "P8.2 supersession modified or back-linked the prior decision.");
+
+                StandardAuthorityReviewPackage incompletePackage = StandardAuthorityReviewPackageBuilder.Create(report, package.DrawingName, scanTimestamp);
+                incompletePackage.ReviewProjection.ReviewItems.Single(item => item.RuleId == first.RuleId).Clauses.Single().SourceSha256 = null;
+                bool incompleteRejected = false;
+                try { HumanEngineeringReviewDecisionBuilder.Create(incompletePackage, packageHash, first.RuleId, first.HumanReviewState, first.ReviewerDisplayName, decisionTimestamp); } catch (InvalidOperationException) { incompleteRejected = true; }
+                Assert(incompleteRejected, "P8.2 incomplete evidence binding was accepted.");
+
+                PlotPlanStandardsAuthorityRuntimeContext context = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+                Assert(context.AuthorityResolution.Rules.Count == 4 && context.ExecutionGate.Rules.Count == 4 && context.ReviewProjection.ReviewItems.Count == 4 && context.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P8.2 changed P7 safety invariants.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
+            }
+        }
+
+        private static void RunP83()
+        {
+            DateTime scanTimestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            DateTime decisionTimestamp = new DateTime(2026, 9, 9, 7, 1, 5, 398, DateTimeKind.Utc);
+            QaReport emptyQa = new QaReport();
+            StandardAuthorityReviewPackage current = StandardAuthorityReviewPackageBuilder.Create(PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), emptyQa), "PLOTPLAN-A0-E-FINAL.dwg", scanTimestamp);
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "EngiSentry-P8.3-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            try
+            {
+                string currentSha = P83PackageSha(current, tempDirectory, "current.json");
+                HumanEngineeringReviewDecisionRecord decision = HumanEngineeringReviewDecisionBuilder.Create(current, currentSha, "runtime.plotplan.authority.pcd.flare", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic reviewer", decisionTimestamp);
+                HumanEngineeringReviewDecisionEvaluation evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, current, currentSha);
+                Assert(evaluation.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Current && evaluation.Reasons.Count == 0, "P8.3 exact current decision was not current.");
+
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, current, new string('D', 64));
+                Assert(evaluation.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Stale && evaluation.Reasons.SequenceEqual(new[] { HumanEngineeringReviewDecisionEvaluationReasons.ReviewPackageShaChanged }), "P8.3 package SHA change was not stale.");
+
+                StandardAuthorityReviewPackage schemaChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                schemaChanged.SchemaVersion = "2.0";
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, schemaChanged, P83PackageSha(schemaChanged, tempDirectory, "schema.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.ReviewPackageSchemaChanged), "P8.3 schema change was not detected.");
+
+                StandardAuthorityReviewPackage drawingChanged = P83Package(emptyQa, "different.dwg", scanTimestamp);
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, drawingChanged, P83PackageSha(drawingChanged, tempDirectory, "drawing.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.DrawingChanged), "P8.3 drawing change was not detected.");
+
+                StandardAuthorityReviewPackage timestampChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp.AddMilliseconds(1));
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, timestampChanged, P83PackageSha(timestampChanged, tempDirectory, "timestamp.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.ScanTimestampChanged), "P8.3 scan timestamp change was not detected.");
+
+                StandardAuthorityReviewPackage ruleMissing = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                ruleMissing.ReviewProjection.ReviewItems.RemoveAll(item => item.RuleId == decision.RuleId);
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, ruleMissing, P83PackageSha(ruleMissing, tempDirectory, "missing.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.RuleMissing), "P8.3 missing rule was not detected.");
+
+                StandardAuthorityReviewPackage stateChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                stateChanged.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).DecisionState = "SYNTHETIC_STATE";
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, stateChanged, P83PackageSha(stateChanged, tempDirectory, "state.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.AuthorityDecisionStateChanged), "P8.3 decision-state change was not detected.");
+
+                StandardAuthorityReviewPackage modeChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                modeChanged.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).EffectiveEnforcementMode = "SYNTHETIC_MODE";
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, modeChanged, P83PackageSha(modeChanged, tempDirectory, "mode.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.EnforcementModeChanged), "P8.3 enforcement-mode change was not detected.");
+
+                StandardAuthorityReviewPackage sourceShaChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                sourceShaChanged.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).Clauses.Single().SourceSha256 = new string('E', 64);
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, sourceShaChanged, P83PackageSha(sourceShaChanged, tempDirectory, "source-sha.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.EvidenceBindingsChanged), "P8.3 source SHA change was not detected.");
+
+                StandardAuthorityReviewPackage clauseChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                clauseChanged.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).Clauses.Single().ClauseId = "synthetic.clause";
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, clauseChanged, P83PackageSha(clauseChanged, tempDirectory, "clause.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.EvidenceBindingsChanged), "P8.3 ClauseId change was not detected.");
+
+                StandardAuthorityReviewPackage sourceChanged = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                sourceChanged.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).Clauses.Single().SourceId = "synthetic.source";
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, sourceChanged, P83PackageSha(sourceChanged, tempDirectory, "source.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.EvidenceBindingsChanged), "P8.3 SourceId change was not detected.");
+
+                StandardAuthorityReviewPackage extraClause = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                extraClause.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).Clauses.Add(new StandardClauseAuthorityResolution { ClauseId = "synthetic.extra", SourceId = "synthetic.source", SourceSha256 = new string('F', 64) });
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, extraClause, P83PackageSha(extraClause, tempDirectory, "extra.json"));
+                Assert(evaluation.Reasons.Contains(HumanEngineeringReviewDecisionEvaluationReasons.EvidenceBindingsChanged), "P8.3 extra clause was not detected.");
+
+                StandardAuthorityReviewPackage multiReason = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                multiReason.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId).Clauses.Single().SourceSha256 = new string('A', 64);
+                evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, multiReason, new string('B', 64));
+                Assert(evaluation.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Stale && evaluation.Reasons.SequenceEqual(new[] { HumanEngineeringReviewDecisionEvaluationReasons.ReviewPackageShaChanged, HumanEngineeringReviewDecisionEvaluationReasons.EvidenceBindingsChanged }), "P8.3 multiple stale reasons were not complete or deterministic.");
+
+                string decisionBefore = Json(decision);
+                string packageBefore = Json(current);
+                HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, current, currentSha);
+                Assert(Json(decision) == decisionBefore && Json(current) == packageBefore, "P8.3 evaluation mutated its inputs.");
+
+                StandardAuthorityReviewPackage duplicateRule = P83Package(emptyQa, current.DrawingName, scanTimestamp);
+                duplicateRule.ReviewProjection.ReviewItems.Add(duplicateRule.ReviewProjection.ReviewItems.Single(item => item.RuleId == decision.RuleId));
+                bool duplicateRejected = false;
+                try { HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decision, duplicateRule, currentSha); } catch (HumanEngineeringReviewDecisionStalenessValidationException) { duplicateRejected = true; }
+                Assert(duplicateRejected, "P8.3 duplicate RuleId was silently evaluated.");
+
+                PlotPlanStandardsAuthorityRuntimeContext context = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+                Assert(emptyQa.Findings.Count == 0 && emptyQa.RuleResults.Count == 0 && context.AuthorityResolution.Rules.Count == 4 && context.ExecutionGate.Rules.Count == 4 && context.ReviewProjection.ReviewItems.Count == 4 && context.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P8.3 changed P7 safety invariants.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
+            }
+        }
+
+        private static StandardAuthorityReviewPackage P83Package(QaReport qa, string drawingName, DateTime scanTimestamp)
+        {
+            return StandardAuthorityReviewPackageBuilder.Create(PlotPlanReportCompactor.CreatePlotPlanQaReport(new PlotPlanModel(), qa), drawingName, scanTimestamp);
+        }
+
+        private static string P83PackageSha(StandardAuthorityReviewPackage package, string directory, string fileName)
+        {
+            string path = Path.Combine(directory, fileName);
+            File.WriteAllText(path, Json(package), new UTF8Encoding(false));
+            return HumanEngineeringReviewDecisionFileStore.ComputeSha256(path);
+        }
+
+        private static void RunP83H()
+        {
+            DateTime scanTimestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            DateTime decisionTimestamp = new DateTime(2026, 9, 9, 7, 1, 5, 398, DateTimeKind.Utc);
+            QaReport emptyQa = new QaReport();
+            StandardAuthorityReviewPackage package = P83Package(emptyQa, "PLOTPLAN-A0-E-FINAL.dwg", scanTimestamp);
+            string packageSha = new string('1', 64);
+            string ruleId = "runtime.plotplan.authority.pcd.flare";
+            HumanEngineeringReviewDecisionRecord a = HistoryRecord(package, packageSha, ruleId, decisionTimestamp);
+            HumanEngineeringReviewDecisionHistoryResolution single = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a });
+            Assert(single.Entries.Single().State == HumanEngineeringReviewDecisionHistoryStates.Active, "P8.3H single decision was not active.");
+
+            HumanEngineeringReviewDecisionRecord b = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(1), a.DecisionRecordId);
+            HumanEngineeringReviewDecisionHistoryResolution simple = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { b, a });
+            Assert(simple.Entries.Single(entry => entry.DecisionRecordId == a.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Superseded && simple.Entries.Single(entry => entry.DecisionRecordId == a.DecisionRecordId).SupersededByDecisionRecordId == b.DecisionRecordId && simple.Entries.Single(entry => entry.DecisionRecordId == b.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Active, "P8.3H simple supersession was not resolved.");
+
+            HumanEngineeringReviewDecisionRecord c = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(2), b.DecisionRecordId);
+            HumanEngineeringReviewDecisionHistoryResolution chain = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { c, a, b });
+            Assert(chain.Entries.Single(entry => entry.DecisionRecordId == a.DecisionRecordId).SupersededByDecisionRecordId == b.DecisionRecordId && chain.Entries.Single(entry => entry.DecisionRecordId == b.DecisionRecordId).SupersededByDecisionRecordId == c.DecisionRecordId && chain.Entries.Single(entry => entry.DecisionRecordId == c.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Active, "P8.3H three-record chain was not resolved.");
+
+            StandardAuthorityReviewPackage changedPackage = P83Package(emptyQa, package.DrawingName, scanTimestamp.AddDays(1));
+            HumanEngineeringReviewDecisionRecord changedReview = HistoryRecord(changedPackage, new string('2', 64), ruleId, decisionTimestamp.AddMilliseconds(3), a.DecisionRecordId);
+            Assert(HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { changedReview, a }).Entries.Single(entry => entry.DecisionRecordId == changedReview.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Active, "P8.3H changed-package re-review was rejected.");
+
+            HumanEngineeringReviewDecisionRecord missing = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(4), "missing-decision");
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, missing }), "missing supersession target was accepted");
+
+            HumanEngineeringReviewDecisionRecord branchB = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(5), a.DecisionRecordId);
+            HumanEngineeringReviewDecisionRecord branchC = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(6), a.DecisionRecordId);
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, branchB, branchC }), "ambiguous supersession branch was accepted");
+
+            HumanEngineeringReviewDecisionRecord cycleA = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(7), "cycle-b");
+            HumanEngineeringReviewDecisionRecord cycleB = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(8), cycleA.DecisionRecordId);
+            cycleA.SupersedesDecisionRecordId = cycleB.DecisionRecordId;
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { cycleA, cycleB }), "supersession cycle was accepted");
+
+            HumanEngineeringReviewDecisionRecord otherRule = HistoryRecord(package, packageSha, "runtime.plotplan.authority.epr.legacy", decisionTimestamp.AddMilliseconds(9), a.DecisionRecordId);
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, otherRule }), "cross-rule supersession was accepted");
+
+            StandardAuthorityReviewPackage otherDrawingPackage = P83Package(emptyQa, "OTHER.dwg", scanTimestamp);
+            HumanEngineeringReviewDecisionRecord otherDrawing = HistoryRecord(otherDrawingPackage, packageSha, ruleId, decisionTimestamp.AddMilliseconds(10), a.DecisionRecordId);
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, otherDrawing }), "cross-drawing supersession was accepted");
+
+            HumanEngineeringReviewDecisionRecord duplicate = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(11));
+            duplicate.DecisionRecordId = a.DecisionRecordId;
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, duplicate }), "duplicate DecisionRecordId was accepted");
+
+            HumanEngineeringReviewDecisionRecord independent = HistoryRecord(package, packageSha, ruleId, decisionTimestamp.AddMilliseconds(12));
+            HistoryInvalid(() => HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, independent }), "multiple active heads were accepted");
+
+            HumanEngineeringReviewDecisionRecord ruleTwo = HistoryRecord(package, packageSha, "runtime.plotplan.authority.epr.legacy", decisionTimestamp.AddMilliseconds(13));
+            HumanEngineeringReviewDecisionHistoryResolution independentGroups = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { a, ruleTwo });
+            Assert(independentGroups.Entries.All(entry => entry.State == HumanEngineeringReviewDecisionHistoryStates.Active), "independent RuleIds did not form independent active groups.");
+
+            string before = Json(new[] { a, b, c });
+            HumanEngineeringReviewDecisionHistoryResolution ordered = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { c, a, b });
+            HumanEngineeringReviewDecisionHistoryResolution reordered = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { b, c, a });
+            Assert(Json(ordered) == Json(reordered) && Json(new[] { a, b, c }) == before && a.SupersedesDecisionRecordId == null && b.SupersedesDecisionRecordId == a.DecisionRecordId && c.SupersedesDecisionRecordId == b.DecisionRecordId, "P8.3H ordering or input immutability failed.");
+
+            PlotPlanStandardsAuthorityRuntimeContext context = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+            Assert(emptyQa.Findings.Count == 0 && emptyQa.RuleResults.Count == 0 && context.AuthorityResolution.Rules.Count == 4 && context.ExecutionGate.Rules.Count == 4 && context.ReviewProjection.ReviewItems.Count == 4 && context.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P8.3H changed P7/P8 safety invariants.");
+        }
+
+        private static HumanEngineeringReviewDecisionRecord HistoryRecord(StandardAuthorityReviewPackage package, string packageSha, string ruleId, DateTime decisionTimestamp, string? supersedes = null)
+        {
+            return HumanEngineeringReviewDecisionBuilder.Create(package, packageSha, ruleId, HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic reviewer", decisionTimestamp, supersedesDecisionRecordId: supersedes);
+        }
+
+        private static void HistoryInvalid(Action action, string message)
+        {
+            bool rejected = false;
+            try { action(); } catch (HumanEngineeringReviewDecisionHistoryValidationException) { rejected = true; }
+            Assert(rejected, message);
+        }
+
+        private static void RunP85()
+        {
+            DateTime scanTimestamp = new DateTime(2026, 9, 8, 19, 49, 8, 658, DateTimeKind.Utc);
+            DateTime changedScanTimestamp = scanTimestamp.AddDays(1);
+            DateTime decisionTimestamp = new DateTime(2026, 9, 9, 7, 1, 5, 398, DateTimeKind.Utc);
+            QaReport emptyQa = new QaReport();
+            StandardAuthorityReviewPackage package = P83Package(emptyQa, "PLOTPLAN-A0-E-FINAL.dwg", scanTimestamp);
+            string tempDirectory = Path.Combine(Path.GetTempPath(), "EngiSentry-P8.5-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDirectory);
+            try
+            {
+                DateTime subMillisecondTimestamp = scanTimestamp.AddTicks(1234);
+                StandardAuthorityReviewPackage subMillisecondPackage = P83Package(emptyQa, "P8.6-sub-millisecond.dwg", subMillisecondTimestamp);
+                Assert(subMillisecondPackage.ScanTimestampUtc.Kind == DateTimeKind.Utc && subMillisecondPackage.ScanTimestampUtc.Ticks % TimeSpan.TicksPerMillisecond == 0, "P8.6 review package timestamp was not normalized to persisted UTC millisecond precision.");
+                string subMillisecondPackagePath = Path.Combine(tempDirectory, "P8.6-sub-millisecond.standards.review.json");
+                File.WriteAllText(subMillisecondPackagePath, Json(subMillisecondPackage), new UTF8Encoding(false));
+                string subMillisecondPackageSha = HumanEngineeringReviewDecisionFileStore.ComputeSha256(subMillisecondPackagePath);
+                HumanEngineeringReviewDecisionRecord subMillisecondDecision = HumanEngineeringReviewDecisionBuilder.Create(subMillisecondPackage, subMillisecondPackageSha, "runtime.plotplan.authority.pcd.flare", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic Reviewer", decisionTimestamp);
+                string subMillisecondDecisionPath = HumanEngineeringReviewDecisionFileStore.Write(subMillisecondDecision, tempDirectory);
+                HumanEngineeringReviewDecisionRecord reloadedSubMillisecondDecision = HumanEngineeringReviewDecisionFileStore.Read(subMillisecondDecisionPath);
+                HumanEngineeringReviewDecisionEvaluation subMillisecondCurrent = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(reloadedSubMillisecondDecision, subMillisecondPackage, subMillisecondPackageSha);
+                Assert(subMillisecondCurrent.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Current && subMillisecondCurrent.Reasons.Count == 0, "P8.6 persisted decision was falsely stale against the same normalized package.");
+                StandardAuthorityReviewPackage millisecondChangedPackage = P83Package(emptyQa, subMillisecondPackage.DrawingName, subMillisecondTimestamp.AddMilliseconds(1));
+                HumanEngineeringReviewDecisionEvaluation millisecondChanged = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(reloadedSubMillisecondDecision, millisecondChangedPackage, subMillisecondPackageSha);
+                Assert(millisecondChanged.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Stale && millisecondChanged.Reasons.SequenceEqual(new[] { HumanEngineeringReviewDecisionEvaluationReasons.ScanTimestampChanged }), "P8.6 genuine millisecond timestamp change was not stale.");
+
+                string packagePath = Path.Combine(tempDirectory, "PLOTPLAN-A0-E-FINAL.dwg.standards.review.json");
+                File.WriteAllText(packagePath, Json(package), new UTF8Encoding(false));
+                byte[] packageBytes = File.ReadAllBytes(packagePath);
+                string packageSha = HumanEngineeringReviewDecisionFileStore.ComputeSha256(packagePath);
+                string independentlyComputedPackageSha;
+                using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) independentlyComputedPackageSha = BitConverter.ToString(sha.ComputeHash(packageBytes)).Replace("-", string.Empty);
+                Assert(string.Equals(packageSha, independentlyComputedPackageSha, StringComparison.Ordinal), "P8.5 package SHA did not match the exact persisted package bytes.");
+                HumanEngineeringReviewDecisionRecord decisionA = HumanEngineeringReviewDecisionBuilder.Create(package, packageSha, "runtime.plotplan.authority.pcd.flare", HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic Reviewer", decisionTimestamp);
+                string decisionDirectory = Path.Combine(tempDirectory, "decisions");
+                string decisionAPath = HumanEngineeringReviewDecisionFileStore.Write(decisionA, decisionDirectory);
+                byte[] decisionABytes = File.ReadAllBytes(decisionAPath);
+                HumanEngineeringReviewDecisionRecord readA = HumanEngineeringReviewDecisionFileStore.Read(decisionAPath);
+                HumanEngineeringReviewDecisionEvaluation currentA = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(readA, package, packageSha);
+                Assert(readA.DecisionRecordId == decisionA.DecisionRecordId && decisionA.ReviewPackageSha256 == packageSha && currentA.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Current && File.ReadAllBytes(packagePath).SequenceEqual(packageBytes), "P8.5 package-to-decision lifecycle or package immutability failed.");
+
+                HumanEngineeringReviewDecisionRecord decisionB = HumanEngineeringReviewDecisionBuilder.Create(package, packageSha, decisionA.RuleId, HumanEngineeringReviewDecisionStates.NeedsClarification, "Synthetic Reviewer", decisionTimestamp.AddMilliseconds(1), supersedesDecisionRecordId: decisionA.DecisionRecordId);
+                HumanEngineeringReviewDecisionFileStore.Write(decisionB, decisionDirectory);
+                HumanEngineeringReviewDecisionHistoryResolution history = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { readA, decisionB });
+                Assert(history.Entries.Single(entry => entry.DecisionRecordId == decisionA.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Superseded && history.Entries.Single(entry => entry.DecisionRecordId == decisionA.DecisionRecordId).SupersededByDecisionRecordId == decisionB.DecisionRecordId && history.Entries.Single(entry => entry.DecisionRecordId == decisionB.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Active && decisionABytes.SequenceEqual(File.ReadAllBytes(decisionAPath)) && !Json(readA).Contains("SupersededByDecisionRecordId"), "P8.5 supersession or prior-record immutability failed.");
+                HumanEngineeringReviewDecisionEvaluation currentB = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decisionB, package, packageSha);
+                Assert(currentB.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Current && decisionB.HumanReviewState == HumanEngineeringReviewDecisionStates.NeedsClarification, "P8.5 superseding decision was not current.");
+
+                StandardAuthorityReviewPackage changedPackage = P83Package(emptyQa, package.DrawingName, changedScanTimestamp);
+                string changedPackagePath = Path.Combine(tempDirectory, "PLOTPLAN-A0-E-FINAL.dwg.changed.standards.review.json");
+                File.WriteAllText(changedPackagePath, Json(changedPackage), new UTF8Encoding(false));
+                byte[] changedPackageBytes = File.ReadAllBytes(changedPackagePath);
+                string changedPackageSha = HumanEngineeringReviewDecisionFileStore.ComputeSha256(changedPackagePath);
+                string independentlyComputedChangedPackageSha;
+                using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create()) independentlyComputedChangedPackageSha = BitConverter.ToString(sha.ComputeHash(changedPackageBytes)).Replace("-", string.Empty);
+                Assert(string.Equals(changedPackageSha, independentlyComputedChangedPackageSha, StringComparison.Ordinal) && !string.Equals(changedPackageSha, packageSha, StringComparison.Ordinal), "P8.5 changed-package SHA was not independently bound to different persisted bytes.");
+                HumanEngineeringReviewDecisionHistoryResolution oldActiveHistory = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { decisionA });
+                HumanEngineeringReviewDecisionEvaluation staleA = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(decisionA, changedPackage, changedPackageSha);
+                Assert(oldActiveHistory.Entries.Single().State == HumanEngineeringReviewDecisionHistoryStates.Active && staleA.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Stale && decisionA.HumanReviewState == HumanEngineeringReviewDecisionStates.ReviewAccepted, "P8.5 stale-active dimensions were conflated.");
+                HumanEngineeringReviewDecisionRecord staleReviewB = HumanEngineeringReviewDecisionBuilder.Create(changedPackage, changedPackageSha, decisionA.RuleId, HumanEngineeringReviewDecisionStates.ReviewAccepted, "Synthetic Reviewer", decisionTimestamp.AddMilliseconds(2), supersedesDecisionRecordId: decisionA.DecisionRecordId);
+                HumanEngineeringReviewDecisionHistoryResolution rereviewHistory = HumanEngineeringReviewDecisionHistoryResolver.Resolve(new[] { decisionA, staleReviewB });
+                HumanEngineeringReviewDecisionEvaluation currentRereview = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(staleReviewB, changedPackage, changedPackageSha);
+                Assert(rereviewHistory.Entries.Single(entry => entry.DecisionRecordId == decisionA.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Superseded && rereviewHistory.Entries.Single(entry => entry.DecisionRecordId == staleReviewB.DecisionRecordId).State == HumanEngineeringReviewDecisionHistoryStates.Active && currentRereview.Status == HumanEngineeringReviewDecisionEvaluationStatuses.Current && changedPackage.ScanTimestampUtc == changedScanTimestamp && File.ReadAllBytes(changedPackagePath).SequenceEqual(changedPackageBytes), "P8.5 stale re-review supersession failed.");
+
+                string absentDirectory = Path.Combine(tempDirectory, "absent");
+                Assert(HumanEngineeringReviewDecisionArtifactCatalog.Load(absentDirectory, package.DrawingName).Count == 0, "P8.5 absent decision directory was not empty.");
+                StandardAuthorityReviewPackage catalogPackage = P83Package(emptyQa, "CATALOG.dwg", scanTimestamp);
+                string catalogDirectory = Path.Combine(tempDirectory, "catalog");
+                string catalogSha = new string('3', 64);
+                HumanEngineeringReviewDecisionRecord catalogFlare = HistoryRecord(catalogPackage, catalogSha, "runtime.plotplan.authority.pcd.flare", decisionTimestamp.AddMilliseconds(3));
+                HumanEngineeringReviewDecisionRecord catalogEpr = HistoryRecord(catalogPackage, catalogSha, "runtime.plotplan.authority.epr.legacy", decisionTimestamp.AddMilliseconds(4));
+                HumanEngineeringReviewDecisionRecord catalogFlareSecond = HistoryRecord(catalogPackage, catalogSha, "runtime.plotplan.authority.pcd.flare", decisionTimestamp.AddMilliseconds(5));
+                string catalogFlarePath = HumanEngineeringReviewDecisionFileStore.Write(catalogFlare, catalogDirectory);
+                HumanEngineeringReviewDecisionFileStore.Write(catalogEpr, catalogDirectory);
+                HumanEngineeringReviewDecisionFileStore.Write(catalogFlareSecond, catalogDirectory);
+                StandardAuthorityReviewPackage otherPackage = P83Package(emptyQa, "OTHER.dwg", scanTimestamp);
+                HumanEngineeringReviewDecisionRecord otherDecision = HistoryRecord(otherPackage, new string('4', 64), "runtime.plotplan.authority.pcd.flare", decisionTimestamp.AddMilliseconds(6));
+                HumanEngineeringReviewDecisionFileStore.Write(otherDecision, catalogDirectory);
+                List<HumanEngineeringReviewDecisionRecord> catalog = HumanEngineeringReviewDecisionArtifactCatalog.Load(catalogDirectory, catalogPackage.DrawingName);
+                List<HumanEngineeringReviewDecisionRecord> expectedCatalogOrder = new[] { catalogEpr, catalogFlare, catalogFlareSecond }.OrderBy(record => record.DrawingName, StringComparer.Ordinal).ThenBy(record => record.RuleId, StringComparer.Ordinal).ThenBy(record => record.DecisionRecordId, StringComparer.Ordinal).ToList();
+                Assert(catalog.Count == 3 && catalog.Select(record => record.DecisionRecordId).SequenceEqual(expectedCatalogOrder.Select(record => record.DecisionRecordId)) && catalog.All(record => record.DrawingName == catalogPackage.DrawingName), "P8.5 decision artifact catalog filtering or same-rule ordering failed.");
+
+                string tamperedCatalogJson = File.ReadAllText(catalogFlarePath).Replace("Synthetic reviewer", "Tampered reviewer");
+                File.WriteAllText(catalogFlarePath, tamperedCatalogJson, new UTF8Encoding(false));
+                bool tamperedRejected = false;
+                try { HumanEngineeringReviewDecisionArtifactCatalog.Load(catalogDirectory, catalogPackage.DrawingName); } catch (InvalidDataException) { tamperedRejected = true; }
+                Assert(tamperedRejected, "P8.5 relevant tampered decision artifact was silently accepted.");
+                File.WriteAllText(Path.Combine(catalogDirectory, "UNRELATED.dwg.invalid.standards.review.decision.json"), "not a decision", new UTF8Encoding(false));
+                StandardAuthorityReviewPackage requestedPackage = P83Package(emptyQa, "REQUESTED.dwg", scanTimestamp);
+                string requestedDirectory = Path.Combine(tempDirectory, "requested");
+                HumanEngineeringReviewDecisionRecord requestedDecision = HistoryRecord(requestedPackage, new string('5', 64), "runtime.plotplan.authority.pcd.flare", decisionTimestamp.AddMilliseconds(6));
+                HumanEngineeringReviewDecisionFileStore.Write(requestedDecision, requestedDirectory);
+                File.WriteAllText(Path.Combine(requestedDirectory, "OTHER.dwg.invalid.standards.review.decision.json"), "not a decision", new UTF8Encoding(false));
+                Assert(HumanEngineeringReviewDecisionArtifactCatalog.Load(requestedDirectory, requestedPackage.DrawingName).Count == 1, "P8.5 unrelated invalid artifact corrupted requested history.");
+
+                Assert(decisionA.AuthorityDecisionStateAtReview == StandardDecisionStates.SourceQuarantined && decisionA.EffectiveEnforcementModeAtReview == "NEVER_AUTO_ENFORCE" && !Json(decisionA).Contains("MinimumDistanceMeters") && !Json(decisionA).Contains("ProposedMinimumDistanceMeters") && !Json(decisionA).Contains("RequiredMeasurementBasisKey") && !Json(decisionA).Contains("RequiredApplicabilityKey") && !Json(decisionA).Contains("90 meters") && emptyQa.Findings.Count == 0 && emptyQa.RuleResults.Count == 0, "P8.5 human decision safety boundary failed.");
+                PlotPlanStandardsAuthorityRuntimeContext context = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+                Assert(context.AuthorityResolution.Rules.Count == 4 && context.ExecutionGate.Rules.Count == 4 && context.ReviewProjection.ReviewItems.Count == 4 && context.ExecutionGate.Rules.Count(rule => rule.AutoExecutionAllowed) == 0 && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.epr.legacy").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.gsf.primary").DecisionState == StandardDecisionStates.ExpertReviewRequired && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.flare").DecisionState == StandardDecisionStates.SourceQuarantined && context.ExecutionGate.Rules.Single(rule => rule.RuleId == "runtime.plotplan.authority.pcd.general").DecisionState == StandardDecisionStates.ExpertReviewRequired, "P8.5 changed P7 authority safety invariants.");
+            }
+            finally
+            {
+                if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
+            }
         }
 
         private static List<KnownQaRule> Catalog() => BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).OrderBy(x => x.RuleId, StringComparer.Ordinal).ToList();

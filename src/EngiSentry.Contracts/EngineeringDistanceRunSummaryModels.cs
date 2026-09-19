@@ -13,5 +13,6 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 5)] public decimal SecurityFenceMinimumMeters { get; set; }
         [DataMember(Order = 6)] public List<EngineeringDistanceRuleEvaluation> Evaluations { get; set; } = new List<EngineeringDistanceRuleEvaluation>();
         [DataMember(Order = 7)] public decimal UnitBoundaryMinimumMeters { get; set; }
+        [DataMember(Order = 8, EmitDefaultValue = false)] public ProjectDistanceGovernanceAggregateResult? Governance { get; set; }
     }
 }

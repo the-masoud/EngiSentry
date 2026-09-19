@@ -167,26 +167,31 @@ namespace EngiSentry.AutoCAD2021
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
                 QaReport baseQa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
-                QaReport qa = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plotPlan, baseQa);
+                string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
+                ProjectDistanceGovernanceAggregateResult governance = ProjectDistanceGovernanceRuntimeLoader.LoadCanonical(criteria, approvalDirectory);
+                QaReport qa = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plotPlan, baseQa, governance);
                 EngineeringDistanceRunSummary summary = qa.EngineeringDistanceSummary ?? throw new InvalidOperationException("ES_PLOTQA engineering distance summary is required.");
                 var evaluations = summary.Evaluations ?? throw new InvalidOperationException("ES_PLOTQA engineering distance evaluations are required.");
                 EngineeringDistanceRuleEvaluation roadEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId);
                 EngineeringDistanceRuleEvaluation plantEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToPlantRuleId);
                 EngineeringDistanceRuleEvaluation unitEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToUnitBoundaryRuleId);
                 WriteToActiveEditor("Project criteria source: ProjectDistanceCriteria\nEquipment to Road minimum: {0} m\nEquipment to Plant minimum: {1} m\nEquipment to Unit Boundary minimum: {2} m\nEquipment to Road rule status: {3}\nEquipment to Plant rule status: {4}\nEquipment to Unit Boundary rule status: {5}\n", summary.AccessRoadEdgeMinimumMeters, summary.SecurityFenceMinimumMeters, summary.UnitBoundaryMinimumMeters, roadEvaluation.Status, plantEvaluation.Status, unitEvaluation.Status);
+                foreach (ProjectDistanceGovernanceAggregateItem item in governance.Items.OrderBy(x => x.CandidateId, StringComparer.Ordinal)) WriteToActiveEditor("Governance: {0} | {1} | {2}\n", item.CandidateId, item.AuthorityState ?? "<none>", item.Resolution.State);
                 WriteToActiveEditor("[ES_PLOTQA] QA complete\n");
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during plot-plan QA processing.");
                 PlotPlanQaReport plotPlanQaReport = PlotPlanReportCompactor.CreatePlotPlanQaReport(plotPlan, qa);
                 string path = SnapshotFileWriter.WritePlotPlanQaReport(plotPlanQaReport, snapshot.FileName, snapshot.ScanTimestampUtc);
-                string reviewPackagePath = SnapshotFileWriter.WriteStandardsReviewPackage(StandardAuthorityReviewPackageBuilder.Create(plotPlanQaReport, snapshot.FileName ?? "unnamed", snapshot.ScanTimestampUtc));
+                StandardAuthorityReviewPackage reviewPackage = StandardAuthorityReviewPackageBuilder.Create(plotPlanQaReport, snapshot.FileName ?? "unnamed", snapshot.ScanTimestampUtc);
+                string reviewPackagePath = SnapshotFileWriter.WriteStandardsReviewPackage(reviewPackage);
+                string reviewPackageSha256 = HumanEngineeringReviewDecisionFileStore.ComputeSha256(reviewPackagePath);
                 WriteToActiveEditor("[ES_PLOTQA] Artifacts written\nQA report: {0}\nStandards review package: {1}\n", path, reviewPackagePath);
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during plot-plan QA artifact creation.");
                 PlotPlanStatistics s = plotPlan.Statistics;
                 PlotGeometryStatistics g = plotPlan.Geometry.Statistics;
                 document.Editor.WriteMessage("\nEngiSentry M2.2 Plot Plan QA Complete\nDrawing: {0}\nEquipment placements: {1}\nComplete placements: {2}\nIncomplete placements: {3}\nAmbiguous placements: {4}\nGeometry primitives: {5}\nGeometry associations: {6}\nResolved geometry associations: {7}\nMissing geometry associations: {8}\nAmbiguous geometry associations: {9}\nSpatial constraints: {10}\nResolved spatial constraints: {11}\nMissing spatial constraints: {12}\nAmbiguous spatial constraints: {13}\nRules executed: {14}\nFindings: {15}\nInfo: {16}\nWarnings: {17}\nErrors: {18}\nOverall status: {19}\nQA report: {20}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", s.EquipmentPlacementCount, s.CompletePlacementCount, s.IncompletePlacementCount, s.AmbiguousPlacementCount, g.SupportedPrimitiveCount, g.GeometryAssociationCount, g.ResolvedAssociationCount, g.MissingAssociationCount, g.AmbiguousAssociationCount, g.SpatialConstraintCount, g.ResolvedSpatialConstraintCount, g.MissingSpatialConstraintCount, g.AmbiguousSpatialConstraintCount, qa.Statistics.RuleCount, qa.Statistics.TotalFindings, qa.Statistics.InfoFindings, qa.Statistics.WarningFindings, qa.Statistics.ErrorFindings, qa.OverallStatus, path);
-                VisualResultsPalette.ShowPlotQa(document, snapshot, plotPlanQaReport, path);
+                VisualResultsPalette.ShowPlotQa(document, snapshot, plotPlanQaReport, path, reviewPackage, reviewPackagePath, reviewPackageSha256);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.2 Plot Plan QA Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message);  VisualResultsPalette.ShowFailure("ES_PLOTQA", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
