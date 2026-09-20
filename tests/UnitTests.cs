@@ -298,6 +298,7 @@ namespace EngiSentry.Tests
             ClearanceTests.Run();
             ProposalContractTests.Run();
             StandardsPackProjectionTests.Run();
+            PlacementProposalTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }
