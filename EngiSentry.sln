@@ -22,6 +22,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.CrossDocument", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Revision", "src\EngiSentry.Revision\EngiSentry.Revision.csproj", "{C9D4E3F2-8A75-4F0E-AE55-1C1F8F8B4D42}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngiSentry.Intelligence", "src\EngiSentry.Intelligence\EngiSentry.Intelligence.csproj", "{C5B937D1-5A97-4D40-A7E7-1C77941182A9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -68,6 +70,10 @@ Global
 		{C9D4E3F2-8A75-4F0E-AE55-1C1F8F8B4D42}.Debug|x64.Build.0 = Debug|Any CPU
 		{C9D4E3F2-8A75-4F0E-AE55-1C1F8F8B4D42}.Release|x64.ActiveCfg = Release|Any CPU
 		{C9D4E3F2-8A75-4F0E-AE55-1C1F8F8B4D42}.Release|x64.Build.0 = Release|Any CPU
+		{C5B937D1-5A97-4D40-A7E7-1C77941182A9}.Debug|x64.ActiveCfg = Debug|x64
+		{C5B937D1-5A97-4D40-A7E7-1C77941182A9}.Debug|x64.Build.0 = Debug|x64
+		{C5B937D1-5A97-4D40-A7E7-1C77941182A9}.Release|x64.ActiveCfg = Release|x64
+		{C5B937D1-5A97-4D40-A7E7-1C77941182A9}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

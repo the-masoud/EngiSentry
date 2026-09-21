@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration><Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProjectGuid>{C5B937D1-5A97-4D40-A7E7-1C77941182A9}</ProjectGuid><OutputType>Library</OutputType><RootNamespace>EngiSentry.Intelligence</RootNamespace><AssemblyName>EngiSentry.Intelligence</AssemblyName><TargetFrameworkVersion>v4.8</TargetFrameworkVersion><PlatformTarget>x64</PlatformTarget><LangVersion>latest</LangVersion><Nullable>enable</Nullable><Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' "><OutputPath>bin\x64\Debug\</OutputPath><DebugSymbols>true</DebugSymbols><DebugType>full</DebugType></PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' "><OutputPath>bin\x64\Release\</OutputPath><DebugType>pdbonly</DebugType><Optimize>true</Optimize></PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" /><Reference Include="System" /><Reference Include="System.Core" /><Reference Include="System.Net.Http" /><Reference Include="System.Runtime.Serialization" /><Reference Include="System.Xml" /></ItemGroup>
+  <ItemGroup><Compile Include="JevSemanticAssistModels.cs" /><Compile Include="JevSemanticAssistPayloadBuilder.cs" /><Compile Include="IJevSemanticDecisionClient.cs" /><Compile Include="TypeSafeJevClient.cs" /><Compile Include="JevSemanticAmbiguityClassifier.cs" /><Compile Include="JevSemanticAmbiguityCaseBuilder.cs" /></ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

@@ -16,6 +16,7 @@ using EngiSentry.Contracts;
 using EngiSentry.Revision;
 using EngiSentry.Standards;
 using EngiSentry.AutoCAD2021.Scanning;
+using EngiSentry.Intelligence;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -193,6 +194,12 @@ namespace EngiSentry.AutoCAD2021
                 StandardsReviewPackagePath = standardsReviewPackagePath,
                 StandardsReviewPackageSha256 = standardsReviewPackageSha256
             });
+        }
+
+        public static void ShowJevAssist(Document document, DrawingSnapshot snapshot, JevSemanticAdvisorySidecar advisory, string outputPath)
+        {
+            List<JevSemanticAssistResult> results = advisory.Results.OrderBy(x => x.EvidenceId, StringComparer.Ordinal).ToList();
+            Publish(new VisualResultsData { Command="ES_JEVASSIST", Title="JEV SEMANTIC ASSIST", Drawing=snapshot.FileName, Status=results.Select(x=>x.AdvisoryStatus).FirstOrDefault() ?? JevSemanticAdvisoryStates.NoAmbiguities, StatusDetail="ADVISORY ONLY | NO ENGINEERING DECISION | READ-ONLY", OutputPath=outputPath, Document=document, Metrics=new List<VisualMetric>{new VisualMetric("Ambiguities",results.Count.ToString(CultureInfo.InvariantCulture)),new VisualMetric("Classified",results.Count(x=>x.AdvisoryStatus==JevSemanticAdvisoryStates.Classified).ToString(CultureInfo.InvariantCulture)),new VisualMetric("Unavailable/errors",results.Count(x=>x.AdvisoryStatus==JevSemanticAdvisoryStates.Unavailable||x.AdvisoryStatus==JevSemanticAdvisoryStates.InvalidResponse).ToString(CultureInfo.InvariantCulture))}, Details=results.SelectMany(x=>new[]{new VisualDetail("EvidenceId",x.EvidenceId),new VisualDetail("Deterministic state","Ambiguous"),new VisualDetail("Jev suggested role",x.Choice??"Not supplied"),new VisualDetail("Confidence",x.Confidence.HasValue?x.Confidence.Value.ToString(CultureInfo.InvariantCulture):"Not supplied"),new VisualDetail("Probabilities",string.Join(" | ",x.ChoiceProbabilities.Select(p=>p.Label+":"+p.Probability.ToString(CultureInfo.InvariantCulture)))),new VisualDetail("Model",x.Model??"Not supplied"),new VisualDetail("Request ID",x.RequestId??"Not supplied"),new VisualDetail("Latency",x.LatencyMilliseconds.ToString(CultureInfo.InvariantCulture)+" ms"),new VisualDetail("Outbound payload SHA256",x.InputProjectionSha256)}).Concat(new[]{new VisualDetail("DETERMINISTIC RESULT CHANGED","NO"),new VisualDetail("STANDARDS GOVERNANCE CHANGED","NO"),new VisualDetail("RULE EXECUTION CHANGED","NO"),new VisualDetail("PLACEMENT PROPOSAL CHANGED","NO"),new VisualDetail("DWG CHANGED","NO"),new VisualDetail("Sidecar",outputPath)}).ToList() });
         }
 
         public static void ShowPlacementProposals(Document document, DrawingSnapshot snapshot, PlacementProposalRunResult result, PlacementProposalRunDiagnostics diagnostics, string outputPath)

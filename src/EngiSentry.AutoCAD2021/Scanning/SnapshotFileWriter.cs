@@ -1,11 +1,13 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using EngiSentry.Contracts;
 using EngiSentry.Revision;
+using EngiSentry.Intelligence;
 
 namespace EngiSentry.AutoCAD2021.Scanning
 {
@@ -137,6 +139,16 @@ namespace EngiSentry.AutoCAD2021.Scanning
             string drawing = SanitizeFileName(snapshot.Drawing.FileName ?? "unnamed"); string timestamp = snapshot.Drawing.ScanTimestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
             string path = Path.Combine(directory, drawing + "." + timestamp + ".revision.baseline.json");
             var serializer = new DataContractJsonSerializer(typeof(RevisionSnapshot)); using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) serializer.WriteObject(stream, snapshot); return path;
+        }
+
+        internal static string WriteJevSemanticAdvisory(JevSemanticAdvisorySidecar advisory, string? drawingName, DateTime timestampUtc)
+        {
+            string directory = Path.Combine(ResolveArtifactsRoot(), "qa", "plotplan"); Directory.CreateDirectory(directory);
+            string drawing = SanitizeFileName(drawingName ?? "unnamed"); string timestamp = timestampUtc.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+            string path = Path.Combine(directory, drawing + "." + timestamp + ".jev-semantic-advisory.json");
+            advisory.Results = advisory.Results.OrderBy(x => x.EvidenceId, StringComparer.Ordinal).ToList();
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) new DataContractJsonSerializer(typeof(JevSemanticAdvisorySidecar)).WriteObject(stream, advisory);
+            return path;
         }
 
         internal static string WriteRevisionComparison(RevisionComparisonReport report, string? drawingName, DateTime timestampUtc)

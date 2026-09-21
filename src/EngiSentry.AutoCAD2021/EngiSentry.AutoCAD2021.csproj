@@ -34,8 +34,10 @@
     <ProjectReference Include="..\EngiSentry.Standards\EngiSentry.Standards.csproj" />
     <ProjectReference Include="..\EngiSentry.CrossDocument\EngiSentry.CrossDocument.csproj" />
     <ProjectReference Include="..\EngiSentry.Revision\EngiSentry.Revision.csproj" />
+    <ProjectReference Include="..\EngiSentry.Intelligence\EngiSentry.Intelligence.csproj" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Net.Http" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Runtime.Serialization" />

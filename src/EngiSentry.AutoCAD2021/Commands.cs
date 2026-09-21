@@ -15,6 +15,7 @@ using EngiSentry.PlotPlan;
 using EngiSentry.Standards;
 using EngiSentry.CrossDocument;
 using EngiSentry.Revision;
+using EngiSentry.Intelligence;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -470,6 +471,36 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry returned approval intake failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALINTAKE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_JEVASSIST")]
+        public void JevAssist()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { VisualResultsPalette.ShowFailure("ES_JEVASSIST", null, "<none>", "No active drawing."); return; }
+                if (!AutoCADHostBoundary.IsJevNetworkAllowed(AutoCADHostBoundary.IsCoreConsole()))
+                {
+                    document.Editor.WriteMessage("\nJEV SEMANTIC ASSIST\nStatus: JEV_DISABLED\nREAD-ONLY\n");
+                    return;
+                }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, capture);
+                List<SemanticAmbiguityCase> cases = JevSemanticAmbiguityCaseBuilder.Build(plotPlan);
+                var classifier = new JevSemanticAmbiguityClassifier(new TypeSafeJevClient());
+                JevSemanticAdvisorySidecar advisory = classifier.Classify(cases, JevSemanticAssistPolicy.FromEnvironment());
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during Jev advisory processing.");
+                string path = SnapshotFileWriter.WriteJevSemanticAdvisory(advisory, snapshot.FileName, snapshot.ScanTimestampUtc);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during Jev advisory sidecar creation.");
+                document.Editor.WriteMessage("\nJEV SEMANTIC ASSIST\nADVISORY ONLY\nNO ENGINEERING DECISION\nAmbiguities: {0}\nClassified: {1}\nStatus: {2}\nDBMOD unchanged: YES\nREAD-ONLY\n", cases.Count, advisory.Results.Count(x => x.AdvisoryStatus == JevSemanticAdvisoryStates.Classified), advisory.Results.Select(x => x.AdvisoryStatus).FirstOrDefault() ?? JevSemanticAdvisoryStates.NoAmbiguities);
+                VisualResultsPalette.ShowJevAssist(document, snapshot, advisory, path);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVASSIST failed\nReason: {0}\n", exception.Message); VisualResultsPalette.ShowFailure("ES_JEVASSIST", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
@@ -515,6 +546,11 @@ namespace EngiSentry.AutoCAD2021
         internal static bool IsCoreConsole()
         {
             return string.Equals(Process.GetCurrentProcess().ProcessName, "accoreconsole", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsJevNetworkAllowed(bool isCoreConsole)
+        {
+            return !isCoreConsole;
         }
     }
 }
