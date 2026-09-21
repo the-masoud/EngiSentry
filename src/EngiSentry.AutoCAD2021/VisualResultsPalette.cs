@@ -271,6 +271,41 @@ namespace EngiSentry.AutoCAD2021
             return details;
         }
 
+        public static void ShowApprovalHandoff(Document document, DrawingSnapshot snapshot, EngineeringDistanceApprovalHandoffPackage package, EngineeringDistanceApprovalHandoffVerificationResult verification)
+        {
+            IReadOnlyList<EngineeringDistanceApprovalHandoffCandidate> candidates = new[] { package.Manifest.Road, package.Manifest.Fence };
+            Publish(new VisualResultsData
+            {
+                Command = "ES_APPROVALPACKAGE",
+                Title = "APPROVAL HANDOFF PACKAGE",
+                Drawing = snapshot == null ? "<none>" : snapshot.FileName,
+                Status = "PREPARATION ONLY",
+                StatusDetail = "NO APPROVAL GRANTED | READ-ONLY",
+                OutputPath = package.DirectoryPath,
+                Document = document,
+                Note = "Directory handoff package only. No approval, authority, trust, signing, installation, or activation occurred.",
+                Metrics = new List<VisualMetric>
+                {
+                    new VisualMetric("PackageId", package.PackageId),
+                    new VisualMetric("AutoExecutionAllowed", candidates.Count(x => x.AutoExecutionAllowed).ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Manifest verification", verification.Status),
+                    new VisualMetric("Payload hash verification", verification.PayloadHashesValid ? "PASS" : "FAIL"),
+                    new VisualMetric("Production authority material", verification.ProductionAuthorityMaterialPresent ? "YES" : "NO"),
+                    new VisualMetric("Mode", "READ-ONLY")
+                },
+                Details = new List<VisualDetail>
+                {
+                    new VisualDetail("Status", "APPROVAL HANDOFF PACKAGE | PREPARATION ONLY | NO APPROVAL GRANTED | READ-ONLY"),
+                    new VisualDetail("Package directory", package.DirectoryPath),
+                    new VisualDetail("Road RequestId", package.Manifest.RoadApprovalRequestId),
+                    new VisualDetail("Fence RequestId", package.Manifest.FenceApprovalRequestId),
+                    new VisualDetail("Road readiness", package.Manifest.Road.GovernanceState + " | AutoExecutionAllowed=" + (package.Manifest.Road.AutoExecutionAllowed ? "YES" : "NO")),
+                    new VisualDetail("Fence readiness", package.Manifest.Fence.GovernanceState + " | AutoExecutionAllowed=" + (package.Manifest.Fence.AutoExecutionAllowed ? "YES" : "NO")),
+                    new VisualDetail("Verifier diagnostics", string.Join(" | ", verification.Diagnostics ?? new List<string>()))
+                }
+            });
+        }
+
         public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, string outputPath)
         {
             ShowPlotQa(document, snapshot, new PlotPlanQaReport { PlotPlan = plotPlan, Qa = report }, outputPath);

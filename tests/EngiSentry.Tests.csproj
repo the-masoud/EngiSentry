@@ -26,6 +26,6 @@
     <ProjectReference Include="..\src\EngiSentry.CrossDocument\EngiSentry.CrossDocument.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Revision\EngiSentry.Revision.csproj" />
   </ItemGroup>
-  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /><Compile Include="CrossDocumentTests.cs" /><Compile Include="RevisionTests.cs" /><Compile Include="ProposalContractTests.cs" /><Compile Include="StandardsPackProjectionTests.cs" /><Compile Include="PlacementProposalTests.cs" /><Compile Include="PlacementProposalRuntimeTests.cs" /><Compile Include="PhaseFPresentationTests.cs" /><Compile Include="PhaseGActivationReadinessTests.cs" /><Compile Include="PhaseHApprovalOnboardingTests.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /><Compile Include="CrossDocumentTests.cs" /><Compile Include="RevisionTests.cs" /><Compile Include="ProposalContractTests.cs" /><Compile Include="StandardsPackProjectionTests.cs" /><Compile Include="PlacementProposalTests.cs" /><Compile Include="PlacementProposalRuntimeTests.cs" /><Compile Include="PhaseFPresentationTests.cs" /><Compile Include="PhaseGActivationReadinessTests.cs" /><Compile Include="PhaseHApprovalOnboardingTests.cs" /><Compile Include="PhaseHApprovalHandoffTests.cs" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

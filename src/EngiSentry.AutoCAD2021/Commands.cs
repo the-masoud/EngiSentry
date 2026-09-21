@@ -415,6 +415,38 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry approval preparation failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALPREP", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_APPROVALPACKAGE")]
+        public void ApprovalPackage()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry approval handoff failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_APPROVALPACKAGE", null, "<none>", "No active drawing."); return; }
+                ProjectDistanceCriteria? criteria = ProjectDistanceCriteriaStore.ResolveOrPrompt(document.Name);
+                if (criteria == null) { WriteToActiveEditor("\nES_APPROVALPACKAGE cancelled: Project Distance Criteria were not saved.\n"); VisualResultsPalette.ShowCancelled("ES_APPROVALPACKAGE", document, System.IO.Path.GetFileName(document.Name), "Project Distance Criteria were not saved."); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out _);
+                ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+                string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
+                IReadOnlyList<EngineeringDistanceApprovalReadinessItem> readiness = EngineeringDistanceApprovalReadinessService.Inspect(criteria, approvalDirectory, EngineeringDistanceApprovalAuthorityTrustStore.CanonicalPath, EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.CanonicalDirectory);
+                EngineeringDistanceCandidateDefinition road = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.AccessRoadEdge);
+                EngineeringDistanceCandidateDefinition fence = EngineeringDistanceCandidateCatalog.BuiltInCandidates.Single(x => x.RequiredMeasurementBasisKey == EngineeringDistanceEvidenceKeys.SecurityFence);
+                string drawingName = System.IO.Path.GetFileName(document.Name) ?? string.Empty;
+                EngineeringDistanceApprovalRequest roadApproval = EngineeringDistanceApprovalPreparation.BuildApprovalRequest(criteria.ProjectDirectory, road, context.ClauseRegistry, context.SourceRegistry, drawingName, snapshot.ScanTimestampUtc);
+                EngineeringDistanceApprovalRequest fenceApproval = EngineeringDistanceApprovalPreparation.BuildApprovalRequest(criteria.ProjectDirectory, fence, context.ClauseRegistry, context.SourceRegistry, drawingName, snapshot.ScanTimestampUtc);
+                EngineeringDistanceAuthorityPolicyRequest roadPolicy = EngineeringDistanceApprovalPreparation.BuildPolicyRequest(criteria.ProjectDirectory, road);
+                EngineeringDistanceAuthorityPolicyRequest fencePolicy = EngineeringDistanceApprovalPreparation.BuildPolicyRequest(criteria.ProjectDirectory, fence);
+                string packageRoot = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "artifacts", "qa", "approval-handoff");
+                EngineeringDistanceApprovalHandoffPackage package = EngineeringDistanceApprovalHandoffPackageBuilder.Write(packageRoot, criteria.ProjectDirectory, drawingName, snapshot.FullPath, snapshot.ScanTimestampUtc, roadApproval, roadPolicy, fenceApproval, fencePolicy, readiness);
+                EngineeringDistanceApprovalHandoffVerificationResult verification = EngineeringDistanceApprovalHandoffVerifier.Verify(package.DirectoryPath);
+                if (verification.Status != "VALID_HANDOFF_PACKAGE") throw new InvalidOperationException("H-B handoff package verification failed: " + string.Join(" | ", verification.Diagnostics));
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during approval handoff package creation.");
+                document.Editor.WriteMessage("\nEngiSentry Approval Handoff Package Complete\nPackageId: {0}\nPackage directory: {1}\nAutoExecutionAllowed: {2}\nProduction authority material: NO\nPackage verification: PASS\nDBMOD unchanged: YES\nStatus: PREPARATION ONLY | NO APPROVAL GRANTED | READ-ONLY\n", package.PackageId, package.DirectoryPath, readiness.Count(x => x.AutoExecutionAllowed));
+                VisualResultsPalette.ShowApprovalHandoff(document, snapshot, package, verification);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry approval handoff failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALPACKAGE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
