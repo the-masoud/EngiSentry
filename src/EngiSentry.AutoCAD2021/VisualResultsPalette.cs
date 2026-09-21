@@ -15,6 +15,7 @@ using Autodesk.AutoCAD.Windows;
 using EngiSentry.Contracts;
 using EngiSentry.Revision;
 using EngiSentry.Standards;
+using EngiSentry.AutoCAD2021.Scanning;
 
 namespace EngiSentry.AutoCAD2021
 {
@@ -191,6 +192,40 @@ namespace EngiSentry.AutoCAD2021
                 StandardsReviewPackage = standardsReviewPackage,
                 StandardsReviewPackagePath = standardsReviewPackagePath,
                 StandardsReviewPackageSha256 = standardsReviewPackageSha256
+            });
+        }
+
+        public static void ShowPlacementProposals(Document document, DrawingSnapshot snapshot, PlacementProposalRunResult result, PlacementProposalRunDiagnostics diagnostics, string outputPath)
+        {
+            PlacementProposalRunResult safeResult = result ?? new PlacementProposalRunResult();
+            PlacementProposalRunDiagnostics safeDiagnostics = diagnostics ?? new PlacementProposalRunDiagnostics();
+            List<PlacementProposal> proposals = (safeResult.Proposals ?? new List<PlacementProposal>())
+                .Where(x => x != null)
+                .OrderBy(x => x.ProposalId ?? string.Empty, StringComparer.Ordinal)
+                .ToList();
+
+            Publish(new VisualResultsData
+            {
+                Command = "ES_SUGGEST",
+                Title = "Placement Proposals",
+                Drawing = snapshot == null ? "<none>" : snapshot.FileName,
+                Status = "COMPLETE",
+                StatusDetail = "Read-only placement proposal projection completed",
+                OutputPath = outputPath,
+                Document = document,
+                Note = "No drawing changes were made. Zero proposals is a valid governed result.",
+                Metrics = new List<VisualMetric>
+                {
+                    new VisualMetric("Governed rules", safeDiagnostics.GovernedRuleCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Bounded constraints", safeDiagnostics.BoundedConstraintCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Violated constraints", safeDiagnostics.ViolatedCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Review-required constraints", safeDiagnostics.ReviewRequiredCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Insufficient-evidence constraints", safeDiagnostics.InsufficientEvidenceCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Executable violations", safeDiagnostics.ExecutableViolatedCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Placement proposals", proposals.Count.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Mode", "READ-ONLY")
+                },
+                Details = PlacementProposalPresentation.BuildDetails(proposals, safeDiagnostics, outputPath)
             });
         }
 
@@ -626,6 +661,127 @@ namespace EngiSentry.AutoCAD2021
         public VisualDetail(string label, string value) { Label = label; Value = value ?? string.Empty; }
         public string Label { get; private set; }
         public string Value { get; private set; }
+    }
+
+    internal static class PlacementProposalPresentation
+    {
+        private const string NotAvailable = "Not available in PlacementProposal projection";
+
+        internal static List<VisualDetail> BuildDetails(IReadOnlyList<PlacementProposal> proposals, PlacementProposalRunDiagnostics diagnostics, string sidecarPath)
+        {
+            var details = new List<VisualDetail>
+            {
+                new VisualDetail("Status", "READ-ONLY"),
+                new VisualDetail("Placement-proposal sidecar", Safe(sidecarPath)),
+                new VisualDetail("Satisfied constraints", CountState(proposals, ProposalConstraintState.Satisfied)),
+                new VisualDetail("Violated constraints", CountState(proposals, ProposalConstraintState.Violated)),
+                new VisualDetail("Insufficient-evidence constraints", CountState(proposals, ProposalConstraintState.InsufficientEvidence)),
+                new VisualDetail("Review-required constraints", CountState(proposals, ProposalConstraintState.ReviewRequired)),
+                new VisualDetail("Not-applicable constraints", CountState(proposals, ProposalConstraintState.NotApplicable)),
+                new VisualDetail("Unchecked constraints", JoinDistinct(proposals.SelectMany(x => x.UncheckedConstraints ?? new List<string>()), "Not available")),
+                new VisualDetail("Assumptions", JoinDistinct(proposals.SelectMany(x => x.Assumptions ?? new List<string>()), "Not available")),
+                new VisualDetail("EngineeringReviewRequired", proposals.Count == 0 ? "YES (proposal layer requires engineering review)" : (proposals.All(x => x.EngineeringReviewRequired) ? "YES" : "NO")),
+                new VisualDetail("Known limitations", JoinDistinct(proposals.SelectMany(x => x.KnownLimitations ?? new List<string>()), "Not available")),
+                new VisualDetail("Rejected candidates", RejectedCandidates(proposals)),
+                new VisualDetail("Governance diagnostics", string.Join(" | ", (diagnostics == null ? new List<string>() : diagnostics.DiagnosticReasons ?? new List<string>()).OrderBy(x => x, StringComparer.Ordinal)))
+            };
+
+            foreach (PlacementProposal proposal in proposals.OrderBy(x => x.ProposalId ?? string.Empty, StringComparer.Ordinal))
+            {
+                AddProposalDetails(details, proposal);
+            }
+
+            if (proposals.Count == 0)
+            {
+                details.Add(new VisualDetail("Proposal details", "No placement proposals were produced; governed evaluation completed successfully."));
+                details.Add(new VisualDetail("Unchecked constraints", JoinDistinct(ProposalUncheckedConstraints.Defaults, "Not available")));
+                details.Add(new VisualDetail("Assumptions", JoinDistinct(ProposalAssumptions.Defaults, "Not available")));
+                details.Add(new VisualDetail("Known limitations", JoinDistinct(ProposalKnownLimitations.Defaults, "Not available")));
+            }
+
+            return details;
+        }
+
+        private static void AddProposalDetails(List<VisualDetail> details, PlacementProposal proposal)
+        {
+            StandardsPackRule rule = proposal.ViolatedRule;
+            details.Add(new VisualDetail("Proposal " + Safe(proposal.ProposalId), ""));
+            details.Add(new VisualDetail("  PlacementId", NotAvailable));
+            details.Add(new VisualDetail("  EquipmentEntityId", NotAvailable));
+            details.Add(new VisualDetail("  NormalizedTag", NotAvailable));
+            details.Add(new VisualDetail("  RuleId", Safe(rule == null ? null : rule.RuleId)));
+            details.Add(new VisualDetail("  Company / Pack", Safe(rule == null ? null : (rule.Company ?? rule.PackName ?? rule.PackId))));
+            details.Add(new VisualDetail("  Document number / title", Safe(rule == null ? null : (rule.DocumentNumber + " / " + rule.DocumentTitle))));
+            details.Add(new VisualDetail("  Revision / edition", Safe(rule == null ? null : rule.RevisionOrEdition)));
+            details.Add(new VisualDetail("  Clause / reference / page", ClauseText(proposal)));
+            details.Add(new VisualDetail("  Source SHA256", SourceHash(proposal)));
+            details.Add(new VisualDetail("  Observed distance", proposal.ObservedDistanceMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m"));
+            details.Add(new VisualDetail("  Required distance", proposal.RequiredDistanceMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m"));
+            details.Add(new VisualDetail("  Measurement basis", Safe(proposal.ObservedMeasurementBasis ?? proposal.MeasurementBasisKey)));
+            details.Add(new VisualDetail("  Unit context", Safe(proposal.UnitContext)));
+            details.Add(new VisualDetail("  Original position", Point(proposal.OriginalEasting, proposal.OriginalNorthing)));
+            details.Add(new VisualDetail("  Proposed position", Point(proposal.ProposedEasting, proposal.ProposedNorthing)));
+            details.Add(new VisualDetail("  Movement", proposal.MovementDistanceMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m / " + Safe(proposal.MovementDirection)));
+            details.Add(new VisualDetail("  Road re-evaluation", Outcome(proposal.RoadReEvaluation)));
+            details.Add(new VisualDetail("  Plant Fence re-evaluation", Outcome(proposal.PlantFenceReEvaluation)));
+            details.Add(new VisualDetail("  Unit Boundary re-evaluation", Outcome(proposal.UnitBoundaryReEvaluation)));
+            details.Add(new VisualDetail("  Constraint outcomes", Outcomes(proposal)));
+            details.Add(new VisualDetail("  Rejected candidates", RejectedCandidates(new[] { proposal })));
+            details.Add(new VisualDetail("  EngineeringReviewRequired", proposal.EngineeringReviewRequired ? "YES: " + Safe(proposal.EngineeringReviewReason) : "NO"));
+        }
+
+        private static string ClauseText(PlacementProposal proposal)
+        {
+            StandardClauseCitation clause = (proposal.ClauseEvidence ?? new List<StandardClauseCitation>()).OrderBy(x => x.ClauseId ?? string.Empty, StringComparer.Ordinal).FirstOrDefault();
+            return clause == null ? NotAvailable : Safe(clause.ClauseReference) + " / " + (clause.PageNumber.HasValue ? clause.PageNumber.Value.ToString(CultureInfo.InvariantCulture) : "page not available");
+        }
+
+        private static string SourceHash(PlacementProposal proposal)
+        {
+            StandardClauseCitation clause = (proposal.ClauseEvidence ?? new List<StandardClauseCitation>()).OrderBy(x => x.ClauseId ?? string.Empty, StringComparer.Ordinal).FirstOrDefault();
+            return clause == null ? NotAvailable : Safe(clause.SourceSha256);
+        }
+
+        private static string Outcomes(PlacementProposal proposal)
+        {
+            IEnumerable<PlacementProposalConstraintOutcome> outcomes = (new[] { proposal.RoadReEvaluation, proposal.PlantFenceReEvaluation, proposal.UnitBoundaryReEvaluation })
+                .Concat(proposal.SatisfiedConstraints ?? new List<PlacementProposalConstraintOutcome>())
+                .Concat(proposal.ViolatedConstraints ?? new List<PlacementProposalConstraintOutcome>())
+                .Concat(proposal.InsufficientEvidenceConstraints ?? new List<PlacementProposalConstraintOutcome>())
+                .Where(x => x != null).GroupBy(x => x.ConstraintId ?? string.Empty, StringComparer.Ordinal).Select(x => x.First()).OrderBy(x => x.ConstraintId ?? string.Empty, StringComparer.Ordinal);
+            return string.Join(" | ", outcomes.Select(x => Safe(x.ConstraintId) + "=" + Safe(x.EvaluationState) + (string.IsNullOrWhiteSpace(x.Reason) ? string.Empty : " (" + x.Reason + ")")));
+        }
+
+        private static string Outcome(PlacementProposalConstraintOutcome outcome)
+        {
+            return outcome == null ? NotAvailable : Safe(outcome.EvaluationState) + (string.IsNullOrWhiteSpace(outcome.Reason) ? string.Empty : " (" + outcome.Reason + ")");
+        }
+
+        private static string RejectedCandidates(IEnumerable<PlacementProposal> proposals)
+        {
+            IEnumerable<string> values = proposals.SelectMany(x => x.RejectedCandidates ?? new List<PlacementProposalCandidate>())
+                .Where(x => x != null).OrderBy(x => x.CandidateId ?? string.Empty, StringComparer.Ordinal)
+                .Select(x => Safe(x.CandidateId) + ": " + JoinDistinct(x.RejectedReasons ?? new List<string>(), "reason not available"));
+            return string.Join(" | ", values.DefaultIfEmpty("None"));
+        }
+
+        private static string CountState(IEnumerable<PlacementProposal> proposals, string state)
+        {
+            return proposals.SelectMany(x => (new[] { x.RoadReEvaluation, x.PlantFenceReEvaluation, x.UnitBoundaryReEvaluation })
+                .Concat(x.SatisfiedConstraints ?? new List<PlacementProposalConstraintOutcome>())
+                .Concat(x.ViolatedConstraints ?? new List<PlacementProposalConstraintOutcome>())
+                .Concat(x.InsufficientEvidenceConstraints ?? new List<PlacementProposalConstraintOutcome>()))
+                .Count(x => x != null && string.Equals(x.EvaluationState, state, StringComparison.Ordinal)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string JoinDistinct(IEnumerable<string> values, string empty)
+        {
+            List<string> clean = (values ?? Enumerable.Empty<string>()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+            return clean.Count == 0 ? empty : string.Join(" | ", clean);
+        }
+
+        private static string Point(double x, double y) => "(" + x.ToString("0.###", CultureInfo.InvariantCulture) + ", " + y.ToString("0.###", CultureInfo.InvariantCulture) + ")";
+        private static string Safe(string value) => string.IsNullOrWhiteSpace(value) ? NotAvailable : value;
     }
 
     internal sealed class VisualDistanceRow

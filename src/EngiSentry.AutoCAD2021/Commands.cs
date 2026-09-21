@@ -376,6 +376,7 @@ namespace EngiSentry.AutoCAD2021
                 int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during placement suggestion artifact creation.");
                 document.Editor.WriteMessage("\nEngiSentry M2.3 Placement Suggestion Complete\nDrawing: {0}\nGoverned rules: {1}\nBounded constraints: {2}\nViolated constraints: {3}\nReview-required constraints: {4}\nInsufficient-evidence constraints: {5}\nExecutable violations: {6}\nPlacement proposals: {7}\nPlacement proposals artifact: {8}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", diagnostics.GovernedRuleCount, diagnostics.BoundedConstraintCount, diagnostics.ViolatedCount, diagnostics.ReviewRequiredCount, diagnostics.InsufficientEvidenceCount, diagnostics.ExecutableViolatedCount, diagnostics.ProposalCount, path);
+                VisualResultsPalette.ShowPlacementProposals(document, snapshot, result, diagnostics, path);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.3 Placement Suggestion Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_SUGGEST", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
