@@ -447,6 +447,29 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry approval handoff failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALPACKAGE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_APPROVALINTAKE")]
+        public void ApprovalIntake()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry returned approval intake failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_APPROVALINTAKE", null, "<none>", "No active drawing."); return; }
+                ProjectDistanceCriteria? criteria = ProjectDistanceCriteriaStore.ResolveOrPrompt(document.Name);
+                if (criteria == null) { WriteToActiveEditor("\nES_APPROVALINTAKE cancelled: Project Distance Criteria were not saved.\n"); VisualResultsPalette.ShowCancelled("ES_APPROVALINTAKE", document, System.IO.Path.GetFileName(document.Name), "Project Distance Criteria were not saved."); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out _);
+                string intakeRoot = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "artifacts", "qa", "approval-intake");
+                string incomingRoot = System.IO.Path.Combine(intakeRoot, "incoming");
+                string quarantineRoot = System.IO.Path.Combine(intakeRoot, "quarantine");
+                string handoffRoot = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EngiSentry", "artifacts", "qa", "approval-handoff");
+                EngineeringDistanceApprovalQuarantineResult result = EngineeringDistanceApprovalQuarantineService.Intake(incomingRoot, quarantineRoot, handoffRoot, criteria.ProjectDirectory, EngineeringDistanceApprovalAuthorityTrustStore.CanonicalPath);
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during returned approval intake.");
+                document.Editor.WriteMessage("\nEngiSentry Returned Approval Intake Complete\nStatus: {0}\nReturned files: {1}\nQuarantined files: {2}\nProduction unchanged: YES\nAutoExecutionAllowed: 0\nREAD-ONLY\n", result.Status, result.ReturnedFileCount, result.QuarantinedFileCount);
+                VisualResultsPalette.ShowApprovalIntake(document, snapshot, result, incomingRoot);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry returned approval intake failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALINTAKE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.

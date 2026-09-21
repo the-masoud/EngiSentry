@@ -306,6 +306,37 @@ namespace EngiSentry.AutoCAD2021
             });
         }
 
+        public static void ShowApprovalIntake(Document document, DrawingSnapshot snapshot, EngineeringDistanceApprovalQuarantineResult result, string incomingRoot)
+        {
+            Publish(new VisualResultsData
+            {
+                Command = "ES_APPROVALINTAKE",
+                Title = "RETURNED APPROVAL INTAKE",
+                Drawing = snapshot == null ? "<none>" : snapshot.FileName,
+                Status = result.Status == EngineeringDistanceApprovalQuarantineStates.NoReturnedArtifacts ? "SAFE NO-OP" : result.Status,
+                StatusDetail = result.Status == EngineeringDistanceApprovalQuarantineStates.NoReturnedArtifacts ? "NO RETURNED ARTIFACTS | PRODUCTION UNCHANGED | READ-ONLY" : "PRODUCTION INSTALLATION: NO | RULE ACTIVATION: NO | READ-ONLY",
+                OutputPath = result.QuarantineDirectory,
+                Document = document,
+                Note = "Returned artifacts are quarantined only. No approval, policy, trust, installation, or activation occurred.",
+                Metrics = new List<VisualMetric>
+                {
+                    new VisualMetric("Incoming root", incomingRoot),
+                    new VisualMetric("Returned files", result.ReturnedFileCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Quarantined files", result.QuarantinedFileCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("AutoExecutionAllowed", "0"),
+                    new VisualMetric("Production unchanged", "YES"),
+                    new VisualMetric("Mode", "READ-ONLY")
+                },
+                Details = new List<VisualDetail>
+                {
+                    new VisualDetail("Status", result.Status == EngineeringDistanceApprovalQuarantineStates.NoReturnedArtifacts ? "SAFE NO-OP | NO RETURNED ARTIFACTS | PRODUCTION UNCHANGED | READ-ONLY" : result.Status),
+                    new VisualDetail("Source H-B PackageId", result.SourcePackageId),
+                    new VisualDetail("Quarantine directory", result.QuarantineDirectory),
+                    new VisualDetail("Diagnostics", string.Join(" | ", result.Diagnostics ?? new List<string>()))
+                }
+            });
+        }
+
         public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, string outputPath)
         {
             ShowPlotQa(document, snapshot, new PlotPlanQaReport { PlotPlan = plotPlan, Qa = report }, outputPath);

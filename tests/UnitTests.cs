@@ -304,6 +304,7 @@ namespace EngiSentry.Tests
             PhaseGActivationReadinessTests.Run();
             PhaseHApprovalOnboardingTests.Run();
             PhaseHApprovalHandoffTests.Run();
+            PhaseHApprovalQuarantineTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }
