@@ -501,6 +501,40 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVASSIST failed\nReason: {0}\n", exception.Message); VisualResultsPalette.ShowFailure("ES_JEVASSIST", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_JEVCALIBRATE")]
+        public void JevCalibrate()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { VisualResultsPalette.ShowFailure("ES_JEVCALIBRATE", null, "<none>", "No active drawing."); return; }
+                if (!AutoCADHostBoundary.IsJevNetworkAllowed(AutoCADHostBoundary.IsCoreConsole())) { document.Editor.WriteMessage("\nJEV CALIBRATION\nStatus: JEV_DISABLED\nREAD-ONLY\n"); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture capture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, capture);
+                List<SemanticAmbiguityCase> cases = JevSemanticAmbiguityCaseBuilder.Build(plotPlan);
+                if (cases.Count == 0) { VerifyJevCalibrationDbmod(snapshot); document.Editor.WriteMessage("\nJEV CALIBRATION\nStatus: NO_AMBIGUITIES\nREAD-ONLY\n"); return; }
+                JevCalibrationPackageStore store = new JevCalibrationPackageStore();
+                JevCalibrationPackage package = store.CreateOrReuse(snapshot.FileName ?? "unnamed", cases, out string directory);
+                List<JevEngineerLabel> labels = JevCalibrationPackageStore.LoadValidLabels(directory, package);
+                if (labels.Count == 0)
+                {
+                    VerifyJevCalibrationDbmod(snapshot);
+                    document.Editor.WriteMessage("\nJEV CALIBRATION\nStatus: {0}\nAmbiguities: {1}\nLabeled: 0\nDBMOD unchanged: YES\nREAD-ONLY\n", JevCalibrationStates.AwaitingEngineerLabels, cases.Count);
+                    VisualResultsPalette.ShowJevCalibration(document, snapshot, package, directory, 0, JevCalibrationStates.AwaitingEngineerLabels);
+                    return;
+                }
+                var execution = new JevCalibrationBenchmarkExecutionService().Execute(directory, package, labels, cases, JevSemanticAssistPolicy.FromEnvironment(), () => new TypeSafeJevClient());
+                VerifyJevCalibrationDbmod(snapshot);
+                if (execution.Status == JevCalibrationStates.BenchmarkInputChanged) throw new InvalidOperationException(JevCalibrationStates.BenchmarkInputChanged);
+                if (execution.Report != null) { VisualResultsPalette.ShowJevCalibrationBenchmark(document, snapshot, package, directory, execution.Report); return; }
+                document.Editor.WriteMessage("\nJEV CALIBRATION\nStatus: {0}\nDBMOD unchanged: YES\nREAD-ONLY\n", execution.Status);
+                return;
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVCALIBRATE failed\nReason: {0}\n", exception.Message); VisualResultsPalette.ShowFailure("ES_JEVCALIBRATE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
@@ -537,6 +571,12 @@ namespace EngiSentry.AutoCAD2021
             {
                 System.Diagnostics.Debug.WriteLine("EngiSentry command output error: " + exception);
             }
+        }
+
+        private static void VerifyJevCalibrationDbmod(DrawingSnapshot snapshot)
+        {
+            int current = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+            if (snapshot.DbModBefore != current) throw new InvalidOperationException("DBMOD changed during Jev calibration.");
         }
     }
 
