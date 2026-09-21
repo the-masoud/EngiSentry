@@ -28,6 +28,43 @@ namespace EngiSentry.Rules
                 .ToList();
         }
 
+        /// <summary>
+        /// Phase E governed bridge: evaluates ONE already-governed <see cref="BoundedConstraint"/> against the
+        /// accepted plot plan and returns the accepted per-placement violation vocabulary for it. This exists so
+        /// the proposal runtime never collapses one rule/basis to a single global measurement: every violated
+        /// <see cref="EngineeringDistanceViolation.PlacementId"/> survives as its own proposal.
+        ///
+        /// This is deliberately NOT a second evaluation implementation. It feeds the exact same
+        /// <see cref="EvaluateRuleCore"/> the registry path uses, so the accepted selection semantics — GroupBy
+        /// PlacementId, minimum Distance2D per placement, MeasurementId ordinal tie-break, measurement-basis and
+        /// applicability filtering, <see cref="DrawingUnitResolver"/> conversion — are shared, not copied.
+        ///
+        /// Nothing is resolved or synthesized here. The constraint is already governed by the accepted Phase C
+        /// projection, so no registry, no criteria provenance, no project directory, source, clause, approval,
+        /// authority, pack or rule value is created or required. The evaluation records
+        /// <see cref="EngineeringDistanceRuleEvaluation.CriteriaProvenance"/> as null, because a bounded
+        /// constraint carries no criteria provenance and inventing one would fabricate governance evidence.
+        /// </summary>
+        public static EngineeringDistanceRuleEvaluation EvaluateGovernedConstraint(BoundedConstraint constraint, PlotPlanModel plotPlan)
+        {
+            if (constraint == null) throw new ArgumentNullException(nameof(constraint));
+            if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
+            if (plotPlan.Drawing == null) throw new EngineeringDistanceRuleEvaluationException("governed engineering distance evaluation Drawing is required");
+
+            DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
+            List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
+
+            return EvaluateRuleCore(
+                constraint.Rule?.RuleId ?? constraint.ConstraintId,
+                constraint.MeasurementKind,
+                constraint.MinimumDistanceMeters,
+                constraint.RequiredMeasurementBasisKey,
+                constraint.RequiredApplicabilityKey,
+                null,
+                measurements,
+                unitResolution);
+        }
+
         private static List<EquipmentSpatialMeasurement> ValidateMeasurements(PlotPlanModel plotPlan)
         {
             if (plotPlan.Measurements == null) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation Measurements are required");
@@ -49,14 +86,28 @@ namespace EngiSentry.Rules
             return validated;
         }
 
-        private static EngineeringDistanceRuleEvaluation EvaluateRule(EngineeringDistanceRuleDefinition rule, IEnumerable<EquipmentSpatialMeasurement> measurements, DrawingUnitResolution unitResolution)
+        /// <summary>
+        /// The one accepted rule-evaluation implementation. Both public entry points — the registry path and the
+        /// Phase E governed bridge — reach this same core, so no selection semantics are duplicated. The
+        /// parameters are exactly the fields a governed bounded constraint already carries; provenance is passed
+        /// through verbatim and is null for the governed path.
+        /// </summary>
+        private static EngineeringDistanceRuleEvaluation EvaluateRuleCore(
+            string ruleId,
+            string measurementKind,
+            decimal minimumDistanceMeters,
+            string requiredMeasurementBasisKey,
+            string requiredApplicabilityKey,
+            EngineeringDistanceCriteriaProvenance? criteriaProvenance,
+            IEnumerable<EquipmentSpatialMeasurement> measurements,
+            DrawingUnitResolution unitResolution)
         {
-            string subjectKind = rule.MeasurementKind == "EquipmentToRoad2D" ? "Road" : "Boundary";
-            double minimumDistanceDrawingUnits = DrawingUnitResolver.MetersToDrawingUnits(decimal.ToDouble(rule.MinimumDistanceMeters), unitResolution);
+            string subjectKind = measurementKind == "EquipmentToRoad2D" ? "Road" : "Boundary";
+            double minimumDistanceDrawingUnits = DrawingUnitResolver.MetersToDrawingUnits(decimal.ToDouble(minimumDistanceMeters), unitResolution);
             List<EquipmentSpatialMeasurement> governing = measurements
                 .Where(x => string.Equals(x.SubjectKind, subjectKind, StringComparison.Ordinal)
-                    && string.Equals(x.EngineeringMeasurementBasisKey, rule.RequiredMeasurementBasisKey, StringComparison.Ordinal)
-                    && string.Equals(x.EngineeringApplicabilityKey, rule.RequiredApplicabilityKey, StringComparison.Ordinal))
+                    && string.Equals(x.EngineeringMeasurementBasisKey, requiredMeasurementBasisKey, StringComparison.Ordinal)
+                    && string.Equals(x.EngineeringApplicabilityKey, requiredApplicabilityKey, StringComparison.Ordinal))
                 .GroupBy(x => x.PlacementId, StringComparer.Ordinal)
                 .Select(x => x.OrderBy(y => y.Distance2D).ThenBy(y => y.MeasurementId, StringComparer.Ordinal).First())
                 .OrderBy(x => x.PlacementId, StringComparer.Ordinal)
@@ -65,16 +116,16 @@ namespace EngiSentry.Rules
 
             var evaluation = new EngineeringDistanceRuleEvaluation
             {
-                RuleId = rule.RuleId,
-                MeasurementKind = rule.MeasurementKind,
-                MinimumDistanceMeters = rule.MinimumDistanceMeters,
+                RuleId = ruleId,
+                MeasurementKind = measurementKind,
+                MinimumDistanceMeters = minimumDistanceMeters,
                 MinimumDistanceDrawingUnits = minimumDistanceDrawingUnits,
                 InsertionUnits = unitResolution.InsertionUnits,
                 CanonicalUnit = unitResolution.CanonicalUnit,
                 MetersPerDrawingUnit = unitResolution.MetersPerDrawingUnit,
-                RequiredMeasurementBasisKey = rule.RequiredMeasurementBasisKey,
-                RequiredApplicabilityKey = rule.RequiredApplicabilityKey,
-                CriteriaProvenance = CopyCriteriaProvenance(rule.CriteriaProvenance),
+                RequiredMeasurementBasisKey = requiredMeasurementBasisKey,
+                RequiredApplicabilityKey = requiredApplicabilityKey,
+                CriteriaProvenance = CopyCriteriaProvenance(criteriaProvenance),
                 EvaluatedSubjectCount = governing.Count
             };
 
@@ -106,6 +157,14 @@ namespace EngiSentry.Rules
             evaluation.ViolationCount = evaluation.Violations.Count;
             evaluation.Status = governing.Count == 0 ? "INSUFFICIENT_EVIDENCE" : evaluation.ViolationCount == 0 ? "PASS" : "VIOLATIONS";
             return evaluation;
+        }
+
+        /// <summary>Registry path adapter: delegates to the shared core, carrying the rule's own provenance.</summary>
+        private static EngineeringDistanceRuleEvaluation EvaluateRule(EngineeringDistanceRuleDefinition rule, IEnumerable<EquipmentSpatialMeasurement> measurements, DrawingUnitResolution unitResolution)
+        {
+            return EvaluateRuleCore(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters,
+                rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance,
+                measurements, unitResolution);
         }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

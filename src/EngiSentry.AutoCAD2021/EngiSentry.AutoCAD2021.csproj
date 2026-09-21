@@ -63,6 +63,8 @@
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="Scanning\SnapshotFileWriter.cs" />
     <Compile Include="Scanning\PlotPlanReportCompactor.cs" />
+    <Compile Include="Scanning\PlacementProposalSnapshotWriter.cs" />
+    <Compile Include="Scanning\PlacementProposalRuntime.cs" />
     <Compile Include="Scanning\DrawingScanner.cs" />
     <Compile Include="Scanning\DependencyClassifier.cs" />
   </ItemGroup>

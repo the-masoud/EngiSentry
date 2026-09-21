@@ -352,6 +352,47 @@ namespace EngiSentry.AutoCAD2021
             return ProfileResolver.Resolve(KnownPlotPlanRules(), null);
         }
 
+        [CommandMethod("ES_SUGGEST")]
+        public void Suggest()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry M2.3 Placement Suggestion Failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_SUGGEST", null, "<none>", "No active drawing."); return; }
+                ProjectDistanceCriteria? criteria = ProjectDistanceCriteriaStore.ResolveOrPrompt(document.Name);
+                if (criteria == null) { WriteToActiveEditor("\nES_SUGGEST cancelled: Project Distance Criteria were not saved.\n"); VisualResultsPalette.ShowCancelled("ES_SUGGEST", document, System.IO.Path.GetFileName(document.Name), "Project Distance Criteria were not saved."); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
+                string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
+                ProjectDistanceGovernanceAggregateResult governance = ProjectDistanceGovernanceRuntimeLoader.LoadCanonical(criteria, approvalDirectory);
+                PlotPlanStandardsAuthorityRuntimeContext authorityContext = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+                System.Collections.Generic.IReadOnlyList<StandardsPackRule> governedRules = StandardsPackProjectionBuilder.Build(authorityContext, ProjectDistanceRuleBinder.Create(criteria), BuildGovernedResolutions(governance));
+                PlacementProposalRunResult result = PlacementProposalRuntime.Build(plotPlan, governedRules, governance, out PlacementProposalRunDiagnostics diagnostics);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during placement suggestion processing.");
+                string path = PlacementProposalSnapshotWriter.Write(result.Proposals, snapshot.FileName, snapshot.ScanTimestampUtc);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during placement suggestion artifact creation.");
+                document.Editor.WriteMessage("\nEngiSentry M2.3 Placement Suggestion Complete\nDrawing: {0}\nGoverned rules: {1}\nBounded constraints: {2}\nViolated constraints: {3}\nReview-required constraints: {4}\nInsufficient-evidence constraints: {5}\nExecutable violations: {6}\nPlacement proposals: {7}\nPlacement proposals artifact: {8}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", snapshot.FileName ?? "<unnamed>", diagnostics.GovernedRuleCount, diagnostics.BoundedConstraintCount, diagnostics.ViolatedCount, diagnostics.ReviewRequiredCount, diagnostics.InsufficientEvidenceCount, diagnostics.ExecutableViolatedCount, diagnostics.ProposalCount, path);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.3 Placement Suggestion Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_SUGGEST", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
+        /// <summary>
+        /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
+        /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
+        /// </summary>
+        private static System.Collections.Generic.IReadOnlyDictionary<string, ProjectDistanceGovernedRuleResolution> BuildGovernedResolutions(ProjectDistanceGovernanceAggregateResult governance)
+        {
+            if (governance == null || governance.Items == null) return new System.Collections.Generic.Dictionary<string, ProjectDistanceGovernedRuleResolution>(System.StringComparer.Ordinal);
+            return governance.Items
+                .Where(x => x != null && x.Resolution != null && !string.IsNullOrEmpty(x.ProjectRuleId))
+                .GroupBy(x => x.ProjectRuleId!, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.OrderBy(y => y.CandidateId, StringComparer.Ordinal).First().Resolution!, StringComparer.Ordinal);
+        }
+
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()
         {
             return BuiltInQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity }).Concat(BuiltInPlotPlanQaRules.All.Select(x => new KnownQaRule { RuleId = x.RuleId, Severity = x.Severity })).Concat(new[]
