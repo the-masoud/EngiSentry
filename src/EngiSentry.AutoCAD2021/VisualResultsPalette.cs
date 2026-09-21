@@ -229,6 +229,48 @@ namespace EngiSentry.AutoCAD2021
             });
         }
 
+        public static void ShowApprovalPreparation(Document document, DrawingSnapshot snapshot, IReadOnlyList<EngineeringDistanceApprovalReadinessItem> readiness, IReadOnlyList<string> approvalRequestPaths, IReadOnlyList<string> policyRequestPaths)
+        {
+            List<EngineeringDistanceApprovalReadinessItem> items = (readiness ?? new List<EngineeringDistanceApprovalReadinessItem>()).OrderBy(x => x.CandidateId, StringComparer.Ordinal).ToList();
+            Publish(new VisualResultsData
+            {
+                Command = "ES_APPROVALPREP",
+                Title = "Approval Onboarding Preparation",
+                Drawing = snapshot == null ? "<none>" : snapshot.FileName,
+                Status = "PREPARATION ONLY",
+                StatusDetail = "NO APPROVAL GRANTED | READ-ONLY",
+                Document = document,
+                Note = "Request artifacts are informational only and are not approval, authority policy, trust data, or activation artifacts.",
+                Metrics = new List<VisualMetric>
+                {
+                    new VisualMetric("Candidates", items.Count.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Executable", items.Count(x => x.AutoExecutionAllowed).ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Approval requests", (approvalRequestPaths ?? new List<string>()).Count.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Policy requests", (policyRequestPaths ?? new List<string>()).Count.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric("Mode", "READ-ONLY")
+                },
+                Details = ApprovalPreparationDetails(items, approvalRequestPaths, policyRequestPaths)
+            });
+        }
+
+        private static List<VisualDetail> ApprovalPreparationDetails(IReadOnlyList<EngineeringDistanceApprovalReadinessItem> items, IReadOnlyList<string> approvalPaths, IReadOnlyList<string> policyPaths)
+        {
+            var details = new List<VisualDetail>
+            {
+                new VisualDetail("Status", "PREPARATION ONLY | NO APPROVAL GRANTED | READ-ONLY"),
+                new VisualDetail("Approval-request artifacts", string.Join(" | ", approvalPaths ?? new List<string>())),
+                new VisualDetail("Policy-request artifacts", string.Join(" | ", policyPaths ?? new List<string>()))
+            };
+            foreach (EngineeringDistanceApprovalReadinessItem item in items)
+            {
+                details.Add(new VisualDetail(item.CandidateId, "Rule=" + item.RuleId + " | Value=" + item.CandidateValueMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m | Project criterion=" + item.ConfiguredCriterionMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m"));
+                details.Add(new VisualDetail("  Readiness", "Approval=" + item.ApprovalArtifactCount.ToString(CultureInfo.InvariantCulture) + " | Currentness=" + item.ApprovalCurrentness + " | Trust=" + (item.TrustedIssuerPresent ? "YES" : "NO") + " | Authority policy=" + (item.VerifiedAuthorityPolicyPresent ? "YES" : "NO")));
+                details.Add(new VisualDetail("  Governance", item.GovernanceState + " | AutoExecutionAllowed=" + (item.AutoExecutionAllowed ? "YES" : "NO")));
+                details.Add(new VisualDetail("  Blocking reason", string.Join("; ", item.BlockingReasons ?? new List<string>())));
+            }
+            return details;
+        }
+
         public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanModel plotPlan, QaReport report, string outputPath)
         {
             ShowPlotQa(document, snapshot, new PlotPlanQaReport { PlotPlan = plotPlan, Qa = report }, outputPath);

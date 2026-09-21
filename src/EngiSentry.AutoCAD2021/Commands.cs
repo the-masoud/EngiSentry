@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -379,6 +380,39 @@ namespace EngiSentry.AutoCAD2021
                 VisualResultsPalette.ShowPlacementProposals(document, snapshot, result, diagnostics, path);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry M2.3 Placement Suggestion Failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_SUGGEST", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
+        [CommandMethod("ES_APPROVALPREP")]
+        public void ApprovalPreparation()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nEngiSentry approval preparation failed\nReason: no active drawing\n"); VisualResultsPalette.ShowFailure("ES_APPROVALPREP", null, "<none>", "No active drawing."); return; }
+                ProjectDistanceCriteria? criteria = ProjectDistanceCriteriaStore.ResolveOrPrompt(document.Name);
+                if (criteria == null) { WriteToActiveEditor("\nES_APPROVALPREP cancelled: Project Distance Criteria were not saved.\n"); VisualResultsPalette.ShowCancelled("ES_APPROVALPREP", document, System.IO.Path.GetFileName(document.Name), "Project Distance Criteria were not saved."); return; }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out _);
+                ProjectEngineeringDistanceReferenceContext context = ProjectEngineeringDistanceReferenceCatalog.Create();
+                string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
+                string policyDirectory = EngineeringDistanceApprovalAuthorityPolicyArtifactCatalog.CanonicalDirectory;
+                string trustPath = EngineeringDistanceApprovalAuthorityTrustStore.CanonicalPath;
+                IReadOnlyList<EngineeringDistanceApprovalReadinessItem> readiness = EngineeringDistanceApprovalReadinessService.Inspect(criteria, approvalDirectory, trustPath, policyDirectory);
+                string requestDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "approval-prep");
+                var approvalPaths = new System.Collections.Generic.List<string>();
+                var policyPaths = new System.Collections.Generic.List<string>();
+                foreach (EngineeringDistanceCandidateDefinition candidate in EngineeringDistanceCandidateCatalog.BuiltInCandidates.OrderBy(x => x.CandidateId, System.StringComparer.Ordinal))
+                {
+                    EngineeringDistanceApprovalRequest request = EngineeringDistanceApprovalPreparation.BuildApprovalRequest(criteria.ProjectDirectory, candidate, context.ClauseRegistry, context.SourceRegistry, System.IO.Path.GetFileName(document.Name), snapshot.ScanTimestampUtc);
+                    EngineeringDistanceAuthorityPolicyRequest policy = EngineeringDistanceApprovalPreparation.BuildPolicyRequest(criteria.ProjectDirectory, candidate);
+                    approvalPaths.Add(ApprovalPreparationArtifactWriter.WriteApprovalRequest(request, requestDirectory));
+                    policyPaths.Add(ApprovalPreparationArtifactWriter.WritePolicyRequest(policy, requestDirectory));
+                }
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != after) throw new InvalidOperationException("DBMOD changed during approval preparation.");
+                document.Editor.WriteMessage("\nEngiSentry Approval Preparation Complete\nRoad/Fence request artifacts: {0}\nExecutable candidates: {1}\nDBMOD unchanged: YES\nStatus: PREPARATION ONLY | NO APPROVAL GRANTED | READ-ONLY\n", approvalPaths.Count, readiness.Count(x => x.AutoExecutionAllowed));
+                VisualResultsPalette.ShowApprovalPreparation(document, snapshot, readiness, approvalPaths, policyPaths);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nEngiSentry approval preparation failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_APPROVALPREP", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
         /// <summary>
