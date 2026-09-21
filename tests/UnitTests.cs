@@ -301,6 +301,7 @@ namespace EngiSentry.Tests
             PlacementProposalTests.Run();
             PlacementProposalRuntimeTests.Run();
             PhaseFPresentationTests.Run();
+            PhaseGActivationReadinessTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }
