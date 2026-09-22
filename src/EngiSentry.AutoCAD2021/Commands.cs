@@ -516,7 +516,7 @@ namespace EngiSentry.AutoCAD2021
                 List<SemanticAmbiguityCase> cases = JevSemanticAmbiguityCaseBuilder.Build(plotPlan);
                 if (cases.Count == 0) { VerifyJevCalibrationDbmod(snapshot); document.Editor.WriteMessage("\nJEV CALIBRATION\nStatus: NO_AMBIGUITIES\nREAD-ONLY\n"); return; }
                 JevCalibrationPackageStore store = new JevCalibrationPackageStore();
-                JevCalibrationPackage package = store.CreateOrReuse(snapshot.FileName ?? "unnamed", cases, out string directory);
+                JevCalibrationPackage package = store.CreateOrReuse(snapshot.FileName ?? "unnamed", plotPlan, cases, out string directory);
                 List<JevEngineerLabel> labels = JevCalibrationPackageStore.LoadValidLabels(directory, package);
                 if (labels.Count == 0)
                 {
