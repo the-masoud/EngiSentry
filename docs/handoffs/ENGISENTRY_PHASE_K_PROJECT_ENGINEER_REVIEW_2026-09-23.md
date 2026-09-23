@@ -116,11 +116,112 @@ untouched while the override is set.
   `WM_SETTEXT`/`WM_GETTEXT` for edits, `BM_CLICK` for Save/Next). Cursor-based input injection is
   unavailable in this environment, so no mouse/capture path was used.
 
+## UI polish + AutoCAD 2021 visual acceptance (follow-up)
+
+The accepted workflow's review surface was visually polished for professional engineer use. UI/UX
+only: no review logic, persistence, P10.3 question set, answer vocabularies, classifications,
+governance, or authority behavior changed, and no new dependency was introduced.
+
+Files touched:
+
+- `src/EngiSentry.AutoCAD2021/ProjectEngineerReviewControl.cs` — presentation-only rework.
+- `src/EngiSentry.AutoCAD2021/VisualResultsPalette.cs` — the review host window opens at
+  `1000x960` instead of `960x800`.
+- `tests/PhaseProjectEngineerReviewUiTests.cs` (new) + `tests/EngiSentry.Tests.csproj` +
+  `tests/UnitTests.cs` — UI-contract assertions that pin the polished surface (button labels and
+  the primary Save styling, one answer control per question with the exact vocabularies, the
+  classification combo, empty-by-default inputs, header status/counter, evidence as readable
+  key/value content with truncation-ready hashes, navigation, blocked incomplete save, and layout
+  sanity with no sibling overlaps at the accepted window size).
+
+Presentation changes:
+
+- Visual hierarchy: a header band (title / status badge / case counter), then labelled sections —
+  Engineer Identity, Case Summary, Software Evidence, Review Questions, Classification,
+  Engineer Comment — and a footer action bar with an inline validation/status line.
+- Section grouping: each section is a card with an uppercase small-caps header on the shared dark
+  palette; the four question groups (Criteria UX / Results UX / Engineering interpretation /
+  Usability) are separated by their own strips.
+- Case summary and Software Evidence are stacked full-width with key/value rows; long values
+  (including the 64-hex request and drawing hashes) ellipsis-truncate and expose the full value in
+  a tooltip.
+- All 14 questions render in a two-column question/answer grid with a dedicated answer column;
+  required questions carry a `*` marker and a note that nothing is stored until Save Review.
+- Reviewer identity is two labelled fields with an explicit "recorded as evidence only" note; the
+  engineer comment is a genuine multiline box; classification is its own wide combo.
+- Previous / Next / Next Pending are flat dark navigation buttons; Save Review is a wider,
+  higher-contrast primary button set apart at the right end of the action bar.
+- Resize behavior: the summary/evidence middle absorbs growth, the questions section keeps a
+  guaranteed usable height, and the whole palette scrolls when the host window is short.
+
+Two real visual defects were found by the runtime acceptance and fixed once:
+
+1. Software Evidence and Case Summary value labels were collapsing to 1-11 px wide. Root cause:
+   the evidence grid placed each key/value pair panel into the narrow key column, and `AutoSize`
+   on the grids shrank the percent column. Fixed by making the evidence grid a single full-width
+   column, giving the summary/evidence/questions grids explicit heights, and stacking the two
+   sections full-width.
+2. Shrinking the window to a moderate 840x720 squeezed the questions section to an unusable
+   ~47 px sliver. Fixed by giving the questions section a guaranteed height and letting the
+   summary/evidence row absorb resize, with palette-level scrolling for short windows.
+
+Build / test / deployment:
+
+- Release x64 rebuild with `-warnaserror` (MSBuild 17.14): PASS, 0 warnings, 0 errors.
+- Focused tests: PASS — Phase Project Engineer Review 64 assertions, Phase Project Engineer Review
+  UI 74 assertions. Full Release test executable: PASS, exit code 0, final line
+  `All EngiSentry M2.2 through M5.0 tests passed.`
+- Deployment: current Release build copied into
+  `%APPDATA%\Autodesk\ApplicationPlugins\EngiSentry.bundle\Contents\Win64`; SHA-256 equality
+  verified for all 10 deployed DLLs against the Release output.
+
+AutoCAD 2021 visual runtime acceptance (visual-only; no review was filled or saved):
+
+- Disposable drawing: `artifacts\runtime-validation\per-acceptance\98102-AJR-000-PD-PLP-0001-B05_1.dwg`
+  (disposable runtime fixture; not a protected source drawing).
+- Review-root override set only for the acceptance AutoCAD process (process scope; never persisted
+  to User/Machine scope; cleared afterwards). The isolated root received only the four real P10.3
+  pilot requests materialized by the queue loader; the production review root was never read.
+- `ES_ENGINEERREVIEW` executed exactly once, through AutoCAD COM `SendCommand` after `NETLOAD`
+  from the deployed bundle; the modeless review window opened enabled at `1000x920`.
+- Surface inventory: combos=13 (12 bounded answers with the exact empty/Yes/No, empty/Yes/No/N/A
+  and empty/Yes/No/Needs review vocabularies, plus the classification combo), edits=5 (reviewer
+  name, reviewer role, two optional free-text answers, comment), buttons=4 (Previous disabled on
+  case 1; Next, Next Pending enabled; Save Review a 162x28 primary control, wider than the
+  navigation buttons and set apart at the right end).
+- All ten section headers and all fourteen question labels were present and readable; the status
+  badge reported PENDING and the case counter read "Case 1 of 4" over the real four-case queue;
+  evidence rows rendered as readable key/value content with the 64-hex hashes at full width
+  (759 px value columns) — no label collapsed.
+- Incomplete-save validation presentation only: clicking Save with empty reviewer fields showed
+  `Review not saved - Reviewer display name is required before saving.` inline and wrote no
+  response.
+- Navigation: Next advanced through cases 2-4 and Previous moved back; every real P10.3 case
+  remained PENDING; Next Pending landed on a pending case. Navigation wrote no responses.
+- Moderate resize: enlarging to 1220x1040 and shrinking to 840x720 left the control inventory
+  unchanged (13/5/4) with every field still usable, and the case counter survived.
+- P10.3 real queue: requests=4, pending=4, real responses written=0. The production review root was
+  never written and remained 4 requests / 0 responses throughout.
+- DBMOD: before `0`, after NETLOAD `0`, after `ES_ENGINEERREVIEW` `0`; unchanged.
+- DWG integrity: SHA-256 before
+  `DBD6D6BFDE04770EF250488DD926DC162EA5E246B3A7971B2745B65F85AC8CAA` == after; size `2890464`
+  unchanged; last-write UTC `2026-09-23T09:57:04.2133300Z` unchanged; drawing was not saved; AutoCAD
+  exited with no save-changes prompt.
+- Production authority safety: no approval created, no authority policy created, no trust store
+  modified, no private key created, no rule activated.
+- Test-owned runtime artifacts (the isolated override review root) were removed afterwards; the
+  production review root is unchanged at 4 requests / 0 responses.
+- Automation method (deterministic, no cursor): AutoCAD COM `SendCommand` for command entry;
+  UI Automation control-view tree walks (by window class) for window/control identity and geometry;
+  Win32 `BM_CLICK` against the real button HWND for the validation presentation; `MoveWindow` for
+  resize. Cursor-based input injection is unavailable in this environment, so no mouse/capture
+  path was used.
+
 ## Status
 
 - Implementation: complete.
-- Build / focused tests / full tests / deployment / AutoCAD runtime acceptance: PASS.
+- Build / focused tests / full tests / deployment / AutoCAD runtime visual acceptance: PASS.
 - Real P10.3 engineering reviews: still PENDING and untouched — no engineer answer was fabricated.
-- Commit: one local commit `feat: add governed engineer review workflow`.
+- Commits: `feat: add governed engineer review workflow`, then `ui: polish project engineer review`.
 - Push: NO.
 - Next: REAL PROJECT ENGINEER completes the four pending P10.3 reviews.

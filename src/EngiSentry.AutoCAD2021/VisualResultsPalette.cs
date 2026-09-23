@@ -724,7 +724,7 @@ namespace EngiSentry.AutoCAD2021
             EnsureWindow();
             if (reviewControl == null || reviewControl.IsDisposed) reviewControl = new ProjectEngineerReviewControl { Dock = DockStyle.Fill };
             else reviewControl.LoadQueue();
-            ShowControl(reviewControl, "EngiSentry - Project Engineer Review", new Size(960, 800));
+            ShowControl(reviewControl, "EngiSentry - Project Engineer Review", new Size(1000, 960));
         }
 
         private static void EnsureWindow()
