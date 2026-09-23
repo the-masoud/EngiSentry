@@ -308,6 +308,7 @@ namespace EngiSentry.Tests
             ShurijehRuleCandidateTests.Run();
             PhaseJevAdvisoryTests.Run();
             PhaseJevCalibrationTests.Run();
+            PhaseJevEngineerLabelingTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }

@@ -535,6 +535,13 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVCALIBRATE failed\nReason: {0}\n", exception.Message); VisualResultsPalette.ShowFailure("ES_JEVCALIBRATE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }
 
+        [CommandMethod("ES_JEVLABEL")]
+        public void JevLabel()
+        {
+            try { VisualResultsPalette.ShowJevEngineerLabeling(); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVLABEL failed\nReason: {0}\n", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.

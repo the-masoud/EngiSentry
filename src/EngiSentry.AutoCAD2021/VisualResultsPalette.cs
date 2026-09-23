@@ -22,6 +22,11 @@ namespace EngiSentry.AutoCAD2021
 {
     internal static class VisualResultsPalette
     {
+        public static void ShowJevEngineerLabeling()
+        {
+            InteractiveVisualResultsPalette.ShowJevEngineerLabeling();
+        }
+
         public static void ShowHome(string command, Document document, string drawing, string status, string detail)
         {
             Publish(new VisualResultsData
@@ -677,35 +682,15 @@ namespace EngiSentry.AutoCAD2021
     {
         private static Form window;
         private static VisualResultsControl control;
+        private static JevEngineerLabelingControl labelingControl;
 
         internal static void Publish(VisualResultsData data)
         {
             try
             {
-                if (window == null || window.IsDisposed)
-                {
-                    control = new VisualResultsControl();
-                    window = new Form
-                    {
-                        Text = "EngiSentry Results",
-                        StartPosition = FormStartPosition.CenterScreen,
-                        Size = new Size(930, 680),
-                        MinimumSize = new Size(520, 360),
-                        FormBorderStyle = FormBorderStyle.Sizable,
-                        MaximizeBox = true,
-                        MinimizeBox = true,
-                        ShowInTaskbar = true,
-                        BackColor = Color.FromArgb(30, 31, 34)
-                    };
-                    control.Dock = DockStyle.Fill;
-                    window.Controls.Add(control);
-                    window.FormClosed += (sender, args) =>
-                    {
-                        window = null;
-                        control = null;
-                    };
-                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
-                }
+                EnsureWindow();
+                if (control == null || control.IsDisposed) control = new VisualResultsControl { Dock = DockStyle.Fill };
+                ShowControl(control, "EngiSentry Results", new Size(930, 680));
 
                 control.SetResult(data);
                 EnsureUsableWindowSize(data);
@@ -718,6 +703,31 @@ namespace EngiSentry.AutoCAD2021
             {
                 Debug.WriteLine("EngiSentry visual results error: " + exception);
             }
+        }
+
+        internal static void ShowJevEngineerLabeling()
+        {
+            EnsureWindow();
+            if (labelingControl == null || labelingControl.IsDisposed) labelingControl = new JevEngineerLabelingControl { Dock = DockStyle.Fill };
+            else labelingControl.LoadPackages();
+            ShowControl(labelingControl, "EngiSentry - Jev Engineer Labeling", new Size(1120, 760));
+        }
+
+        private static void EnsureWindow()
+        {
+            if (window != null && !window.IsDisposed) return;
+            window = new Form { Text = "EngiSentry Results", StartPosition = FormStartPosition.CenterScreen, Size = new Size(930, 680), MinimumSize = new Size(520, 360), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = true, ShowInTaskbar = true, BackColor = Color.FromArgb(30, 31, 34) };
+            window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; };
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
+        }
+
+        private static void ShowControl(Control selected, string title, Size preferredSize)
+        {
+            if (window.Controls.Count != 1 || window.Controls[0] != selected) { window.Controls.Clear(); window.Controls.Add(selected); }
+            window.Text = title;
+            if (window.Width < preferredSize.Width || window.Height < preferredSize.Height) window.Size = preferredSize;
+            if (window.WindowState == FormWindowState.Minimized) window.WindowState = FormWindowState.Normal;
+            window.Show(); window.BringToFront(); window.Activate();
         }
 
         internal static void UpdateNote(string note)
