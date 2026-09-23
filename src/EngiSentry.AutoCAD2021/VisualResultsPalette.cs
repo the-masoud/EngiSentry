@@ -27,6 +27,11 @@ namespace EngiSentry.AutoCAD2021
             InteractiveVisualResultsPalette.ShowJevEngineerLabeling();
         }
 
+        public static void ShowProjectEngineerReview()
+        {
+            InteractiveVisualResultsPalette.ShowProjectEngineerReview();
+        }
+
         public static void ShowHome(string command, Document document, string drawing, string status, string detail)
         {
             Publish(new VisualResultsData
@@ -683,6 +688,7 @@ namespace EngiSentry.AutoCAD2021
         private static Form window;
         private static VisualResultsControl control;
         private static JevEngineerLabelingControl labelingControl;
+        private static ProjectEngineerReviewControl reviewControl;
 
         internal static void Publish(VisualResultsData data)
         {
@@ -713,11 +719,19 @@ namespace EngiSentry.AutoCAD2021
             ShowControl(labelingControl, "EngiSentry - Jev Engineer Labeling", new Size(1120, 760));
         }
 
+        internal static void ShowProjectEngineerReview()
+        {
+            EnsureWindow();
+            if (reviewControl == null || reviewControl.IsDisposed) reviewControl = new ProjectEngineerReviewControl { Dock = DockStyle.Fill };
+            else reviewControl.LoadQueue();
+            ShowControl(reviewControl, "EngiSentry - Project Engineer Review", new Size(960, 800));
+        }
+
         private static void EnsureWindow()
         {
             if (window != null && !window.IsDisposed) return;
             window = new Form { Text = "EngiSentry Results", StartPosition = FormStartPosition.CenterScreen, Size = new Size(930, 680), MinimumSize = new Size(520, 360), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = true, ShowInTaskbar = true, BackColor = Color.FromArgb(30, 31, 34) };
-            window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; };
+            window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; reviewControl = null; };
             Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
         }
 

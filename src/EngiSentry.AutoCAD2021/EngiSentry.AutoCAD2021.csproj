@@ -64,6 +64,7 @@
     <Compile Include="ProjectDistanceGovernanceRuntimeLoader.cs" />
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="JevEngineerLabelingControl.cs" />
+    <Compile Include="ProjectEngineerReviewControl.cs" />
     <Compile Include="Scanning\SnapshotFileWriter.cs" />
     <Compile Include="Scanning\PlotPlanReportCompactor.cs" />
     <Compile Include="Scanning\PlacementProposalSnapshotWriter.cs" />

@@ -1,0 +1,126 @@
+# EngiSentry Phase K — Governed Project Engineer Review Handoff
+
+- Base HEAD: `2040a0170fc040e2e0d35c206732945ffe1fe435`
+- Command: `ES_ENGINEERREVIEW`
+- UI host: existing `VisualResultsPalette` / `InteractiveVisualResultsPalette` modeless WinForms surface
+- Evidence source: accepted `docs/handoffs/P10.3-SUPERVISED-ENGINEER-PILOT-RECORD.md` (read-only; never modified)
+- Purpose: present the pending P10.3 pilot results to a real project engineer through a dedicated
+  human-review UI with bounded questions, record the engineer's observation evidence, and never
+  create approval, authority policy, trusted-issuer status, private-key authority, or rule activation.
+
+## What this workflow is not
+
+A project engineer review records **human observation evidence only**. It is deliberately separate
+from the P8 `HumanEngineeringReviewDecisionRecord` / P9 approval machinery. No response can be
+converted into an `EngineeringDistanceApprovalRecord`, and no P9 gate overload accepts a review
+response (compile-time and reflection-checked negative tests). Review ≠ approval: the
+`REVIEW_ACCEPTED != APPROVED` invariant is asserted in the focused tests.
+
+## Production files added
+
+- `src/EngiSentry.Contracts/ProjectEngineerReviewModels.cs` — portable contracts (schema `PER-1`,
+  statuses, classifications, answer vocabularies, request/response/evidence/question types). References
+  no Autodesk assembly.
+- `src/EngiSentry.Standards/ProjectEngineerReviewQuestions.cs` — the exact accepted P10.3 observation
+  template: 14 questions (12 required bounded, 2 optional free text) across Criteria UX / Results UX /
+  Engineering interpretation / Usability. No question added, broadened, or narrowed.
+- `src/EngiSentry.Standards/ProjectEngineerReviewService.cs` — builds, validates, and atomically
+  persists requests/responses; deterministic SHA-256 request identity; binding validation that rejects
+  any response that does not bind to its request; completeness gate used by the UI.
+- `src/EngiSentry.AutoCAD2021/ProjectEngineerReviewControl.cs` — the human-review UI: reviewer identity
+  fields, evidence panel, all 14 bounded/free questions, classification, comment, Previous / Next /
+  Next Pending navigation, and an explicit Save.
+
+## Production files modified
+
+- `src/EngiSentry.AutoCAD2021/Commands.cs` — `ES_ENGINEERREVIEW` command.
+- `src/EngiSentry.AutoCAD2021/VisualResultsPalette.cs` — `ShowProjectEngineerReview()` host surface.
+- `src/EngiSentry.AutoCAD2021/EngiSentry.AutoCAD2021.csproj` — compile entry.
+- `AGENTS.md` — human engineering judgment protocol.
+
+## Test files added / modified
+
+- `tests/PhaseProjectEngineerReviewTests.cs` (added) — focused assertions.
+- `tests/EngiSentry.Tests.csproj`, `tests/UnitTests.cs` (modified) — integration.
+
+## Optional review-root override (testability, default behavior unchanged)
+
+The queue loader materializes only the four real P10.3 pilot requests, so a pre-seeded synthetic
+request would not otherwise appear in the UI. The smallest safe testability change was added:
+
+- `ProjectEngineerReviewService.ReviewRootOverrideVariable = "ENGISENTRY_ENGINEERING_REVIEW_ROOT"`,
+  following the existing `ENGISENTRY_*` environment-variable convention.
+- The parameterless constructor resolves the override (`ResolveRoot()`); when the variable is unset or
+  blank the default `%LOCALAPPDATA%\EngiSentry\artifacts\qa\engineering-review` root is used, so
+  production behavior is unchanged and the override is disabled unless explicitly set.
+- `LoadQueue()` additionally materializes pre-seeded persisted requests **only** when the root is not
+  the default root. The production default root holds only the four P10.3 pilot requests, so the real
+  queue and production queue semantics are unchanged; no arbitrary non-P10.3 request is ever included.
+- No change to P9 governance/approval behavior, and no change to queue semantics on the default root.
+
+Focused-test coverage for this override: disabled unless explicitly set, an isolated override root
+materializes a pre-seeded test-only request with its exact identity while still carrying the four
+pilot requests, a pre-seeded request stays PENDING until answered, and the default/production root is
+untouched while the override is set.
+
+## Build / test / deployment evidence
+
+- Release x64 rebuild with `-warnaserror` (MSBuild 17.14): PASS, 0 warnings, 0 errors.
+- Focused Project Engineer Review assertions: PASS, 64 assertions (55 + 9 override assertions).
+- Full Release test executable `tests/bin/x64/Release/EngiSentry.Tests.exe`: PASS, exit code 0;
+  final line `All EngiSentry M2.2 through M5.0 tests passed.`
+- Deployment: current Release build copied into
+  `%APPDATA%\Autodesk\ApplicationPlugins\EngiSentry.bundle\Contents\Win64`; SHA-256 equality verified
+  for all 11 deployed DLLs against the Release output.
+
+## AutoCAD runtime acceptance (AutoCAD 2021 x64)
+
+- Disposable drawing: `artifacts\runtime-validation\per-acceptance\98102-AJR-000-PD-PLP-0001-B05_1.dwg`
+  (disposable runtime fixture; not a protected source drawing).
+- Review-root override set only for the acceptance AutoCAD process (process scope; never persisted to
+  User/Machine scope; cleared afterwards).
+- Exactly one unmistakably test-only synthetic request (`WorkflowSourceType=TEST_ONLY`,
+  case `AA-TEST-ONLY-RUNTIME-UI-CASE`) pre-seeded into the isolated override root; the four real P10.3
+  pilot requests were also materialized into that isolated root only and left unanswered.
+- `ES_ENGINEERREVIEW` executions: exactly 1, invoked through AutoCAD COM `SendCommand` after
+  `NETLOAD`; the modeless review window opened enabled.
+- STEP 17 control verification: combos=13 (12 bounded question combos with the exact
+  empty/Yes/No, empty/Yes/No/N/A and empty/Yes/No/Needs review vocabularies, plus the classification
+  combo with exactly empty/PASS/USABILITY_ISSUE/SUSPECTED_PRODUCT_DEFECT/DRAWING_EVIDENCE_LIMITATION/
+  ENGINEERING_REVIEW_REQUIRED), edits=6 (reviewer name, reviewer role, read-only evidence, two
+  free-text question answers, comment), buttons=4 (Previous disabled on case 1; Next, Next Pending,
+  Save enabled); all four question sections and all fourteen question labels present; evidence panel
+  showed the synthetic TEST_ONLY identity.
+- Incomplete Save blocked: clicking Save with empty reviewer fields produced
+  `Review not saved - Reviewer display name is required before saving.` and wrote no response file.
+- STEP 18 explicit Save: reviewer name/role, all twelve bounded answers, classification
+  (`USABILITY_ISSUE`), comment and both free-text answers entered through the real control surfaces;
+  one Save click wrote exactly ONE response, bound to the synthetic request only
+  (schema `PER-1`, matching `ReviewRequestId`/`RequestSha256`/`DrawingName`/`ReviewedCaseId`, 14
+  answers, UTC timestamp, `ResponseId` present, classification preserved, no `.tmp` left, request
+  hash unchanged by the save). The UI then reported `This case is already completed.`
+- P10.3 real queue: requests=4, pending=4, real responses written=0. The production review root was
+  never written to during acceptance and remained 4 requests / 0 responses throughout.
+- DBMOD: before `0`, after NETLOAD `0`, after `ES_ENGINEERREVIEW` `0`, at quit `0`; unchanged.
+- DWG integrity: SHA-256 before `DBD6D6BFDE04770EF250488DD926DC162EA5E246B3A7971B2745B65F85AC8CAA`
+  == after; size `2890464` unchanged; last-write UTC `2026-09-23T09:57:04.2133300Z` unchanged;
+  drawing was not saved; AutoCAD exited cleanly with NO save-changes prompt.
+- Network / TypeSafe / Jev calls: 0. Benchmark executions: 0.
+- Production authority safety: no approval created, no authority policy created, no trust store
+  modified, no private key created, no rule activated.
+- Test-owned runtime artifacts (isolated override review root and the seeder binary) were removed
+  afterwards; the production review root is unchanged at 4 requests / 0 responses.
+- Automation method (deterministic, no cursor): AutoCAD COM `SendCommand` for command entry; Windows
+  UI Automation tree reads for window/control identity; real control-surface interaction via Win32
+  messages against the actual modeless control HWNDs (`CB_SETCURSEL` + `CBN_SELCHANGE` for combos,
+  `WM_SETTEXT`/`WM_GETTEXT` for edits, `BM_CLICK` for Save/Next). Cursor-based input injection is
+  unavailable in this environment, so no mouse/capture path was used.
+
+## Status
+
+- Implementation: complete.
+- Build / focused tests / full tests / deployment / AutoCAD runtime acceptance: PASS.
+- Real P10.3 engineering reviews: still PENDING and untouched — no engineer answer was fabricated.
+- Commit: one local commit `feat: add governed engineer review workflow`.
+- Push: NO.
+- Next: REAL PROJECT ENGINEER completes the four pending P10.3 reviews.

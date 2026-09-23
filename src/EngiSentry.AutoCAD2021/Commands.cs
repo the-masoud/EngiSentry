@@ -542,6 +542,13 @@ namespace EngiSentry.AutoCAD2021
             catch (System.Exception exception) { WriteToActiveEditor("\nES_JEVLABEL failed\nReason: {0}\n", exception.Message); }
         }
 
+        [CommandMethod("ES_ENGINEERREVIEW")]
+        public void EngineerReview()
+        {
+            try { VisualResultsPalette.ShowProjectEngineerReview(); }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_ENGINEERREVIEW failed\nReason: {0}\n", exception.Message); }
+        }
+
         /// <summary>
         /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
         /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
