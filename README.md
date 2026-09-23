@@ -2,7 +2,7 @@
 
 EngiSentry is a read-only AutoCAD 2021 x64 engineering drawing QA plugin targeting .NET Framework 4.8.
 
-Current commands: `ENGISENTRY`, `ES_HELLO`, `ES_SCAN`, `ES_SEMANTIC`, `ES_INDEX`, `ES_QA`, `ES_PLOTQA`, `ES_PROFILEQA`, `ES_CROSSQA`, `ES_REVBASELINE`, `ES_REVISION`, and `ES_DISTANCESETTINGS`.
+Current commands: `ENGISENTRY`, `ES_HELLO`, `ES_SCAN`, `ES_SEMANTIC`, `ES_INDEX`, `ES_QA`, `ES_PLOTQA`, `ES_PROFILEQA`, `ES_CROSSQA`, `ES_REVBASELINE`, `ES_REVISION`, `ES_DISTANCESETTINGS`, `ES_SUGGEST`, `ES_APPROVALPREP`, `ES_APPROVALPACKAGE`, `ES_APPROVALINTAKE`, `ES_JEVASSIST`, `ES_JEVCALIBRATE`, and `ES_JEVLABEL`.
 
 It provides semantic extraction, Plot Plan QA, native XLSX cross-document QA, revision comparison, project distance criteria, and standards authority/review infrastructure. Analysis is read-only: EngiSentry does not save or auto-fix DWGs.
 
