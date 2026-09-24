@@ -311,6 +311,7 @@ namespace EngiSentry.Tests
             PhaseJevEngineerLabelingTests.Run();
             PhaseProjectEngineerReviewTests.Run();
             PhaseProjectEngineerReviewUiTests.Run();
+            PhaseProjectEngineerReviewLocalizationTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }

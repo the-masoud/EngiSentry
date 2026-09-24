@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    English (neutral) UI strings for the ES_ENGINEERREVIEW review surface. This is the default
+    language; Persian lives in ReviewStrings.fa.resx. Presentation only: review questions, answer
+    vocabularies, classifications, status vocabulary, and backend reasons stay governed upstream.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppTitle" xml:space="preserve">
+    <value>Project Engineer Review</value>
+  </data>
+  <data name="AppSubtitle" xml:space="preserve">
+    <value>Human engineering observation evidence only</value>
+  </data>
+  <data name="AppSubtitleToolTip" xml:space="preserve">
+    <value>Records human engineering observation evidence only. It never creates approval, authority policy, trusted-issuer status, private-key authority, or rule activation.</value>
+  </data>
+  <data name="LanguageSwitchToolTip" xml:space="preserve">
+    <value>Switch the review interface language (English / فارسی).</value>
+  </data>
+  <data name="StatusNone" xml:space="preserve">
+    <value>● NONE</value>
+  </data>
+  <data name="StatusPendingBadge" xml:space="preserve">
+    <value>● PENDING</value>
+  </data>
+  <data name="CaseOf" xml:space="preserve">
+    <value>Case {0} of {1}</value>
+  </data>
+  <data name="ReviewedOf" xml:space="preserve">
+    <value>Reviewed {0} of {1}</value>
+  </data>
+  <data name="ReviewedToolTip" xml:space="preserve">
+    <value>{0} of {1} cases hold a complete, binding-valid engineer response.</value>
+  </data>
+  <data name="NoCaseToDisplayToolTip" xml:space="preserve">
+    <value>There is no case to display.</value>
+  </data>
+  <data name="StatusCompletedDetail" xml:space="preserve">
+    <value>A complete, binding-valid engineer response is recorded for this case.</value>
+  </data>
+  <data name="StatusInvalidDetail" xml:space="preserve">
+    <value>A stored response failed validation; a new save will replace it.</value>
+  </data>
+  <data name="StatusPendingDetail" xml:space="preserve">
+    <value>No engineer response is recorded yet for this case.</value>
+  </data>
+  <data name="NoReviewableCases" xml:space="preserve">
+    <value>No reviewable cases found.</value>
+  </data>
+  <data name="NoCaseSelected" xml:space="preserve">
+    <value>No case selected.</value>
+  </data>
+  <data name="SectionIdentity" xml:space="preserve">
+    <value>Engineer Identity</value>
+  </data>
+  <data name="ChipRequiredBeforeSaving" xml:space="preserve">
+    <value>Required before saving</value>
+  </data>
+  <data name="FieldReviewerName" xml:space="preserve">
+    <value>Reviewer / Display Name</value>
+  </data>
+  <data name="FieldReviewerRole" xml:space="preserve">
+    <value>Role / Title</value>
+  </data>
+  <data name="ReviewerNameToolTip" xml:space="preserve">
+    <value>Name as the reviewer wishes it recorded in the review evidence.</value>
+  </data>
+  <data name="ReviewerRoleToolTip" xml:space="preserve">
+    <value>Role or title as the reviewer wishes it recorded in the review evidence.</value>
+  </data>
+  <data name="IdentityNote" xml:space="preserve">
+    <value>Recorded as review evidence only — this is not identity verification.</value>
+  </data>
+  <data name="SectionSummary" xml:space="preserve">
+    <value>Case Summary</value>
+  </data>
+  <data name="KeyDrawing" xml:space="preserve">
+    <value>Drawing</value>
+  </data>
+  <data name="KeyCase" xml:space="preserve">
+    <value>Case</value>
+  </data>
+  <data name="KeyOperationalResult" xml:space="preserve">
+    <value>Operational result</value>
+  </data>
+  <data name="KeyReviewReason" xml:space="preserve">
+    <value>Review reason</value>
+  </data>
+  <data name="ValueNotRecorded" xml:space="preserve">
+    <value>&lt;not recorded&gt;</value>
+  </data>
+  <data name="SectionEvidence" xml:space="preserve">
+    <value>Software Evidence</value>
+  </data>
+  <data name="EvidenceCountFormat" xml:space="preserve">
+    <value>{0} evidence items</value>
+  </data>
+  <data name="EvidenceReviewRequestId" xml:space="preserve">
+    <value>Review request ID</value>
+  </data>
+  <data name="EvidenceRequestSha256" xml:space="preserve">
+    <value>Request SHA-256</value>
+  </data>
+  <data name="EvidenceWorkflowSource" xml:space="preserve">
+    <value>Workflow source</value>
+  </data>
+  <data name="EvidenceReviewedCase" xml:space="preserve">
+    <value>Reviewed case</value>
+  </data>
+  <data name="EvidenceDrawing" xml:space="preserve">
+    <value>Drawing</value>
+  </data>
+  <data name="EvidenceDrawingSha256" xml:space="preserve">
+    <value>Drawing SHA-256</value>
+  </data>
+  <data name="EvidenceSoftwareResult" xml:space="preserve">
+    <value>Software result</value>
+  </data>
+  <data name="EvidenceSoftwareState" xml:space="preserve">
+    <value>Software state</value>
+  </data>
+  <data name="SectionQuestions" xml:space="preserve">
+    <value>Review Questions</value>
+  </data>
+  <data name="RequiredNote" xml:space="preserve">
+    <value>Answer every required question (marked ●). Nothing is stored until you choose Save Review.</value>
+  </data>
+  <data name="RequiredSuffix" xml:space="preserve">
+    <value> (required)</value>
+  </data>
+  <data name="OptionalSuffix" xml:space="preserve">
+    <value> (optional)</value>
+  </data>
+  <data name="SectionCriteriaUx" xml:space="preserve">
+    <value>Criteria UX</value>
+  </data>
+  <data name="SectionResultsUx" xml:space="preserve">
+    <value>Results UX</value>
+  </data>
+  <data name="SectionEngineeringInterpretation" xml:space="preserve">
+    <value>Engineering interpretation</value>
+  </data>
+  <data name="SectionUsability" xml:space="preserve">
+    <value>Usability</value>
+  </data>
+  <data name="SectionDisposition" xml:space="preserve">
+    <value>Engineer Disposition</value>
+  </data>
+  <data name="FieldClassification" xml:space="preserve">
+    <value>Classification</value>
+  </data>
+  <data name="ClassificationToolTip" xml:space="preserve">
+    <value>Exactly one classification is required before saving.</value>
+  </data>
+  <data name="ChipRequired" xml:space="preserve">
+    <value>● Required</value>
+  </data>
+  <data name="FieldComment" xml:space="preserve">
+    <value>Engineer Comment</value>
+  </data>
+  <data name="CommentCountFormat" xml:space="preserve">
+    <value>{0} / 1000</value>
+  </data>
+  <data name="ButtonPrevious" xml:space="preserve">
+    <value>Previous</value>
+  </data>
+  <data name="ButtonNext" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="ButtonNextPending" xml:space="preserve">
+    <value>Next Pending</value>
+  </data>
+  <data name="ButtonSave" xml:space="preserve">
+    <value>Save Review</value>
+  </data>
+  <data name="PreviousToolTip" xml:space="preserve">
+    <value>Show the previous case in the review queue.</value>
+  </data>
+  <data name="NextToolTip" xml:space="preserve">
+    <value>Show the next case in the review queue.</value>
+  </data>
+  <data name="NextPendingToolTip" xml:space="preserve">
+    <value>Jump to the next case that still has no recorded response.</value>
+  </data>
+  <data name="SaveToolTip" xml:space="preserve">
+    <value>Explicitly save this review. It is never saved automatically.</value>
+  </data>
+  <data name="MsgCompleted" xml:space="preserve">
+    <value>This case is already completed — the recorded review is shown.</value>
+  </data>
+  <data name="MsgInvalid" xml:space="preserve">
+    <value>The stored response is invalid; saving will replace it.</value>
+  </data>
+  <data name="MsgNoPending" xml:space="preserve">
+    <value>No pending cases remain.</value>
+  </data>
+  <data name="MsgNotSavedPrefix" xml:space="preserve">
+    <value>Review not saved — </value>
+  </data>
+  <data name="MsgSavedFor" xml:space="preserve">
+    <value>Project engineer review saved for {0}.</value>
+  </data>
+  <data name="MsgSaveFailed" xml:space="preserve">
+    <value>Save failed: {0}</value>
+  </data>
+  <data name="RemainingAllComplete" xml:space="preserve">
+    <value>All required answers complete</value>
+  </data>
+  <data name="RemainingSingular" xml:space="preserve">
+    <value>{0} required answer remaining</value>
+  </data>
+  <data name="RemainingPlural" xml:space="preserve">
+    <value>{0} required answers remaining</value>
+  </data>
+  <data name="RemainingCompleteToolTip" xml:space="preserve">
+    <value>Every required question has an answer. Save Review stores the review.</value>
+  </data>
+  <data name="RemainingPendingToolTip" xml:space="preserve">
+    <value>Required questions are still unanswered. Nothing is stored until Save Review.</value>
+  </data>
+</root>

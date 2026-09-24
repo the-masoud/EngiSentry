@@ -240,12 +240,107 @@ Build / test:
   the no-sibling-overlap and field-sizing layout sanity at the accepted window size); full test
   executable: PASS, final line `All EngiSentry M2.2 through M5.0 tests passed.`
 
+## Persian localization + RTL (presentation only)
+
+English remains the default UI language and Persian (فارسی) was added as a selectable UI
+language on the review surface only. No backend logic, command, persistence format, question set,
+answer vocabulary, classification set, status vocabulary, governance, or authority behavior changed,
+and no new dependency was introduced.
+
+Files added:
+
+- `src/EngiSentry.AutoCAD2021/ReviewStrings.resx` — neutral (English) UI resources; the default.
+- `src/EngiSentry.AutoCAD2021/ReviewStrings.fa.resx` — Persian UI resources (satellite `fa` assembly
+  produced by the standard .NET resource pipeline).
+- `src/EngiSentry.AutoCAD2021/ReviewLocalization.cs` — session-scoped language selection and
+  resource access (`ReviewStrings` / `ReviewLocalization`).
+- `tests/PhaseProjectEngineerReviewLocalizationTests.cs` — focused localization + RTL assertions.
+
+Files modified:
+
+- `src/EngiSentry.AutoCAD2021/ProjectEngineerReviewControl.cs` — all UI prose now reads from
+  resources; added the header language link and a `Rebuild()` that re-renders the surface on a
+  language switch while preserving the current case and any unsaved entries.
+- `src/EngiSentry.AutoCAD2021/EngiSentry.AutoCAD2021.csproj` — compile + embedded-resource entries.
+- `tests/EngiSentry.Tests.csproj`, `tests/UnitTests.cs` — integration of the focused test.
+
+What is translated (the UI surface only):
+
+- Header: title, subtitle, subtitle authority tooltip, language tooltip.
+- Section titles: Engineer Identity, Case Summary, Software Evidence, Review Questions, Engineer
+  Disposition, and the four question section titles (Criteria UX / Results UX / Engineering
+  interpretation / Usability).
+- Field captions: Reviewer / Display Name, Role / Title, Classification, Engineer Comment.
+- Buttons: Previous, Next, Next Pending, Save Review, plus their tooltips.
+- Status / progress text: case counter, `Reviewed X of Y`, queue progress tooltip, `N evidence
+  items`, `X / 1000` comment counter, `All required answers complete` / `N required answers
+  remaining` and their tooltips, and the empty-state strings.
+- Validation / help text: the `Review not saved — ` prefix, the completed / invalid / pending status
+  messages, `No pending cases remain.`, `Save failed: `, the saved-confirmation message, the
+  identity note, the required-question note, and the ` (required)` / ` (optional)` tooltip suffixes.
+
+What is deliberately NOT translated (governance stays exact and LTR):
+
+- The status vocabulary (`PENDING` / `COMPLETED` / `INVALID`), the classification set, the answer
+  vocabularies, and the backend completeness reasons. These are governed identifiers, so they keep
+  their exact upstream values in both languages; the UI only composes a glyph before the status word.
+- SHA-256 hashes, request/case IDs, drawing names, workflow sources, software result/state, and the
+  review reason. Evidence key/value rows render their values unchanged and hashes stay in the LTR
+  `Consolas` monospace face.
+- Reviewer name / role / comment / free-text answers are engineer-authored content and are never
+  translated or normalized.
+
+RTL implementation (standard WinForms):
+
+- The root control sets `RightToLeft.Yes` for Persian and `RightToLeft.No` for English, so docking,
+  column order, and text alignment mirror automatically across the whole surface; the language link
+  and the status stack swap sides with the header grid's mirrored column order.
+- The three custom painters are direction-aware: `BadgeLabel` adds `TextFormatFlags.RightToLeft`,
+  `SeverityMessage` draws its severity dot at the leading edge and right-aligns the message, and
+  `ThinProgress` grows its fill from the leading edge (left for LTR, right for RTL).
+- Persian text renders in `Tahoma`, the system-safe Persian-capable font that ships with every
+  supported Windows release; the Latin surface keeps `Segoe UI`, and hashes/IDs keep `Consolas`.
+- Language selection is session-scoped only: it is never persisted and never writes to the review
+  root, so it cannot affect review state across sessions or processes.
+
+Rebuild-on-switch behavior:
+
+- `Rebuild()` captures the current reviewer name / role / classification / comment / answers before
+  recreating the control tree, re-shows the current case, then restores the captured entries, so a
+  language switch never loses unsaid work and never writes a response.
+- The link's click is deferred with `BeginInvoke` so the control that raised the event is never
+  disposed from inside its own handler.
+
+Build / focused tests:
+
+- Release x64 solution rebuild with `-warnaserror` (MSBuild 17.14): PASS, 0 warnings, 0 errors.
+- Focused localization assertions: PASS, 341 assertions — English defaults are byte-identical to the
+  accepted surface, all 76 keys resolve to distinct non-empty Persian text, the Persian strings
+  measure and render real glyphs with Tahoma, the Persian surface is fully `RightToLeft.Yes` down
+  every descendant while English is fully `RightToLeft.No`, the review contract is intact in Persian
+  (same 4 pilot cases, 14 answer controls with the exact vocabularies, exactly 13 combos, 4 buttons,
+  hash evidence unchanged in the LTR monospace face), the language link offers the correct switch
+  target in each direction, a switch preserves entered identity and writes no response, and a forced
+  1000x960 render pass of the Persian RTL surface produces real, widely distributed content.
+- Full Release test executable: PASS, exit code 0, final line
+  `All EngiSentry M2.2 through M5.0 tests passed.`
+- Existing focused suites unchanged: Phase Project Engineer Review 64 assertions, Phase Project
+  Engineer Review UI 74 assertions.
+
+Safety:
+
+- No approval, authority policy, trusted-issuer status, private-key authority, or rule activation is
+  created or changed by localization.
+- No review response was created or saved; the real P10.3 reviews remain PENDING and untouched.
+- No DWG was opened, read, or modified.
+
 ## Status
 
-- Implementation: complete.
+- Implementation: complete (plus Persian UI localization + RTL, presentation only).
 - Build / focused tests / full tests / deployment / AutoCAD runtime visual acceptance: PASS.
 - Real P10.3 engineering reviews: still PENDING and untouched — no engineer answer was fabricated.
 - Commits: `feat: add governed engineer review workflow`, then `ui: polish project engineer review`,
-  then a second presentation-only polish pass (`ui: polish engineer review surface`).
+  then a second presentation-only polish pass (`ui: polish engineer review surface`), then
+  `ui: add Persian localization to engineer review surface`.
 - Push: NO.
 - Next: REAL PROJECT ENGINEER completes the four pending P10.3 reviews.

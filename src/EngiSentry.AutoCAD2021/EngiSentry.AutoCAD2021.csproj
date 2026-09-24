@@ -65,6 +65,7 @@
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="JevEngineerLabelingControl.cs" />
     <Compile Include="ProjectEngineerReviewControl.cs" />
+    <Compile Include="ReviewLocalization.cs" />
     <Compile Include="Scanning\SnapshotFileWriter.cs" />
     <Compile Include="Scanning\PlotPlanReportCompactor.cs" />
     <Compile Include="Scanning\PlacementProposalSnapshotWriter.cs" />
@@ -72,6 +73,11 @@
     <Compile Include="Scanning\PlacementProposalRuntime.cs" />
     <Compile Include="Scanning\DrawingScanner.cs" />
     <Compile Include="Scanning\DependencyClassifier.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- English (neutral/default) and Persian UI resources for the ES_ENGINEERREVIEW surface. -->
+    <EmbeddedResource Include="ReviewStrings.resx" />
+    <EmbeddedResource Include="ReviewStrings.fa.resx" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

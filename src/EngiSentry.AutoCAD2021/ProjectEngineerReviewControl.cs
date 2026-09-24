@@ -39,26 +39,27 @@ namespace EngiSentry.AutoCAD2021
         private const int EvidenceBodyHeight = 176;
 
         private readonly ProjectEngineerReviewService service;
-        private readonly ToolTip toolTip = new ToolTip { AutoPopDelay = 8000 };
-        private readonly Label titleLabel = new Label();
-        private readonly Label subtitleLabel = new Label();
-        private readonly BadgeLabel statusBadge = new BadgeLabel();
-        private readonly Label caseLabel = new Label();
-        private readonly Label progressLabel = new Label();
-        private readonly ThinProgress queueProgress = new ThinProgress();
-        private readonly TextBox reviewerName = new TextBox();
-        private readonly TextBox reviewerRole = new TextBox();
-        private readonly Panel evidenceBody = new Panel();
-        private readonly Label remainingChip = new Label();
-        private readonly Label evidenceCountChip = new Label();
-        private readonly ComboBox classification = new ComboBox();
-        private readonly TextBox comment = new TextBox();
-        private readonly Label commentCount = new Label();
-        private readonly Button previous = new Button();
-        private readonly Button next = new Button();
-        private readonly Button nextPending = new Button();
-        private readonly Button save = new Button();
-        private readonly SeverityMessage message = new SeverityMessage();
+        private ToolTip toolTip;
+        private Label titleLabel;
+        private Label subtitleLabel;
+        private BadgeLabel statusBadge;
+        private Label caseLabel;
+        private Label progressLabel;
+        private ThinProgress queueProgress;
+        private TextBox reviewerName;
+        private TextBox reviewerRole;
+        private Panel evidenceBody;
+        private Label remainingChip;
+        private Label evidenceCountChip;
+        private ComboBox classification;
+        private TextBox comment;
+        private Label commentCount;
+        private Button previous;
+        private Button next;
+        private Button nextPending;
+        private Button save;
+        private LinkLabel languageLink;
+        private SeverityMessage message;
         private Card summaryCard;
         private TableLayoutPanel summaryGrid;
         private Card questionsCard;
@@ -76,8 +77,37 @@ namespace EngiSentry.AutoCAD2021
             if (reviewService == null) throw new ArgumentNullException(nameof(reviewService));
             service = reviewService;
             Dock = DockStyle.Fill;
+            CreateControls();
             BuildLayout();
             LoadQueue();
+        }
+
+        // (Re)creates the control instances so a UI-language switch can rebuild the whole surface
+        // with the current culture's resources, fonts, and layout direction. Review state (queue,
+        // current case, unsaved entries) is preserved across the rebuild by Rebuild().
+        private void CreateControls()
+        {
+            toolTip = new ToolTip { AutoPopDelay = 8000 };
+            titleLabel = new Label();
+            subtitleLabel = new Label();
+            statusBadge = new BadgeLabel();
+            caseLabel = new Label();
+            progressLabel = new Label();
+            queueProgress = new ThinProgress();
+            reviewerName = new TextBox();
+            reviewerRole = new TextBox();
+            evidenceBody = new Panel();
+            remainingChip = new Label();
+            evidenceCountChip = new Label();
+            classification = new ComboBox();
+            comment = new TextBox();
+            commentCount = new Label();
+            previous = new Button();
+            next = new Button();
+            nextPending = new Button();
+            save = new Button();
+            languageLink = new LinkLabel();
+            message = new SeverityMessage();
         }
 
         internal int QueueCount => queue.Count;
@@ -97,6 +127,11 @@ namespace EngiSentry.AutoCAD2021
             Font = ReviewUi.BodyFont;
             DoubleBuffered = true;
 
+            // Standard WinForms right-to-left support: the whole surface is mirrored for Persian so
+            // docking, column order, and text alignment flip automatically. Latin identifiers and
+            // hashes stay LTR inside the mirrored surface.
+            RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
+
             // one pinned header row, one scrolling column of cards, one pinned action bar:
             // the status/counter and the Save Review action are never scrolled out of view
             var root = new TableLayoutPanel
@@ -114,6 +149,66 @@ namespace EngiSentry.AutoCAD2021
             Controls.Add(root);
         }
 
+        // Rebuilds the surface after a UI-language change: the current case and any unsaved entries
+        // are captured first, the control tree is recreated with the new culture's resources, fonts
+        // and direction, then the case is re-shown and the captured entries restored. Nothing is
+        // persisted by the rebuild — the review still stores only on an explicit Save Review.
+        internal void Rebuild()
+        {
+            string draftName = reviewerName.Text;
+            string draftRole = reviewerRole.Text;
+            string draftClassification = classification.SelectedItem as string ?? string.Empty;
+            string draftComment = comment.Text;
+            Dictionary<string, string> draftAnswers = CaptureAnswers();
+            int restore = currentIndex;
+
+            SuspendLayout();
+            try
+            {
+                ClearControls(this);
+                CreateControls();
+                BuildLayout();
+            }
+            finally { ResumeLayout(); }
+
+            ShowCase(restore);
+
+            // restore the engineer's unsaved screen entries onto the fresh controls
+            loading = true;
+            try
+            {
+                reviewerName.Text = draftName;
+                reviewerRole.Text = draftRole;
+                classification.SelectedItem = draftClassification;
+                if (classification.SelectedIndex < 0) classification.SelectedIndex = 0;
+                comment.Text = draftComment;
+                foreach (KeyValuePair<string, string> pair in draftAnswers)
+                {
+                    if (!answerControls.TryGetValue(pair.Key, out Control control)) continue;
+                    if (control is ComboBox combo) combo.SelectedItem = pair.Value;
+                    else control.Text = pair.Value;
+                    if (control is ComboBox c && c.SelectedIndex < 0) c.SelectedIndex = 0;
+                }
+            }
+            finally { loading = false; }
+            UpdateRemainingRequired();
+            UpdateCommentCount();
+        }
+
+        private void SwitchLanguage()
+        {
+            // defer the rebuild until the link's click message has completed, so the control that
+            // raised the event is never disposed from inside its own handler
+            if (IsHandleCreated) BeginInvoke((Action)SwitchLanguageDeferred);
+            else SwitchLanguageDeferred();
+        }
+
+        private void SwitchLanguageDeferred()
+        {
+            ReviewLocalization.Toggle();
+            Rebuild();
+        }
+
         private void BuildHeader(TableLayoutPanel root)
         {
             var host = new BorderedPanel
@@ -121,37 +216,56 @@ namespace EngiSentry.AutoCAD2021
                 Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, BottomLine = true,
                 Padding = new Padding(18, 10, 14, 10)
             };
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
 
-            titleLabel.Text = "Project Engineer Review";
+            titleLabel.Text = ReviewStrings.Get("AppTitle");
             titleLabel.Dock = DockStyle.Fill;
             titleLabel.TextAlign = ContentAlignment.MiddleLeft;
             titleLabel.Font = ReviewUi.TitleFont;
             titleLabel.ForeColor = Color.White;
             titleLabel.AutoEllipsis = true;
-            toolTip.SetToolTip(titleLabel, "Project Engineer Review");
+            toolTip.SetToolTip(titleLabel, ReviewStrings.Get("AppTitle"));
             grid.Controls.Add(titleLabel, 0, 0);
 
-            subtitleLabel.Text = "Human engineering observation evidence only";
+            subtitleLabel.Text = ReviewStrings.Get("AppSubtitle");
             subtitleLabel.Dock = DockStyle.Fill;
             subtitleLabel.TextAlign = ContentAlignment.MiddleLeft;
             subtitleLabel.Font = ReviewUi.SubtitleFont;
             subtitleLabel.ForeColor = ReviewUi.Muted;
             subtitleLabel.AutoEllipsis = true;
-            toolTip.SetToolTip(subtitleLabel, "Records human engineering observation evidence only. It never creates approval, authority policy, trusted-issuer status, private-key authority, or rule activation.");
+            toolTip.SetToolTip(subtitleLabel, ReviewStrings.Get("AppSubtitleToolTip"));
             grid.Controls.Add(subtitleLabel, 0, 1);
             grid.SetRowSpan(subtitleLabel, 2);
+
+            // the language link names the language the engineer can switch to; it never names the
+            // current one, so it always reads as an available action
+            languageLink.Text = ReviewLocalization.SwitchLabel;
+            languageLink.Dock = DockStyle.Fill;
+            languageLink.TextAlign = ContentAlignment.MiddleCenter;
+            languageLink.Font = ReviewUi.CaptionFont;
+            languageLink.ForeColor = ReviewUi.Value;
+            languageLink.LinkColor = ReviewUi.Value;
+            languageLink.ActiveLinkColor = ReviewUi.Value;
+            languageLink.VisitedLinkColor = ReviewUi.Value;
+            languageLink.LinkBehavior = LinkBehavior.HoverUnderline;
+            languageLink.AccessibleName = "UiLanguage";
+            languageLink.TabIndex = 3;
+            languageLink.LinkClicked += (s, e) => SwitchLanguage();
+            toolTip.SetToolTip(languageLink, ReviewStrings.Get("LanguageSwitchToolTip"));
+            grid.Controls.Add(languageLink, 2, 1);
+            grid.SetRowSpan(languageLink, 2);
 
             statusBadge.Dock = DockStyle.Fill;
             statusBadge.Font = ReviewUi.BadgeFont;
             statusBadge.ForeColor = ReviewUi.Pending;
             statusBadge.Tint = ReviewUi.PendingTint;
-            statusBadge.Text = "● PENDING";
+            statusBadge.Text = ReviewStrings.Get("StatusPendingBadge");
             statusBadge.TextAlign = ContentAlignment.MiddleCenter;
             grid.Controls.Add(statusBadge, 1, 0);
 
@@ -214,7 +328,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildIdentity()
         {
-            var card = new Card("Engineer Identity", MakeChip("Required before saving", ReviewUi.Required));
+            var card = new Card(ReviewStrings.Get("SectionIdentity"), MakeChip(ReviewStrings.Get("ChipRequiredBeforeSaving"), ReviewUi.Required));
 
             reviewerName.Dock = DockStyle.Fill;
             reviewerName.MaxLength = 120;
@@ -223,7 +337,7 @@ namespace EngiSentry.AutoCAD2021
             reviewerName.ForeColor = ReviewUi.InputText;
             reviewerName.AccessibleName = "ReviewerDisplayName";
             reviewerName.TabIndex = 1;
-            toolTip.SetToolTip(reviewerName, "Name as the reviewer wishes it recorded in the review evidence.");
+            toolTip.SetToolTip(reviewerName, ReviewStrings.Get("ReviewerNameToolTip"));
 
             reviewerRole.Dock = DockStyle.Fill;
             reviewerRole.MaxLength = 120;
@@ -232,11 +346,11 @@ namespace EngiSentry.AutoCAD2021
             reviewerRole.ForeColor = ReviewUi.InputText;
             reviewerRole.AccessibleName = "ReviewerRole";
             reviewerRole.TabIndex = 2;
-            toolTip.SetToolTip(reviewerRole, "Role or title as the reviewer wishes it recorded in the review evidence.");
+            toolTip.SetToolTip(reviewerRole, ReviewStrings.Get("ReviewerRoleToolTip"));
 
             var note = new Label
             {
-                Text = "Recorded as review evidence only — this is not identity verification.",
+                Text = ReviewStrings.Get("IdentityNote"),
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, AutoEllipsis = true
             };
@@ -247,8 +361,8 @@ namespace EngiSentry.AutoCAD2021
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-            grid.Controls.Add(FieldPair("Reviewer / Display Name", reviewerName), 0, 0);
-            grid.Controls.Add(FieldPair("Role / Title", reviewerRole), 1, 0);
+            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldReviewerName"), reviewerName), 0, 0);
+            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldReviewerRole"), reviewerRole), 1, 0);
             grid.Controls.Add(note, 0, 1);
             grid.SetColumnSpan(note, 2);
 
@@ -259,7 +373,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildSummary()
         {
-            var card = new Card("Case Summary", null);
+            var card = new Card(ReviewStrings.Get("SectionSummary"), null);
             summaryGrid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             summaryGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             summaryGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -273,7 +387,7 @@ namespace EngiSentry.AutoCAD2021
         private Card BuildEvidence()
         {
             ConfigureChip(evidenceCountChip, 112);
-            var card = new Card("Software Evidence", evidenceCountChip);
+            var card = new Card(ReviewStrings.Get("SectionEvidence"), evidenceCountChip);
             evidenceBody.Dock = DockStyle.Fill;
             evidenceBody.AutoScroll = true;
             evidenceBody.BackColor = ReviewUi.Surface;
@@ -286,10 +400,10 @@ namespace EngiSentry.AutoCAD2021
         private Card BuildQuestions()
         {
             ConfigureChip(remainingChip, 192);
-            var card = new Card("Review Questions", remainingChip);
+            var card = new Card(ReviewStrings.Get("SectionQuestions"), remainingChip);
             var requiredNote = new Label
             {
-                Text = "Answer every required question (marked ●). Nothing is stored until you choose Save Review.",
+                Text = ReviewStrings.Get("RequiredNote"),
                 Dock = DockStyle.Top, Height = 18, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, AutoEllipsis = true
             };
@@ -311,7 +425,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildDisposition()
         {
-            var card = new Card("Engineer Disposition", null);
+            var card = new Card(ReviewStrings.Get("SectionDisposition"), null);
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 312));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -329,8 +443,8 @@ namespace EngiSentry.AutoCAD2021
             classification.SelectedIndex = 0;
             classification.AccessibleName = "Classification";
             classification.TabIndex = 24;
-            toolTip.SetToolTip(classification, "Exactly one classification is required before saving.");
-            grid.Controls.Add(FieldPair("Classification", classification, MakeChip("● Required", ReviewUi.Required)), 0, 0);
+            toolTip.SetToolTip(classification, ReviewStrings.Get("ClassificationToolTip"));
+            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldClassification"), classification, MakeChip(ReviewStrings.Get("ChipRequired"), ReviewUi.Required)), 0, 0);
 
             comment.Dock = DockStyle.Fill;
             comment.Multiline = true;
@@ -345,7 +459,7 @@ namespace EngiSentry.AutoCAD2021
             commentCount.Font = ReviewUi.ChipFont;
             commentCount.AutoEllipsis = true;
             commentCount.TextAlign = ContentAlignment.MiddleRight;
-            grid.Controls.Add(FieldPair("Engineer Comment", comment, commentCount), 1, 0);
+            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldComment"), comment, commentCount), 1, 0);
 
             card.Body.Controls.Add(grid);
             card.Fit(59);
@@ -370,10 +484,10 @@ namespace EngiSentry.AutoCAD2021
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
 
-            previous.Text = "Previous";
-            next.Text = "Next";
-            nextPending.Text = "Next Pending";
-            save.Text = "Save Review";
+            previous.Text = ReviewStrings.Get("ButtonPrevious");
+            next.Text = ReviewStrings.Get("ButtonNext");
+            nextPending.Text = ReviewStrings.Get("ButtonNextPending");
+            save.Text = ReviewStrings.Get("ButtonSave");
             previous.Click += (s, e) => Navigate(-1);
             next.Click += (s, e) => Navigate(1);
             nextPending.Click += (s, e) => NavigatePending();
@@ -394,10 +508,10 @@ namespace EngiSentry.AutoCAD2021
             }
             foreach (Button button in new[] { previous, next, nextPending }) StyleButton(button, false);
             StyleButton(save, true);
-            toolTip.SetToolTip(previous, "Show the previous case in the review queue.");
-            toolTip.SetToolTip(next, "Show the next case in the review queue.");
-            toolTip.SetToolTip(nextPending, "Jump to the next case that still has no recorded response.");
-            toolTip.SetToolTip(save, "Explicitly save this review. It is never saved automatically.");
+            toolTip.SetToolTip(previous, ReviewStrings.Get("PreviousToolTip"));
+            toolTip.SetToolTip(next, ReviewStrings.Get("NextToolTip"));
+            toolTip.SetToolTip(nextPending, ReviewStrings.Get("NextPendingToolTip"));
+            toolTip.SetToolTip(save, ReviewStrings.Get("SaveToolTip"));
             grid.Controls.Add(previous, 0, 0);
             grid.Controls.Add(next, 1, 0);
             grid.Controls.Add(nextPending, 2, 0);
@@ -507,7 +621,7 @@ namespace EngiSentry.AutoCAD2021
                 ClearControls(evidenceBody);
                 var empty = new Label
                 {
-                    Text = queue.Count == 0 ? "No reviewable cases found." : "No case selected.",
+                    Text = queue.Count == 0 ? ReviewStrings.Get("NoReviewableCases") : ReviewStrings.Get("NoCaseSelected"),
                     Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                     Font = ReviewUi.BodyFont, ForeColor = ReviewUi.Muted
                 };
@@ -539,12 +653,12 @@ namespace EngiSentry.AutoCAD2021
             save.Enabled = status != ProjectEngineerReviewStatuses.Completed;
             if (status == ProjectEngineerReviewStatuses.Completed)
             {
-                message.Text = "This case is already completed — the recorded review is shown.";
+                message.Text = ReviewStrings.Get("MsgCompleted");
                 message.Severity = SeverityMessage.Success;
             }
             else if (status == ProjectEngineerReviewStatuses.Invalid)
             {
-                message.Text = "The stored response is invalid; saving will replace it.";
+                message.Text = ReviewStrings.Get("MsgInvalid");
                 message.Severity = SeverityMessage.Warning;
             }
             else
@@ -561,22 +675,22 @@ namespace EngiSentry.AutoCAD2021
         {
             if (index < 0 || index >= queue.Count)
             {
-                statusBadge.Text = "● NONE";
+                statusBadge.Text = ReviewStrings.Get("StatusNone");
                 statusBadge.ForeColor = ReviewUi.Muted;
                 statusBadge.Tint = ReviewUi.SurfaceAlt;
-                caseLabel.Text = queue.Count == 0 ? "No reviewable cases found." : "No case selected.";
-                toolTip.SetToolTip(statusBadge, "There is no case to display.");
+                caseLabel.Text = queue.Count == 0 ? ReviewStrings.Get("NoReviewableCases") : ReviewStrings.Get("NoCaseSelected");
+                toolTip.SetToolTip(statusBadge, ReviewStrings.Get("NoCaseToDisplayToolTip"));
                 return;
             }
-            caseLabel.Text = "Case " + (index + 1).ToString(CultureInfo.InvariantCulture) + " of " + queue.Count.ToString(CultureInfo.InvariantCulture);
+            caseLabel.Text = ReviewStrings.Format("CaseOf", (index + 1).ToString(CultureInfo.InvariantCulture), queue.Count.ToString(CultureInfo.InvariantCulture));
             statusBadge.Text = StatusGlyph(status) + " " + status;
             statusBadge.ForeColor = StatusColor(status);
             statusBadge.Tint = StatusTint(status);
             string detail = status == ProjectEngineerReviewStatuses.Completed
-                ? "A complete, binding-valid engineer response is recorded for this case."
+                ? ReviewStrings.Get("StatusCompletedDetail")
                 : status == ProjectEngineerReviewStatuses.Invalid
-                    ? "A stored response failed validation; a new save will replace it."
-                    : "No engineer response is recorded yet for this case.";
+                    ? ReviewStrings.Get("StatusInvalidDetail")
+                    : ReviewStrings.Get("StatusPendingDetail");
             toolTip.SetToolTip(statusBadge, detail);
         }
 
@@ -584,9 +698,9 @@ namespace EngiSentry.AutoCAD2021
         {
             int total = queue.Count;
             int completed = queue.Count(x => service.ResolveStatus(x) == ProjectEngineerReviewStatuses.Completed);
-            progressLabel.Text = "Reviewed " + completed.ToString(CultureInfo.InvariantCulture) + " of " + total.ToString(CultureInfo.InvariantCulture);
+            progressLabel.Text = ReviewStrings.Format("ReviewedOf", completed.ToString(CultureInfo.InvariantCulture), total.ToString(CultureInfo.InvariantCulture));
             queueProgress.Percent = total == 0 ? 0 : (int)Math.Round(100.0 * completed / total);
-            toolTip.SetToolTip(progressLabel, completed.ToString(CultureInfo.InvariantCulture) + " of " + total.ToString(CultureInfo.InvariantCulture) + " cases hold a complete, binding-valid engineer response.");
+            toolTip.SetToolTip(progressLabel, ReviewStrings.Format("ReviewedToolTip", completed.ToString(CultureInfo.InvariantCulture), total.ToString(CultureInfo.InvariantCulture)));
         }
 
         // live, presentation-only completeness meter: derived only from answers already entered
@@ -603,18 +717,18 @@ namespace EngiSentry.AutoCAD2021
                 if (string.IsNullOrWhiteSpace(value)) missing++;
             }
             remainingChip.Text = missing == 0
-                ? "All required answers complete"
-                : missing.ToString(CultureInfo.InvariantCulture) + " required answer" + (missing == 1 ? string.Empty : "s") + " remaining";
+                ? ReviewStrings.Get("RemainingAllComplete")
+                : ReviewStrings.Format(missing == 1 ? "RemainingSingular" : "RemainingPlural", missing.ToString(CultureInfo.InvariantCulture));
             remainingChip.ForeColor = missing == 0 ? ReviewUi.Completed : ReviewUi.Required;
             toolTip.SetToolTip(remainingChip, missing == 0
-                ? "Every required question has an answer. Save Review stores the review."
-                : "Required questions are still unanswered. Nothing is stored until Save Review.");
+                ? ReviewStrings.Get("RemainingCompleteToolTip")
+                : ReviewStrings.Get("RemainingPendingToolTip"));
         }
 
         private void UpdateCommentCount()
         {
             int length = comment.TextLength;
-            commentCount.Text = length.ToString(CultureInfo.InvariantCulture) + " / 1000";
+            commentCount.Text = ReviewStrings.Format("CommentCountFormat", length.ToString(CultureInfo.InvariantCulture));
             commentCount.ForeColor = length > 0 ? ReviewUi.Muted : ReviewUi.Caption;
         }
 
@@ -643,10 +757,10 @@ namespace EngiSentry.AutoCAD2021
         {
             summaryCard.SuspendLayout();
             ClearControls(summaryGrid);
-            AddSummaryPair(summaryGrid, 0, 0, "Drawing", request.DrawingName);
-            AddSummaryPair(summaryGrid, 1, 0, "Case", request.ReviewedCaseId);
-            AddSummaryPair(summaryGrid, 0, 1, "Operational result", request.SoftwareResult ?? "<not recorded>");
-            AddSummaryPair(summaryGrid, 1, 1, "Review reason", request.ReviewReason);
+            AddSummaryPair(summaryGrid, 0, 0, ReviewStrings.Get("KeyDrawing"), request.DrawingName);
+            AddSummaryPair(summaryGrid, 1, 0, ReviewStrings.Get("KeyCase"), request.ReviewedCaseId);
+            AddSummaryPair(summaryGrid, 0, 1, ReviewStrings.Get("KeyOperationalResult"), request.SoftwareResult ?? ReviewStrings.Get("ValueNotRecorded"));
+            AddSummaryPair(summaryGrid, 1, 1, ReviewStrings.Get("KeyReviewReason"), request.ReviewReason);
             summaryCard.ResumeLayout();
         }
 
@@ -682,21 +796,21 @@ namespace EngiSentry.AutoCAD2021
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             int added = 0;
-            added += AddEvidenceRow(grid, "Review request ID", request.ReviewRequestId);
-            added += AddEvidenceRow(grid, "Request SHA-256", request.RequestSha256);
-            added += AddEvidenceRow(grid, "Workflow source", request.WorkflowSourceType);
-            added += AddEvidenceRow(grid, "Reviewed case", request.ReviewedCaseId);
-            added += AddEvidenceRow(grid, "Drawing", request.DrawingName);
-            if (!string.IsNullOrWhiteSpace(request.DrawingSha256)) added += AddEvidenceRow(grid, "Drawing SHA-256", request.DrawingSha256);
-            added += AddEvidenceRow(grid, "Software result", request.SoftwareResult);
-            added += AddEvidenceRow(grid, "Software state", request.SoftwareState);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceReviewRequestId"), request.ReviewRequestId);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceRequestSha256"), request.RequestSha256);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceWorkflowSource"), request.WorkflowSourceType);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceReviewedCase"), request.ReviewedCaseId);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceDrawing"), request.DrawingName);
+            if (!string.IsNullOrWhiteSpace(request.DrawingSha256)) added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceDrawingSha256"), request.DrawingSha256);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceSoftwareResult"), request.SoftwareResult);
+            added += AddEvidenceRow(grid, ReviewStrings.Get("EvidenceSoftwareState"), request.SoftwareState);
             foreach (ProjectEngineerReviewEvidenceReference reference in request.EvidenceReferences ?? new List<ProjectEngineerReviewEvidenceReference>())
             {
                 if (string.IsNullOrWhiteSpace(reference.Value)) continue;
                 string key = !string.IsNullOrWhiteSpace(reference.Label) ? reference.Label : reference.Kind;
                 added += AddEvidenceRow(grid, key, reference.Value);
             }
-            evidenceCountChip.Text = added.ToString(CultureInfo.InvariantCulture) + " evidence items";
+            evidenceCountChip.Text = ReviewStrings.Format("EvidenceCountFormat", added.ToString(CultureInfo.InvariantCulture));
             evidenceBody.Controls.Add(grid);
             grid.Height = (grid.RowCount * EvidenceRowHeight) + 2;
             evidenceBody.ResumeLayout();
@@ -763,18 +877,34 @@ namespace EngiSentry.AutoCAD2021
             questionsCard.ResumeLayout();
         }
 
+        // The four question sections are governed upstream; the surface may present their titles
+        // in the selected UI language while the underlying section identifiers stay unchanged.
+        private static readonly Dictionary<string, string> QuestionSectionKeys = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { ProjectEngineerReviewQuestions.SectionCriteriaUx, "SectionCriteriaUx" },
+            { ProjectEngineerReviewQuestions.SectionResultsUx, "SectionResultsUx" },
+            { ProjectEngineerReviewQuestions.SectionEngineeringInterpretation, "SectionEngineeringInterpretation" },
+            { ProjectEngineerReviewQuestions.SectionUsability, "SectionUsability" }
+        };
+
+        private static string LocalizeSection(string section)
+        {
+            return QuestionSectionKeys.TryGetValue(section, out string key) ? ReviewStrings.Get(key) : section;
+        }
+
         private void AddQuestionSectionHeader(TableLayoutPanel grid, string section)
         {
             grid.RowCount++;
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, QuestionSectionHeight));
+            string label = LocalizeSection(section);
             var strip = new Label
             {
-                Text = section.ToUpperInvariant(),
+                Text = label.ToUpperInvariant(),
                 Dock = DockStyle.Fill, BackColor = ReviewUi.SurfaceAlt, ForeColor = ReviewUi.Section,
                 Font = ReviewUi.SectionFont, TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(10, 0, 0, 0), Margin = new Padding(0, 3, 0, 3), AutoEllipsis = true
             };
-            toolTip.SetToolTip(strip, section);
+            toolTip.SetToolTip(strip, label);
             grid.Controls.Add(strip, 0, grid.RowCount - 1);
             grid.SetColumnSpan(strip, 2);
         }
@@ -797,7 +927,7 @@ namespace EngiSentry.AutoCAD2021
                 Text = question.Text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.BodyFont, ForeColor = ReviewUi.Value, AutoEllipsis = true
             };
-            toolTip.SetToolTip(label, question.Text + (question.Required ? " (required)" : " (optional)"));
+            toolTip.SetToolTip(label, question.Text + ReviewStrings.Get(question.Required ? "RequiredSuffix" : "OptionalSuffix"));
             textHost.Controls.Add(label);
             textHost.Controls.Add(marker);
             grid.Controls.Add(textHost, 0, grid.RowCount - 1);
@@ -898,7 +1028,7 @@ namespace EngiSentry.AutoCAD2021
                 int target = (currentIndex + offset) % queue.Count;
                 if (service.ResolveStatus(queue[target]) == ProjectEngineerReviewStatuses.Pending) { ShowCase(target); return; }
             }
-            message.Text = "No pending cases remain.";
+            message.Text = ReviewStrings.Get("MsgNoPending");
             message.Severity = SeverityMessage.Info;
         }
 
@@ -913,7 +1043,7 @@ namespace EngiSentry.AutoCAD2021
             {
                 // inline validation: the reason is mapped back to the exact field that blocked the
                 // save so the engineer sees where to look, not just that something is missing
-                message.Text = "Review not saved — " + incomplete;
+                message.Text = ReviewStrings.Get("MsgNotSavedPrefix") + incomplete;
                 message.Severity = SeverityMessage.Warning;
                 Highlight(MapErrorControl(request, incomplete));
                 return;
@@ -936,12 +1066,12 @@ namespace EngiSentry.AutoCAD2021
             {
                 service.SaveResponse(request, response);
                 ShowCase(currentIndex);
-                message.Text = "Project engineer review saved for " + request.ReviewedCaseId + ".";
+                message.Text = ReviewStrings.Format("MsgSavedFor", request.ReviewedCaseId);
                 message.Severity = SeverityMessage.Success;
             }
             catch (Exception exception)
             {
-                message.Text = "Save failed: " + exception.Message;
+                message.Text = ReviewStrings.Format("MsgSaveFailed", exception.Message);
                 message.Severity = SeverityMessage.Error;
             }
         }
@@ -1092,8 +1222,9 @@ namespace EngiSentry.AutoCAD2021
                 Rectangle r = new Rectangle(0, 0, Math.Max(0, Width - 1), Math.Max(0, Height - 1));
                 using (var path = RoundedPath(r, 8))
                 using (var brush = new SolidBrush(Tint)) g.FillPath(brush, path);
-                TextRenderer.DrawText(g, Text, Font, r, ForeColor,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+                TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
+                if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft;
+                TextRenderer.DrawText(g, Text, Font, r, ForeColor, flags);
             }
         }
 
@@ -1126,7 +1257,10 @@ namespace EngiSentry.AutoCAD2021
                 {
                     int fill = (int)Math.Round(Width * (percent / 100.0));
                     int barWidth = Math.Max(RailHeight, Math.Min(fill, Width));
-                    Rectangle bar = new Rectangle(0, y, barWidth, RailHeight);
+                    // progress grows from the leading edge: left for LTR, right for RTL
+                    Rectangle bar = RightToLeft == RightToLeft.Yes
+                        ? new Rectangle(Width - barWidth, y, barWidth, RailHeight)
+                        : new Rectangle(0, y, barWidth, RailHeight);
                     using (var barPath = RoundedPath(bar, RailHeight / 2))
                     using (var barBrush = new SolidBrush(ReviewUi.Completed)) g.FillPath(barBrush, barPath);
                 }
@@ -1144,7 +1278,7 @@ namespace EngiSentry.AutoCAD2021
             public const int Error = 4;
 
             private const int GlyphBox = 20;
-            private static readonly Font GlyphFont = new Font("Segoe UI", 8F, FontStyle.Bold, GraphicsUnit.Point);
+            private static Font GlyphFont => ReviewUi.GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Bold);
 
             private int severity = None;
 
@@ -1165,22 +1299,31 @@ namespace EngiSentry.AutoCAD2021
                 Graphics g = e.Graphics;
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 using (var back = new SolidBrush(BackColor)) g.FillRectangle(back, e.ClipRectangle);
-                Rectangle text = new Rectangle(2, 0, Math.Max(0, Width - 4), Height);
+                bool rtl = RightToLeft == RightToLeft.Yes;
+                Rectangle text = new Rectangle(rtl ? 0 : 2, 0, Math.Max(0, Width - 4), Height);
                 if (severity == None)
                 {
-                    TextRenderer.DrawText(g, Text, Font, text, ForeColor,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                    TextFormatFlags noneFlags = (rtl ? TextFormatFlags.Right : TextFormatFlags.Left) | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+                    if (rtl) noneFlags |= TextFormatFlags.RightToLeft;
+                    TextRenderer.DrawText(g, Text, Font, text, ForeColor, noneFlags);
                     return;
                 }
                 Color color = severity == Success ? ReviewUi.Completed : severity == Warning ? ReviewUi.Required : severity == Error ? ReviewUi.Invalid : ReviewUi.Accent;
                 string glyph = severity == Success ? "✓" : severity == Warning ? "!" : severity == Error ? "✕" : "●";
-                Rectangle dot = new Rectangle(2, (Height - 15) / 2, 15, 15);
+                // the severity dot sits at the leading edge so the message text follows it in the
+                // current reading direction
+                Rectangle dot = rtl
+                    ? new Rectangle(Width - 17, (Height - 15) / 2, 15, 15)
+                    : new Rectangle(2, (Height - 15) / 2, 15, 15);
                 using (var brush = new SolidBrush(color)) g.FillEllipse(brush, dot);
                 TextRenderer.DrawText(g, glyph, GlyphFont, dot, Color.FromArgb(28, 30, 34),
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-                text = new Rectangle(GlyphBox, 0, Math.Max(0, Width - GlyphBox - 2), Height);
-                TextRenderer.DrawText(g, Text, Font, text, ForeColor,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                text = rtl
+                    ? new Rectangle(0, 0, Math.Max(0, Width - GlyphBox - 2), Height)
+                    : new Rectangle(GlyphBox, 0, Math.Max(0, Width - GlyphBox - 2), Height);
+                TextFormatFlags msgFlags = (rtl ? TextFormatFlags.Right : TextFormatFlags.Left) | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+                if (rtl) msgFlags |= TextFormatFlags.RightToLeft;
+                TextRenderer.DrawText(g, Text, Font, text, ForeColor, msgFlags);
             }
         }
 
@@ -1227,19 +1370,35 @@ namespace EngiSentry.AutoCAD2021
             internal static readonly Color ErrorBack = Color.FromArgb(58, 30, 32);
             internal static readonly Color DisabledText = Color.FromArgb(120, 125, 132);
 
-            internal static readonly Font TitleFont = new Font("Segoe UI Semibold", 14.5F, FontStyle.Bold, GraphicsUnit.Point);
-            internal static readonly Font SubtitleFont = new Font("Segoe UI", 8.5F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font BadgeFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold, GraphicsUnit.Point);
-            internal static readonly Font CounterFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold, GraphicsUnit.Point);
-            internal static readonly Font SectionFont = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold, GraphicsUnit.Point);
-            internal static readonly Font CaptionFont = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font ChipFont = new Font("Segoe UI", 8F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font BodyFont = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font ButtonFont = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font PrimaryButtonFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold, GraphicsUnit.Point);
-            internal static readonly Font ValueFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font MarkerFont = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-            internal static readonly Font MonoFont = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            // Fonts are resolved per UI language so Persian renders in a Persian-capable system
+            // font (Tahoma) while the Latin surface keeps Segoe UI. Instances are cached per
+            // culture; hash/ID values always render in the LTR monospace face.
+            private static readonly Dictionary<string, Font> fontCache = new Dictionary<string, Font>(StringComparer.Ordinal);
+
+            internal static Font GetFont(string family, float size, FontStyle style)
+            {
+                string key = (ReviewLocalization.IsPersian ? "fa|" : "en|") + family + "|" + size.ToString(CultureInfo.InvariantCulture) + "|" + (int)style;
+                if (!fontCache.TryGetValue(key, out Font font))
+                {
+                    font = new Font(family, size, style, GraphicsUnit.Point);
+                    fontCache[key] = font;
+                }
+                return font;
+            }
+
+            internal static Font TitleFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 14.5F, FontStyle.Bold);
+            internal static Font SubtitleFont => GetFont(ReviewLocalization.UiFontFamily, 8.5F, FontStyle.Regular);
+            internal static Font BadgeFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
+            internal static Font CounterFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
+            internal static Font SectionFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 8.5F, FontStyle.Bold);
+            internal static Font CaptionFont => GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Regular);
+            internal static Font ChipFont => GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Regular);
+            internal static Font BodyFont => GetFont(ReviewLocalization.UiFontFamily, 9F, FontStyle.Regular);
+            internal static Font ButtonFont => GetFont(ReviewLocalization.UiFontFamily, 9F, FontStyle.Regular);
+            internal static Font PrimaryButtonFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
+            internal static Font ValueFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Regular);
+            internal static Font MarkerFont => GetFont(ReviewLocalization.UiFontFamily, 10F, FontStyle.Regular);
+            internal static Font MonoFont => GetFont(ReviewLocalization.MonoFontFamily, 9F, FontStyle.Regular);
         }
     }
 }

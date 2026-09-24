@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Persian (فارسی) UI strings for the ES_ENGINEERREVIEW review surface. English is the default
+    language; this file only supplies the selectable Persian UI surface. Presentation only: review
+    questions, answer vocabularies, classifications, status vocabulary, and backend reasons stay
+    governed upstream and are therefore kept identical to the neutral (English) resources.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppTitle" xml:space="preserve">
+    <value>بازبینی مهندس پروژه</value>
+  </data>
+  <data name="AppSubtitle" xml:space="preserve">
+    <value>تنها شواهد مشاهده مهندسی انسانی</value>
+  </data>
+  <data name="AppSubtitleToolTip" xml:space="preserve">
+    <value>فقط شواهد مشاهده مهندسی انسانی را ثبت می‌کند. هرگز تأیید، سیاست اعتبار، وضعیت صادرکننده معتبر، اختیار کلید خصوصی یا فعال‌سازی قانون ایجاد نمی‌کند.</value>
+  </data>
+  <data name="LanguageSwitchToolTip" xml:space="preserve">
+    <value>تغییر زبان رابط کاربری (English / فارسی).</value>
+  </data>
+  <data name="StatusNone" xml:space="preserve">
+    <value>● بدون مورد</value>
+  </data>
+  <data name="StatusPendingBadge" xml:space="preserve">
+    <value>● PENDING</value>
+  </data>
+  <data name="CaseOf" xml:space="preserve">
+    <value>مورد {0} از {1}</value>
+  </data>
+  <data name="ReviewedOf" xml:space="preserve">
+    <value>{0} از {1} بازبینی‌شده</value>
+  </data>
+  <data name="ReviewedToolTip" xml:space="preserve">
+    <value>{0} از {1} مورد دارای پاسخ کامل و معتبر مهندس هستند.</value>
+  </data>
+  <data name="NoCaseToDisplayToolTip" xml:space="preserve">
+    <value>موردی برای نمایش وجود ندارد.</value>
+  </data>
+  <data name="StatusCompletedDetail" xml:space="preserve">
+    <value>پاسخ کامل و معتبر مهندس برای این مورد ثبت شده است.</value>
+  </data>
+  <data name="StatusInvalidDetail" xml:space="preserve">
+    <value>پاسخ ذخیره‌شده نامعتبر است؛ ذخیره‌سازی مجدد آن را جایگزین می‌کند.</value>
+  </data>
+  <data name="StatusPendingDetail" xml:space="preserve">
+    <value>هنوز پاسخ مهندسی برای این مورد ثبت نشده است.</value>
+  </data>
+  <data name="NoReviewableCases" xml:space="preserve">
+    <value>موردی برای بازبینی یافت نشد.</value>
+  </data>
+  <data name="NoCaseSelected" xml:space="preserve">
+    <value>موردی انتخاب نشده است.</value>
+  </data>
+  <data name="SectionIdentity" xml:space="preserve">
+    <value>هویت مهندس</value>
+  </data>
+  <data name="ChipRequiredBeforeSaving" xml:space="preserve">
+    <value>الزامی پیش از ذخیره</value>
+  </data>
+  <data name="FieldReviewerName" xml:space="preserve">
+    <value>نام بازبین / نام نمایشی</value>
+  </data>
+  <data name="FieldReviewerRole" xml:space="preserve">
+    <value>سمت / عنوان شغلی</value>
+  </data>
+  <data name="ReviewerNameToolTip" xml:space="preserve">
+    <value>نامی که بازبین می‌خواهد در شواهد بازبینی ثبت شود.</value>
+  </data>
+  <data name="ReviewerRoleToolTip" xml:space="preserve">
+    <value>سمت یا عنوانی که بازبین می‌خواهد در شواهد بازبینی ثبت شود.</value>
+  </data>
+  <data name="IdentityNote" xml:space="preserve">
+    <value>فقط به عنوان شواهد بازبینی ثبت می‌شود — این تأیید هویت نیست.</value>
+  </data>
+  <data name="SectionSummary" xml:space="preserve">
+    <value>خلاصه مورد</value>
+  </data>
+  <data name="KeyDrawing" xml:space="preserve">
+    <value>نقشه</value>
+  </data>
+  <data name="KeyCase" xml:space="preserve">
+    <value>مورد</value>
+  </data>
+  <data name="KeyOperationalResult" xml:space="preserve">
+    <value>نتیجه عملیاتی</value>
+  </data>
+  <data name="KeyReviewReason" xml:space="preserve">
+    <value>دلیل بازبینی</value>
+  </data>
+  <data name="ValueNotRecorded" xml:space="preserve">
+    <value>&lt;ثبت نشده&gt;</value>
+  </data>
+  <data name="SectionEvidence" xml:space="preserve">
+    <value>شواهد نرم‌افزار</value>
+  </data>
+  <data name="EvidenceCountFormat" xml:space="preserve">
+    <value>{0} مورد شواهد</value>
+  </data>
+  <data name="EvidenceReviewRequestId" xml:space="preserve">
+    <value>شناسه درخواست بازبینی</value>
+  </data>
+  <data name="EvidenceRequestSha256" xml:space="preserve">
+    <value>SHA-256 درخواست</value>
+  </data>
+  <data name="EvidenceWorkflowSource" xml:space="preserve">
+    <value>منبع گردش کار</value>
+  </data>
+  <data name="EvidenceReviewedCase" xml:space="preserve">
+    <value>مورد بازبینی‌شده</value>
+  </data>
+  <data name="EvidenceDrawing" xml:space="preserve">
+    <value>نقشه</value>
+  </data>
+  <data name="EvidenceDrawingSha256" xml:space="preserve">
+    <value>SHA-256 نقشه</value>
+  </data>
+  <data name="EvidenceSoftwareResult" xml:space="preserve">
+    <value>نتیجه نرم‌افزار</value>
+  </data>
+  <data name="EvidenceSoftwareState" xml:space="preserve">
+    <value>وضعیت نرم‌افزار</value>
+  </data>
+  <data name="SectionQuestions" xml:space="preserve">
+    <value>سؤالات بازبینی</value>
+  </data>
+  <data name="RequiredNote" xml:space="preserve">
+    <value>به هر سؤال الزامی (با ● نشان‌شده) پاسخ دهید. تا زمانی که «ذخیره بازبینی» را انتخاب نکنید چیزی ذخیره نمی‌شود.</value>
+  </data>
+  <data name="RequiredSuffix" xml:space="preserve">
+    <value> (الزامی)</value>
+  </data>
+  <data name="OptionalSuffix" xml:space="preserve">
+    <value> (اختیاری)</value>
+  </data>
+  <data name="SectionCriteriaUx" xml:space="preserve">
+    <value>معیارها — تجربه کاربری</value>
+  </data>
+  <data name="SectionResultsUx" xml:space="preserve">
+    <value>نتایج — تجربه کاربری</value>
+  </data>
+  <data name="SectionEngineeringInterpretation" xml:space="preserve">
+    <value>تفسیر مهندسی</value>
+  </data>
+  <data name="SectionUsability" xml:space="preserve">
+    <value>قابلیت استفاده</value>
+  </data>
+  <data name="SectionDisposition" xml:space="preserve">
+    <value>نتیجه‌گیری مهندس</value>
+  </data>
+  <data name="FieldClassification" xml:space="preserve">
+    <value>رده‌بندی</value>
+  </data>
+  <data name="ClassificationToolTip" xml:space="preserve">
+    <value>دقیقاً یک رده‌بندی پیش از ذخیره الزامی است.</value>
+  </data>
+  <data name="ChipRequired" xml:space="preserve">
+    <value>● الزامی</value>
+  </data>
+  <data name="FieldComment" xml:space="preserve">
+    <value>توضیحات مهندس</value>
+  </data>
+  <data name="CommentCountFormat" xml:space="preserve">
+    <value>{0} / 1000</value>
+  </data>
+  <data name="ButtonPrevious" xml:space="preserve">
+    <value>قبلی</value>
+  </data>
+  <data name="ButtonNext" xml:space="preserve">
+    <value>بعدی</value>
+  </data>
+  <data name="ButtonNextPending" xml:space="preserve">
+    <value>مورد در انتظار بعدی</value>
+  </data>
+  <data name="ButtonSave" xml:space="preserve">
+    <value>ذخیره بازبینی</value>
+  </data>
+  <data name="PreviousToolTip" xml:space="preserve">
+    <value>نمایش مورد قبلی در صف بازبینی.</value>
+  </data>
+  <data name="NextToolTip" xml:space="preserve">
+    <value>نمایش مورد بعدی در صف بازبینی.</value>
+  </data>
+  <data name="NextPendingToolTip" xml:space="preserve">
+    <value>پرش به مورد بعدی که هنوز پاسخی برای آن ثبت نشده است.</value>
+  </data>
+  <data name="SaveToolTip" xml:space="preserve">
+    <value>این بازبینی به‌صورت صریح ذخیره می‌شود. هرگز به‌طور خودکار ذخیره نمی‌شود.</value>
+  </data>
+  <data name="MsgCompleted" xml:space="preserve">
+    <value>این مورد از قبل تکمیل شده — بازبینی ثبت‌شده نمایش داده می‌شود.</value>
+  </data>
+  <data name="MsgInvalid" xml:space="preserve">
+    <value>پاسخ ذخیره‌شده نامعتبر است؛ ذخیره‌سازی مجدد آن را جایگزین می‌کند.</value>
+  </data>
+  <data name="MsgNoPending" xml:space="preserve">
+    <value>مورد در انتظاری باقی نمانده است.</value>
+  </data>
+  <data name="MsgNotSavedPrefix" xml:space="preserve">
+    <value>بازبینی ذخیره نشد — </value>
+  </data>
+  <data name="MsgSavedFor" xml:space="preserve">
+    <value>بازبینی مهندس پروژه برای {0} ذخیره شد.</value>
+  </data>
+  <data name="MsgSaveFailed" xml:space="preserve">
+    <value>ذخیره‌سازی ناموفق: {0}</value>
+  </data>
+  <data name="RemainingAllComplete" xml:space="preserve">
+    <value>تمام پاسخ‌های الزامی کامل است</value>
+  </data>
+  <data name="RemainingSingular" xml:space="preserve">
+    <value>{0} پاسخ الزامی باقی مانده است</value>
+  </data>
+  <data name="RemainingPlural" xml:space="preserve">
+    <value>{0} پاسخ الزامی باقی مانده‌اند</value>
+  </data>
+  <data name="RemainingCompleteToolTip" xml:space="preserve">
+    <value>همه سؤالات الزامی پاسخ داده شده‌اند. «ذخیره بازبینی» بازبینی را ثبت می‌کند.</value>
+  </data>
+  <data name="RemainingPendingToolTip" xml:space="preserve">
+    <value>هنوز به سؤالات الزامی پاسخ داده نشده است. تا «ذخیره بازبینی» چیزی ذخیره نمی‌شود.</value>
+  </data>
+</root>
