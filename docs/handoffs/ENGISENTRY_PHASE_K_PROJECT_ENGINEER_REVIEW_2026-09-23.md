@@ -217,11 +217,35 @@ AutoCAD 2021 visual runtime acceptance (visual-only; no review was filled or sav
   resize. Cursor-based input injection is unavailable in this environment, so no mouse/capture
   path was used.
 
+## UI polish follow-up pass (presentation only)
+
+A second presentation-only pass refined the accepted polished surface. No review logic, persistence,
+P10.3 question set, answer vocabularies, classifications, governance, or authority behavior changed.
+
+- Card order was rebalanced so the primary review flow fits the first screen: Engineer Identity,
+  Review Questions, then Engineer Disposition (classification + comment) now sit above the fold at
+  the accepted 1000x960 window, with all 14 questions and all four section headers visible without
+  scrolling. Case Summary and Software Evidence follow as audit reference material.
+- The live "N required answers remaining" and evidence counter chips were clipping their text at a
+  default 100 px width; they are now sized for their longest text, right-aligned, and
+  truncation-ready, so a counter never clips mid-update.
+- Card headers gained a subtly tinted band with a hairline divider for clearer section hierarchy.
+- Dark-theme polish: the queue progress rail is a rounded pill, the evidence key/value list is
+  faintly zebra-banded for scanability, disabled navigation buttons read as buttons again, and the
+  header status stack (badge / case counter / progress rail) was widened and centered.
+
+Build / test:
+
+- Debug x64 rebuild: PASS, 0 errors. Focused UI contract assertions: PASS, 74 assertions (including
+  the no-sibling-overlap and field-sizing layout sanity at the accepted window size); full test
+  executable: PASS, final line `All EngiSentry M2.2 through M5.0 tests passed.`
+
 ## Status
 
 - Implementation: complete.
 - Build / focused tests / full tests / deployment / AutoCAD runtime visual acceptance: PASS.
 - Real P10.3 engineering reviews: still PENDING and untouched — no engineer answer was fabricated.
-- Commits: `feat: add governed engineer review workflow`, then `ui: polish project engineer review`.
+- Commits: `feat: add governed engineer review workflow`, then `ui: polish project engineer review`,
+  then a second presentation-only polish pass (`ui: polish engineer review surface`).
 - Push: NO.
 - Next: REAL PROJECT ENGINEER completes the four pending P10.3 reviews.
