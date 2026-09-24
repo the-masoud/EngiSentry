@@ -168,6 +168,70 @@ namespace EngiSentry.Tests
                 renderControl.Dispose();
                 ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
 
+                // 6c. governed values are shown in Persian while every canonical token stays exact:
+                // questions, answer choices, statuses, classifications, and validation reasons
+                ReviewLocalization.Apply(CultureInfo.GetCultureInfo("fa-IR"));
+                foreach (ProjectEngineerReviewQuestionDefinition question in ProjectEngineerReviewQuestions.All)
+                {
+                    Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Question(question) != question.Text, "Each question text must have a Persian display form: " + question.QuestionId);
+                    Assert(ContainsPersian(EngiSentry.AutoCAD2021.ReviewDisplayText.Question(question)), "The Persian question display must actually be Persian: " + question.QuestionId);
+                }
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("Yes") == "بله", "Persian Yes answer display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("No") == "خیر", "Persian No answer display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("N/A") == "نامرتبط", "Persian N/A answer display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("Needs review") == "نیاز به بازبینی", "Persian Needs review answer display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Status(ProjectEngineerReviewStatuses.Pending) == "در انتظار", "Persian PENDING status display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Status(ProjectEngineerReviewStatuses.Completed) == "تکمیل‌شده", "Persian COMPLETED status display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Status(ProjectEngineerReviewStatuses.Invalid) == "نامعتبر", "Persian INVALID status display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Classification(ProjectEngineerReviewClassifications.Pass) == "تأیید شد", "Persian PASS classification display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Classification(ProjectEngineerReviewClassifications.EngineeringReviewRequired) == "بازبینی مهندسی الزامی است", "Persian ENGINEERING_REVIEW_REQUIRED classification display is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Reason("Reviewer display name is required before saving.") == "نام نمایشی بازبین پیش از ذخیره الزامی است.", "Persian reviewer-name reason is wrong.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Reason("Answer required: Road minimum understandable") == "پاسخ الزامی است: حداقل الزامی جاده قابل درک است", "Persian answer-required reason must map its question tail too.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Reason("A review classification is required before saving.") == "یک رده‌بندی بازبینی پیش از ذخیره الزامی است.", "Persian classification-required reason is wrong.");
+                // unknown tokens must fall through unchanged, never be masked
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("SOMETHING_ELSE") == "SOMETHING_ELSE", "Unknown answer tokens must fall through unchanged.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Reason("Some reason the service never emits") == "Some reason the service never emits", "Unknown reasons must fall through unchanged.");
+
+                // 6d. in English the display layer is exactly the canonical value (identity)
+                ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
+                foreach (ProjectEngineerReviewQuestionDefinition question in ProjectEngineerReviewQuestions.All)
+                    Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Question(question) == question.Text, "English question display must equal the canonical text: " + question.QuestionId);
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("Yes") == "Yes" && EngiSentry.AutoCAD2021.ReviewDisplayText.Answer("N/A") == "N/A", "English answer display must equal the canonical value.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Status(ProjectEngineerReviewStatuses.Pending) == "PENDING", "English status display must equal the canonical token.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Classification(ProjectEngineerReviewClassifications.Pass) == "PASS", "English classification display must equal the canonical token.");
+                Assert(EngiSentry.AutoCAD2021.ReviewDisplayText.Reason("Answer required: Road minimum understandable") == "Answer required: Road minimum understandable", "English reason display must equal the canonical reason.");
+
+                // 6e. the Persian surface shows the localized governed values while its combos still
+                // hold the canonical tokens, so selection and persistence are byte-identical
+                ReviewLocalization.Apply(CultureInfo.GetCultureInfo("fa-IR"));
+                var governedControl = new EngiSentry.AutoCAD2021.ProjectEngineerReviewControl(service);
+                Assert(governedControl.RightToLeft == RightToLeft.Yes, "The Persian governed surface must stay RTL.");
+                foreach (ProjectEngineerReviewQuestionDefinition question in ProjectEngineerReviewQuestions.All)
+                {
+                    Control answer = AnswerControl(governedControl, question.QuestionId);
+                    if (answer is ComboBox combo)
+                    {
+                        List<string> items = combo.Items.Cast<string>().ToList();
+                        List<string> expected = new List<string> { string.Empty }.Concat(ProjectEngineerAnswerKinds.AllowedAnswers(question.AnswerKind)).ToList();
+                        Assert(items.SequenceEqual(expected, StringComparer.Ordinal), "Answer combo items must stay canonical in Persian Mode for " + question.QuestionId + ".");
+                        Assert(combo.DrawMode == DrawMode.OwnerDrawFixed, "Answer combos must be owner-drawn so Persian text renders without changing the canonical items: " + question.QuestionId);
+                        Assert((string)combo.SelectedItem == string.Empty && combo.SelectedIndex == 0, "No answer may be preselected in Persian mode: " + question.QuestionId);
+                    }
+                }
+                ComboBox persianClassification = Descendants(governedControl).OfType<ComboBox>().Single(c => c.Items.Cast<string>().Contains(ProjectEngineerReviewClassifications.EngineeringReviewRequired));
+                Assert(persianClassification.Items.Cast<string>().SequenceEqual(new List<string> { string.Empty }.Concat(ProjectEngineerReviewClassifications.All), StringComparer.Ordinal), "Classification combo items must stay canonical in Persian mode.");
+                Assert(persianClassification.DrawMode == DrawMode.OwnerDrawFixed, "The classification combo must be owner-drawn in Persian mode.");
+                Label persianBadge = Descendants(governedControl).OfType<Label>().First(l => l.Text.EndsWith(" " + ReviewStrings.Get("StatusPending"), StringComparison.Ordinal));
+                Assert(persianBadge.Text.Contains("در انتظار"), "The Persian header badge must show the localized status.");
+                // every question label on the Persian surface reads in Persian
+                foreach (ProjectEngineerReviewQuestionDefinition question in ProjectEngineerReviewQuestions.All)
+                {
+                    Label questionLabel = Descendants(governedControl).OfType<Label>().First(l => l.Text == EngiSentry.AutoCAD2021.ReviewDisplayText.Question(question));
+                    Assert(ContainsPersian(questionLabel.Text), "The Persian question label must render Persian: " + question.QuestionId);
+                }
+                governedControl.Dispose();
+                ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
+
                 // 7. a language switch preserves unsaid entries and writes nothing
                 ReviewerNameBox(persianControl).Text = "Test Reviewer";
                 ReviewerRoleBox(persianControl).Text = "Test Role";

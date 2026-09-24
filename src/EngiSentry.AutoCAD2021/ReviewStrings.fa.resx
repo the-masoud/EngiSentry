@@ -277,4 +277,106 @@
   <data name="RemainingPendingToolTip" xml:space="preserve">
     <value>هنوز به سؤالات الزامی پاسخ داده نشده است. تا «ذخیره بازبینی» چیزی ذخیره نمی‌شود.</value>
   </data>
+  <!--
+    Display-layer Persian mappings for governed values. These are shown in place of the
+    canonical tokens (question texts, answer choices, statuses, classifications, validation
+    reasons). The canonical tokens themselves stay exactly as upstream — combos still hold and
+    persist them; only the visible text is Persian.
+  -->
+  <data name="Question_criteria_road_minimum" xml:space="preserve">
+    <value>حداقل الزامی جاده قابل درک است</value>
+  </data>
+  <data name="Question_criteria_fence_minimum" xml:space="preserve">
+    <value>حداقل الزامی حصار گیاهی/امنیتی قابل درک است</value>
+  </data>
+  <data name="Question_criteria_unit_boundary" xml:space="preserve">
+    <value>حداقل الزامی مرز واحد قابل درک است</value>
+  </data>
+  <data name="Question_results_understandable_without_json" xml:space="preserve">
+    <value>نتیجه بدون باز کردن JSON قابل درک است</value>
+  </data>
+  <data name="Question_results_observed_distance" xml:space="preserve">
+    <value>فاصله مشاهده‌شده قابل درک است</value>
+  </data>
+  <data name="Question_results_insufficient_evidence" xml:space="preserve">
+    <value>نقص شواهد قابل درک است</value>
+  </data>
+  <data name="Question_results_governance_wording" xml:space="preserve">
+    <value>عبارت فرمانروایی قابل درک است</value>
+  </data>
+  <data name="Question_interpretation_technically_plausible" xml:space="preserve">
+    <value>نتیجه از نظر فنی محتمل به نظر می‌رسد</value>
+  </data>
+  <data name="Question_interpretation_false_positive" xml:space="preserve">
+    <value>مثبت کاذب مشکوک است</value>
+  </data>
+  <data name="Question_interpretation_false_negative" xml:space="preserve">
+    <value>منفی کاذب مشکوک است</value>
+  </data>
+  <data name="Question_interpretation_ambiguous_reported" xml:space="preserve">
+    <value>شواهد مبهم/غایب نقشه به‌درستی گزارش شده است</value>
+  </data>
+  <data name="Question_usability_blocking_issue" xml:space="preserve">
+    <value>مشکل بازدارنده قابلیت استفاده</value>
+  </data>
+  <data name="Question_usability_issue_description" xml:space="preserve">
+    <value>شرح مشکل</value>
+  </data>
+  <data name="Question_usability_engineer_comment" xml:space="preserve">
+    <value>توضیحات مهندس</value>
+  </data>
+  <data name="AnswerYes" xml:space="preserve">
+    <value>بله</value>
+  </data>
+  <data name="AnswerNo" xml:space="preserve">
+    <value>خیر</value>
+  </data>
+  <data name="AnswerNotApplicable" xml:space="preserve">
+    <value>نامرتبط</value>
+  </data>
+  <data name="AnswerNeedsReview" xml:space="preserve">
+    <value>نیاز به بازبینی</value>
+  </data>
+  <data name="StatusPending" xml:space="preserve">
+    <value>در انتظار</value>
+  </data>
+  <data name="StatusCompleted" xml:space="preserve">
+    <value>تکمیل‌شده</value>
+  </data>
+  <data name="StatusInvalid" xml:space="preserve">
+    <value>نامعتبر</value>
+  </data>
+  <data name="Classification_PASS" xml:space="preserve">
+    <value>تأیید شد</value>
+  </data>
+  <data name="Classification_USABILITY_ISSUE" xml:space="preserve">
+    <value>مشکل قابلیت استفاده</value>
+  </data>
+  <data name="Classification_SUSPECTED_PRODUCT_DEFECT" xml:space="preserve">
+    <value>مشکوک به نقص محصول</value>
+  </data>
+  <data name="Classification_DRAWING_EVIDENCE_LIMITATION" xml:space="preserve">
+    <value>محدودیت شواهد نقشه</value>
+  </data>
+  <data name="Classification_ENGINEERING_REVIEW_REQUIRED" xml:space="preserve">
+    <value>بازبینی مهندسی الزامی است</value>
+  </data>
+  <data name="ReasonReviewerName" xml:space="preserve">
+    <value>نام نمایشی بازبین پیش از ذخیره الزامی است.</value>
+  </data>
+  <data name="ReasonReviewerRole" xml:space="preserve">
+    <value>سمت/عنوان شغلی بازبین پیش از ذخیره الزامی است.</value>
+  </data>
+  <data name="ReasonAnswerRequired" xml:space="preserve">
+    <value>پاسخ الزامی است: </value>
+  </data>
+  <data name="ReasonAnswerVocabulary" xml:space="preserve">
+    <value>پاسخ در واژگان مجاز نیست: </value>
+  </data>
+  <data name="ReasonClassificationRequired" xml:space="preserve">
+    <value>یک رده‌بندی بازبینی پیش از ذخیره الزامی است.</value>
+  </data>
+  <data name="ReasonUnsupportedClassification" xml:space="preserve">
+    <value>رده‌بندی پشتیبانی نمی‌شود: </value>
+  </data>
 </root>

@@ -276,4 +276,106 @@
   <data name="RemainingPendingToolTip" xml:space="preserve">
     <value>Required questions are still unanswered. Nothing is stored until Save Review.</value>
   </data>
+  <!--
+    Display-layer mappings for governed values. In the neutral (English) resources every value is
+    the canonical upstream value itself, so the accepted English surface is unchanged; the Persian
+    resources carry the shown text. Canonical values (combo items, selections, persisted strings)
+    are never replaced — only rendered through these strings in Persian mode.
+  -->
+  <data name="Question_criteria_road_minimum" xml:space="preserve">
+    <value>Road minimum understandable</value>
+  </data>
+  <data name="Question_criteria_fence_minimum" xml:space="preserve">
+    <value>Plant / Security Fence minimum understandable</value>
+  </data>
+  <data name="Question_criteria_unit_boundary" xml:space="preserve">
+    <value>Unit Boundary minimum understandable</value>
+  </data>
+  <data name="Question_results_understandable_without_json" xml:space="preserve">
+    <value>Result understandable without opening JSON</value>
+  </data>
+  <data name="Question_results_observed_distance" xml:space="preserve">
+    <value>Observed distance understandable</value>
+  </data>
+  <data name="Question_results_insufficient_evidence" xml:space="preserve">
+    <value>Insufficient evidence understandable</value>
+  </data>
+  <data name="Question_results_governance_wording" xml:space="preserve">
+    <value>Governance wording understandable</value>
+  </data>
+  <data name="Question_interpretation_technically_plausible" xml:space="preserve">
+    <value>Result appears technically plausible</value>
+  </data>
+  <data name="Question_interpretation_false_positive" xml:space="preserve">
+    <value>False positive suspected</value>
+  </data>
+  <data name="Question_interpretation_false_negative" xml:space="preserve">
+    <value>False negative suspected</value>
+  </data>
+  <data name="Question_interpretation_ambiguous_reported" xml:space="preserve">
+    <value>Ambiguous/missing drawing evidence correctly reported</value>
+  </data>
+  <data name="Question_usability_blocking_issue" xml:space="preserve">
+    <value>Blocking usability issue</value>
+  </data>
+  <data name="Question_usability_issue_description" xml:space="preserve">
+    <value>Issue description</value>
+  </data>
+  <data name="Question_usability_engineer_comment" xml:space="preserve">
+    <value>Engineer comment</value>
+  </data>
+  <data name="AnswerYes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="AnswerNo" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="AnswerNotApplicable" xml:space="preserve">
+    <value>N/A</value>
+  </data>
+  <data name="AnswerNeedsReview" xml:space="preserve">
+    <value>Needs review</value>
+  </data>
+  <data name="StatusPending" xml:space="preserve">
+    <value>PENDING</value>
+  </data>
+  <data name="StatusCompleted" xml:space="preserve">
+    <value>COMPLETED</value>
+  </data>
+  <data name="StatusInvalid" xml:space="preserve">
+    <value>INVALID</value>
+  </data>
+  <data name="Classification_PASS" xml:space="preserve">
+    <value>PASS</value>
+  </data>
+  <data name="Classification_USABILITY_ISSUE" xml:space="preserve">
+    <value>USABILITY_ISSUE</value>
+  </data>
+  <data name="Classification_SUSPECTED_PRODUCT_DEFECT" xml:space="preserve">
+    <value>SUSPECTED_PRODUCT_DEFECT</value>
+  </data>
+  <data name="Classification_DRAWING_EVIDENCE_LIMITATION" xml:space="preserve">
+    <value>DRAWING_EVIDENCE_LIMITATION</value>
+  </data>
+  <data name="Classification_ENGINEERING_REVIEW_REQUIRED" xml:space="preserve">
+    <value>ENGINEERING_REVIEW_REQUIRED</value>
+  </data>
+  <data name="ReasonReviewerName" xml:space="preserve">
+    <value>Reviewer display name is required before saving.</value>
+  </data>
+  <data name="ReasonReviewerRole" xml:space="preserve">
+    <value>Reviewer role/title is required before saving.</value>
+  </data>
+  <data name="ReasonAnswerRequired" xml:space="preserve">
+    <value>Answer required: </value>
+  </data>
+  <data name="ReasonAnswerVocabulary" xml:space="preserve">
+    <value>Answer not in the allowed vocabulary: </value>
+  </data>
+  <data name="ReasonClassificationRequired" xml:space="preserve">
+    <value>A review classification is required before saving.</value>
+  </data>
+  <data name="ReasonUnsupportedClassification" xml:space="preserve">
+    <value>Unsupported classification: </value>
+  </data>
 </root>

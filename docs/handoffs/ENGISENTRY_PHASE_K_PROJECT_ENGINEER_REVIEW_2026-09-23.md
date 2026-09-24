@@ -334,13 +334,87 @@ Safety:
 - No review response was created or saved; the real P10.3 reviews remain PENDING and untouched.
 - No DWG was opened, read, or modified.
 
+## Display-layer completion: governed values now localized in Persian (presentation only)
+
+The first pass left five governed value groups rendering in canonical English even in Persian mode:
+question texts, answer choices, status labels, classification labels, and validation messages. These
+are now shown in Persian too, while every canonical value stays byte-identical wherever it is stored,
+matched, or persisted. No backend logic, persistence format, question set, vocabulary, governance, or
+authority behavior changed, and no new dependency was introduced.
+
+The mechanism is a strict display layer, never a value replacement:
+
+- Added `src/EngiSentry.AutoCAD2021/ReviewDisplayText.cs` — converts a canonical token into the text
+  shown in the current UI language. In English every mapping is the identity of the canonical value
+  (the neutral resources hold the canonical value itself), so the accepted English surface is
+  unchanged. In Persian the same token is rendered through the Persian resources. Tokens with no
+  mapping fall through unchanged rather than being masked.
+- The answer and classification combos are now owner-drawn: the item objects stay the canonical
+  tokens, so selection, `CaptureAnswers`, and persistence are byte-identical — only the painted entry
+  is localized. The owner-draw honors the surface's RTL direction.
+- Question labels and their tooltips render through the display layer; the header status badge renders
+  the status word through it, keeping its glyph prefix.
+- The inline validation message shows the backend reason localized, including the prefix-bearing
+  reasons whose tail is a canonical question text or classification token. The canonical reason is
+  still what drives the field-highlight mapping and what is compared upstream — nothing is translated
+  before it reaches the gate.
+- The canonical reason literals the gate produces are duplicated inside the display layer on purpose:
+  the service stays untouched, so the display layer carries its own copy of the exact reason text it
+  matches against, and any reason the service does not produce falls through unchanged.
+
+Resource additions to `ReviewStrings.resx` / `ReviewStrings.fa.resx`: the 14 question texts, the four
+bounded answer choices, the three statuses, the five classifications, and the six validation reason
+strings/prefixes. The neutral entries hold the canonical values verbatim, which is what makes English
+an exact identity.
+
+Files added:
+
+- `src/EngiSentry.AutoCAD2021/ReviewDisplayText.cs` — display-layer mapping.
+
+Files modified:
+
+- `src/EngiSentry.AutoCAD2021/ProjectEngineerReviewControl.cs` — question labels/tooltips, status
+  badge, owner-drawn answer/classification combos, and the validation message render through the
+  display layer.
+- `src/EngiSentry.AutoCAD2021/EngiSentry.AutoCAD2021.csproj` — compile entry.
+- `src/EngiSentry.AutoCAD2021/ReviewStrings.resx`, `ReviewStrings.fa.resx` — display-layer resources.
+- `tests/PhaseProjectEngineerReviewLocalizationTests.cs` — focused display-layer assertions.
+
+Focused display-layer assertions (new): all 14 questions have a Persian display form and it is
+actually Persian; the four answer choices, three statuses, and five classifications map to their exact
+Persian strings; prefix-bearing reasons localize their tail too; unknown tokens and reasons fall
+through unchanged; in English every mapping is exactly the canonical value; on the live Persian surface
+the answer and classification combos still hold exactly the canonical item sets (with the empty leading
+item) and are owner-drawn, nothing is preselected, the header badge shows the localized status, and
+every question label renders Persian.
+
+Build / focused tests:
+
+- Release x64 solution rebuild with `-warnaserror` (MSBuild 17.14): PASS, 0 warnings, 0 errors.
+- Focused localization assertions: PASS, 455 assertions (up from 341) — including the live RTL render
+  pass and the new display-layer coverage.
+- Full Release test executable: PASS, exit code 0, final line
+  `All EngiSentry M2.2 through M5.0 tests passed.`
+- Unchanged focused suites confirm the English surface is unaffected: Phase Project Engineer Review 64
+  assertions, Phase Project Engineer Review UI 74 assertions (byte-identical English labels, exact
+  canonical vocabularies and item sets, no preselection).
+
+Safety:
+
+- Canonical question texts, answer values, status tokens, classification tokens, and validation
+  reasons are never replaced — only rendered through a language-dependent display mapping.
+- No review response was created or saved; the real P10.3 reviews remain PENDING and untouched.
+- No DWG was opened, read, or modified.
+
 ## Status
 
-- Implementation: complete (plus Persian UI localization + RTL, presentation only).
+- Implementation: complete (plus Persian UI localization + RTL, and display-layer localization
+  of governed values — presentation only).
 - Build / focused tests / full tests / deployment / AutoCAD runtime visual acceptance: PASS.
 - Real P10.3 engineering reviews: still PENDING and untouched — no engineer answer was fabricated.
 - Commits: `feat: add governed engineer review workflow`, then `ui: polish project engineer review`,
   then a second presentation-only polish pass (`ui: polish engineer review surface`), then
-  `ui: add Persian localization to engineer review surface`.
+  `ui: add Persian localization to engineer review surface`, then
+  `ui: localize governed values in Persian review surface`.
 - Push: NO.
 - Next: REAL PROJECT ENGINEER completes the four pending P10.3 reviews.

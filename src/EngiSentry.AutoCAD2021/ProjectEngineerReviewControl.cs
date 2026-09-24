@@ -443,6 +443,10 @@ namespace EngiSentry.AutoCAD2021
             classification.SelectedIndex = 0;
             classification.AccessibleName = "Classification";
             classification.TabIndex = 24;
+            // the combo holds canonical classification tokens and persists exactly those; only the
+            // painted entry is localized
+            classification.DrawMode = DrawMode.OwnerDrawFixed;
+            classification.DrawItem += DrawClassificationItem;
             toolTip.SetToolTip(classification, ReviewStrings.Get("ClassificationToolTip"));
             grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldClassification"), classification, MakeChip(ReviewStrings.Get("ChipRequired"), ReviewUi.Required)), 0, 0);
 
@@ -581,6 +585,41 @@ namespace EngiSentry.AutoCAD2021
             return chip;
         }
 
+        // Owner-draw for the answer/classification combos: the item objects stay canonical so the
+        // selection, CaptureAnswers, and persistence are byte-identical; only the painted text runs
+        // through the display layer so Persian shows Persian choice text and English shows the
+        // canonical vocabulary.
+        private static void DrawAnswerItem(object sender, DrawItemEventArgs e)
+        {
+            ComboBox combo = (ComboBox)sender;
+            if (e.Index < 0 || e.Index >= combo.Items.Count) return;
+            string canonical = (string)combo.Items[e.Index];
+            PaintComboItem(combo, e, ReviewDisplayText.Answer(canonical));
+        }
+
+        private static void DrawClassificationItem(object sender, DrawItemEventArgs e)
+        {
+            ComboBox combo = (ComboBox)sender;
+            if (e.Index < 0 || e.Index >= combo.Items.Count) return;
+            string canonical = (string)combo.Items[e.Index];
+            PaintComboItem(combo, e, ReviewDisplayText.Classification(canonical));
+        }
+
+        private static void PaintComboItem(ComboBox combo, DrawItemEventArgs e, string display)
+        {
+            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            using (var back = new SolidBrush(selected ? ReviewUi.SurfaceAlt : combo.BackColor))
+                e.Graphics.FillRectangle(back, e.Bounds);
+            Color fore = selected ? ReviewUi.Value : combo.ForeColor;
+            if (string.IsNullOrEmpty(display)) { e.DrawFocusRectangle(); return; }
+            TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+            flags |= combo.RightToLeft == RightToLeft.Yes
+                ? TextFormatFlags.Right | TextFormatFlags.RightToLeft
+                : TextFormatFlags.Left;
+            TextRenderer.DrawText(e.Graphics, display, combo.Font, e.Bounds, fore, flags);
+            e.DrawFocusRectangle();
+        }
+
         private static void StyleButton(Button button, bool primary)
         {
             button.FlatStyle = FlatStyle.Flat;
@@ -683,7 +722,7 @@ namespace EngiSentry.AutoCAD2021
                 return;
             }
             caseLabel.Text = ReviewStrings.Format("CaseOf", (index + 1).ToString(CultureInfo.InvariantCulture), queue.Count.ToString(CultureInfo.InvariantCulture));
-            statusBadge.Text = StatusGlyph(status) + " " + status;
+            statusBadge.Text = StatusGlyph(status) + " " + ReviewDisplayText.Status(status);
             statusBadge.ForeColor = StatusColor(status);
             statusBadge.Tint = StatusTint(status);
             string detail = status == ProjectEngineerReviewStatuses.Completed
@@ -924,10 +963,10 @@ namespace EngiSentry.AutoCAD2021
             };
             var label = new Label
             {
-                Text = question.Text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Text = ReviewDisplayText.Question(question), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.BodyFont, ForeColor = ReviewUi.Value, AutoEllipsis = true
             };
-            toolTip.SetToolTip(label, question.Text + ReviewStrings.Get(question.Required ? "RequiredSuffix" : "OptionalSuffix"));
+            toolTip.SetToolTip(label, ReviewDisplayText.Question(question) + ReviewStrings.Get(question.Required ? "RequiredSuffix" : "OptionalSuffix"));
             textHost.Controls.Add(label);
             textHost.Controls.Add(marker);
             grid.Controls.Add(textHost, 0, grid.RowCount - 1);
@@ -957,6 +996,10 @@ namespace EngiSentry.AutoCAD2021
                 foreach (string value in ProjectEngineerAnswerKinds.AllowedAnswers(question.AnswerKind)) combo.Items.Add(value);
                 combo.SelectedIndex = 0;
                 combo.SelectedIndexChanged += HandleAnswerChanged;
+                // items stay canonical so selection and persistence are byte-identical; only the
+                // painted text is localized
+                combo.DrawMode = DrawMode.OwnerDrawFixed;
+                combo.DrawItem += DrawAnswerItem;
                 answer = combo;
             }
             grid.Controls.Add(answer, 1, grid.RowCount - 1);
@@ -1042,8 +1085,9 @@ namespace EngiSentry.AutoCAD2021
             if (incomplete != null)
             {
                 // inline validation: the reason is mapped back to the exact field that blocked the
-                // save so the engineer sees where to look, not just that something is missing
-                message.Text = ReviewStrings.Get("MsgNotSavedPrefix") + incomplete;
+                // save so the engineer sees where to look, not just that something is missing. The
+                // canonical reason drives field mapping; the displayed text is localized.
+                message.Text = ReviewStrings.Get("MsgNotSavedPrefix") + ReviewDisplayText.Reason(incomplete);
                 message.Severity = SeverityMessage.Warning;
                 Highlight(MapErrorControl(request, incomplete));
                 return;
