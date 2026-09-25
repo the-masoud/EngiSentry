@@ -747,6 +747,7 @@ namespace EngiSentry.Tests
             return new EquipmentPlacement
             {
                 PlacementId = placementId,
+                EquipmentEntityId = placementId.StartsWith("placement:", StringComparison.Ordinal) ? placementId.Substring("placement:".Length) : placementId,
                 TagSourceHandle = tagHandle,
                 PlacementStatus = "Complete",
                 EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment,

@@ -22,7 +22,7 @@ namespace EngiSentry.Rules
             DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
             if (conflict != null)
                 return ruleRegistry.Rules.OrderBy(x => x.RuleId, StringComparer.Ordinal)
-                    .Select(rule => ConflictEvaluation(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters, rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance, conflict, ApplicablePlacements(plotPlan, rule.RequiredApplicabilityKey).Count)).ToList();
+                    .Select(rule => ConflictEvaluation(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters, rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance, conflict, ApplicableEntityCount(ApplicablePlacements(plotPlan, rule.RequiredApplicabilityKey)))).ToList();
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
@@ -57,7 +57,7 @@ namespace EngiSentry.Rules
 
             DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
             if (conflict != null)
-                return ConflictEvaluation(constraint.Rule?.RuleId ?? constraint.ConstraintId, constraint.MeasurementKind, constraint.MinimumDistanceMeters, constraint.RequiredMeasurementBasisKey, constraint.RequiredApplicabilityKey, null, conflict, ApplicablePlacements(plotPlan, constraint.RequiredApplicabilityKey).Count);
+                return ConflictEvaluation(constraint.Rule?.RuleId ?? constraint.ConstraintId, constraint.MeasurementKind, constraint.MinimumDistanceMeters, constraint.RequiredMeasurementBasisKey, constraint.RequiredApplicabilityKey, null, conflict, ApplicableEntityCount(ApplicablePlacements(plotPlan, constraint.RequiredApplicabilityKey)));
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
@@ -113,15 +113,17 @@ namespace EngiSentry.Rules
         {
             string subjectKind = measurementKind == "EquipmentToRoad2D" ? "Road" : "Boundary";
             double minimumDistanceDrawingUnits = DrawingUnitResolver.MetersToDrawingUnits(decimal.ToDouble(minimumDistanceMeters), unitResolution);
-            var evaluableIds = new HashSet<string>(applicablePlacements.Where(IsEvaluablePlacement).Select(x => x.PlacementId), StringComparer.Ordinal);
+            List<EquipmentPlacement> canonicalRepresentatives = CanonicalRepresentatives(applicablePlacements);
+            var evaluableIds = canonicalRepresentatives.ToDictionary(x => x.PlacementId, x => x.EquipmentEntityId, StringComparer.Ordinal);
             List<EquipmentSpatialMeasurement> governing = measurements
                 .Where(x => string.Equals(x.SubjectKind, subjectKind, StringComparison.Ordinal)
                     && string.Equals(x.EngineeringMeasurementBasisKey, requiredMeasurementBasisKey, StringComparison.Ordinal)
                     && string.Equals(x.EngineeringApplicabilityKey, requiredApplicabilityKey, StringComparison.Ordinal)
-                    && evaluableIds.Contains(x.PlacementId))
-                .GroupBy(x => x.PlacementId, StringComparer.Ordinal)
-                .Select(x => x.OrderBy(y => y.Distance2D).ThenBy(y => y.MeasurementId, StringComparer.Ordinal).First())
-                .OrderBy(x => x.PlacementId, StringComparer.Ordinal)
+                    && evaluableIds.TryGetValue(x.PlacementId, out string? entityId)
+                    && string.Equals(x.EquipmentEntityId, entityId, StringComparison.Ordinal))
+                .GroupBy(x => x.EquipmentEntityId, StringComparer.Ordinal)
+                .Select(x => x.OrderBy(y => y.PlacementId, StringComparer.Ordinal).ThenBy(y => y.Distance2D).ThenBy(y => y.MeasurementId, StringComparer.Ordinal).First())
+                .OrderBy(x => x.EquipmentEntityId, StringComparer.Ordinal)
                 .ThenBy(x => x.MeasurementId, StringComparer.Ordinal)
                 .ToList();
 
@@ -138,9 +140,9 @@ namespace EngiSentry.Rules
                 RequiredApplicabilityKey = requiredApplicabilityKey,
                 CriteriaProvenance = CopyCriteriaProvenance(criteriaProvenance),
                 EvaluatedSubjectCount = governing.Count,
-                TotalApplicablePlacementCount = applicablePlacements.Count,
+                TotalApplicablePlacementCount = ApplicableEntityCount(applicablePlacements),
                 EvaluatedPlacementCount = governing.Count,
-                UnresolvedPlacementCount = applicablePlacements.Count - governing.Count
+                UnresolvedPlacementCount = ApplicableEntityCount(applicablePlacements) - governing.Count
             };
 
             foreach (EquipmentSpatialMeasurement measurement in governing)
@@ -187,7 +189,25 @@ namespace EngiSentry.Rules
             if (plotPlan.EquipmentPlacements == null) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation EquipmentPlacements are required");
             List<EquipmentPlacement> applicable = plotPlan.EquipmentPlacements.Where(x => x != null && string.Equals(x.EngineeringApplicabilityKey, key, StringComparison.Ordinal)).ToList();
             if (applicable.Any(x => string.IsNullOrWhiteSpace(x.PlacementId)) || applicable.GroupBy(x => x.PlacementId, StringComparer.Ordinal).Any(x => x.Count() != 1)) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation applicable PlacementIds must be unique and nonempty");
+            if (applicable.Any(x => string.IsNullOrWhiteSpace(x.EquipmentEntityId))) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation applicable EquipmentEntityIds must be canonical, unique identities");
             return applicable;
+        }
+
+        private static int ApplicableEntityCount(IEnumerable<EquipmentPlacement> applicablePlacements) => applicablePlacements.Select(x => x.EquipmentEntityId).Distinct(StringComparer.Ordinal).Count();
+
+        private static List<EquipmentPlacement> CanonicalRepresentatives(IReadOnlyList<EquipmentPlacement> applicablePlacements)
+        {
+            var representatives = new List<EquipmentPlacement>();
+            foreach (IGrouping<string, EquipmentPlacement> entity in applicablePlacements.GroupBy(x => x.EquipmentEntityId, StringComparer.Ordinal).OrderBy(x => x.Key, StringComparer.Ordinal))
+            {
+                List<EquipmentPlacement> complete = entity.Where(IsEvaluablePlacement).OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
+                if (complete.Count == 0) continue;
+                decimal easting = complete[0].Easting.SelectedValue!.Value;
+                decimal northing = complete[0].Northing.SelectedValue!.Value;
+                if (complete.Any(x => x.Easting.SelectedValue!.Value != easting || x.Northing.SelectedValue!.Value != northing)) continue;
+                representatives.Add(complete[0]);
+            }
+            return representatives;
         }
 
         private static bool IsEvaluablePlacement(EquipmentPlacement placement) =>

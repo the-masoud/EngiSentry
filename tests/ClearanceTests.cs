@@ -463,9 +463,9 @@ namespace EngiSentry.Tests
         {
             EngineeringDistanceRuleRegistry roadRule = EngineeringDistanceRuleRegistry.Create(Standards("std.coverage.road"), new[] { DistanceRule("std.coverage.road", "EquipmentToRoad2D", 3m, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment) });
             PlotPlanModel plot = EvaluationPlot("Meters", EvaluationMeasurement("coverage-road", "coverage-complete", "Road", 4d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment));
-            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-ambiguous", PlacementStatus = "Ambiguous", EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment });
-            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-incomplete", PlacementStatus = "Incomplete", EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment });
-            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-other", PlacementStatus = "Incomplete", EngineeringApplicabilityKey = "Other" });
+            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-ambiguous", EquipmentEntityId = "equipment:coverage-ambiguous", PlacementStatus = "Ambiguous", EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment });
+            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-incomplete", EquipmentEntityId = "equipment:coverage-incomplete", PlacementStatus = "Incomplete", EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment });
+            plot.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "coverage-other", EquipmentEntityId = "equipment:coverage-other", PlacementStatus = "Incomplete", EngineeringApplicabilityKey = "Other" });
             EngineeringDistanceRuleEvaluation partial = EngineeringDistanceRuleEvaluator.Evaluate(roadRule, plot).Single();
             Assert(partial.Status == "INSUFFICIENT_EVIDENCE" && partial.TotalApplicablePlacementCount == 3 && partial.EvaluatedPlacementCount == 1 && partial.UnresolvedPlacementCount == 2 && partial.EvaluatedSubjectCount == 1 && partial.ViolationCount == 0, "Partial placement coverage incorrectly passed or lost counts.");
             StandardSourceRegistry sources = QaSources();
@@ -493,6 +493,27 @@ namespace EngiSentry.Tests
             EngineeringDistanceRuleRegistry boundaryRule = EngineeringDistanceRuleRegistry.Create(Standards("std.coverage.boundary"), new[] { DistanceRule("std.coverage.boundary", "EquipmentToBoundary2D", 15m, EngineeringDistanceEvidenceKeys.UnitBoundary, EngineeringDistanceEvidenceKeys.Equipment) });
             EngineeringDistanceRuleEvaluation noBoundary = EngineeringDistanceRuleEvaluator.Evaluate(boundaryRule, plot).Single();
             Assert(noBoundary.Status == "INSUFFICIENT_EVIDENCE" && noBoundary.TotalApplicablePlacementCount == 3 && noBoundary.EvaluatedPlacementCount == 0 && noBoundary.UnresolvedPlacementCount == 3, "UnitBoundary without a valid subject did not remain insufficient.");
+
+            PlotPlanModel duplicateOccurrences = EvaluationPlot("Meters",
+                EvaluationMeasurement("duplicate-a-road", "duplicate-a", "Road", 4d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment),
+                EvaluationMeasurement("duplicate-b-road", "duplicate-b", "Road", 4d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment));
+            EquipmentPlacement duplicateA = duplicateOccurrences.EquipmentPlacements.Single(x => x.PlacementId == "duplicate-a");
+            EquipmentPlacement duplicateB = duplicateOccurrences.EquipmentPlacements.Single(x => x.PlacementId == "duplicate-b");
+            duplicateA.EquipmentEntityId = duplicateB.EquipmentEntityId = "equipment:canonical-duplicate";
+            duplicateOccurrences.Measurements.EquipmentSpatialMeasurements.ForEach(x => x.EquipmentEntityId = "equipment:canonical-duplicate");
+            duplicateA.Easting.SelectedValue = duplicateB.Easting.SelectedValue = 100m;
+            duplicateA.Northing.SelectedValue = duplicateB.Northing.SelectedValue = 200m;
+            EngineeringDistanceRuleEvaluation deduplicated = EngineeringDistanceRuleEvaluator.Evaluate(roadRule, duplicateOccurrences).Single();
+            Assert(deduplicated.Status == "PASS" && deduplicated.TotalApplicablePlacementCount == 1 && deduplicated.EvaluatedPlacementCount == 1 && deduplicated.UnresolvedPlacementCount == 0 && deduplicated.EvaluatedSubjectCount == 1, "Equivalent DrawingTag placements inflated canonical equipment coverage.");
+
+            duplicateB.Easting.SelectedValue = 101m;
+            EngineeringDistanceRuleEvaluation conflicting = EngineeringDistanceRuleEvaluator.Evaluate(roadRule, duplicateOccurrences).Single();
+            Assert(conflicting.Status == "INSUFFICIENT_EVIDENCE" && conflicting.TotalApplicablePlacementCount == 1 && conflicting.EvaluatedPlacementCount == 0 && conflicting.UnresolvedPlacementCount == 1 && conflicting.EvaluatedSubjectCount == 0 && conflicting.ViolationCount == 0, "Conflicting Complete placements were selected instead of leaving the canonical equipment unresolved.");
+
+            PlotPlanModel oneCompleteOccurrence = EvaluationPlot("Meters", EvaluationMeasurement("one-complete-road", "one-complete", "Road", 4d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.Equipment));
+            oneCompleteOccurrence.EquipmentPlacements.Add(new EquipmentPlacement { PlacementId = "one-incomplete", EquipmentEntityId = "equipment:one-complete", PlacementStatus = "Incomplete", EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment });
+            EngineeringDistanceRuleEvaluation oneComplete = EngineeringDistanceRuleEvaluator.Evaluate(roadRule, oneCompleteOccurrence).Single();
+            Assert(oneComplete.Status == "PASS" && oneComplete.TotalApplicablePlacementCount == 1 && oneComplete.EvaluatedPlacementCount == 1 && oneComplete.UnresolvedPlacementCount == 0, "An incomplete duplicate DrawingTag occurrence inflated unresolved coverage.");
         }
 
         private static void RunDrawingUnitConflictGate()
@@ -1488,7 +1509,7 @@ namespace EngiSentry.Tests
             Drawing = new SemanticDrawing { InsertionUnits = insertionUnits },
             EquipmentPlacements = measurements.Where(x => x != null && !string.IsNullOrWhiteSpace(x.PlacementId)).GroupBy(x => x.PlacementId, StringComparer.Ordinal).Select(x => new EquipmentPlacement
             {
-                PlacementId = x.Key, PlacementStatus = "Complete", EngineeringApplicabilityKey = x.First().EngineeringApplicabilityKey,
+                PlacementId = x.Key, EquipmentEntityId = x.First().EquipmentEntityId, PlacementStatus = "Complete", EngineeringApplicabilityKey = x.First().EngineeringApplicabilityKey,
                 Easting = new CoordinateAssociation { Axis = "E", Status = "Resolved", SelectedValue = 0m },
                 Northing = new CoordinateAssociation { Axis = "N", Status = "Resolved", SelectedValue = 0m }
             }).ToList(),
