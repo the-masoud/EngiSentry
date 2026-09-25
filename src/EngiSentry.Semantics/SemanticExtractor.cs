@@ -13,7 +13,7 @@ namespace EngiSentry.Semantics
         private const double RowYTolerance = 1.0;
         private static readonly Regex StructureLegacy = new Regex(@"^\s*([A-Za-z0-9]+)-([A-Za-z]{2})-([0-9]+)\s*$", RegexOptions.Compiled);
         private static readonly Regex StructureTypeFirst = new Regex(@"^\s*([A-Za-z]{2,6})-([0-9]{1,4})-([0-9]{1,4})\s*$", RegexOptions.Compiled);
-        private static readonly Regex Coordinate = new Regex(@"^\s*([EN])\s*(?:[.=]\s*|\s+)([+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[0-9]+,[0-9]{1,2}))\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex Coordinate = new Regex(@"^\s*([EN])\s*(?:[.=]\s*|\s+)([+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[0-9]+,[0-9]{1,2}))\s*$|^\s*([XY])\s*=\s*([+-]?(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?|[0-9]+,[0-9]{1,2}))\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex Elevation = new Regex(@"^\s*([TH])\s*\.?\s*([OPSGC])\s*\.?\s*([PSGC])?\s*\.?\s*EL\s*\.?\s*([+-]?[0-9][0-9.,]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex RoadToken = new Regex(@"(?<![A-Za-z0-9_-])ROAD(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex FenceToken = new Regex(@"(?<![A-Za-z0-9_-])FENCE(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -83,6 +83,8 @@ namespace EngiSentry.Semantics
         private static TagClassification ClassifyTag(TextSnapshot text)
         {
             if (IsBlockDefinitionMetadata(text)) return TagClassification.None;
+            if (string.Equals(text.SpaceKind, "Paper", StringComparison.OrdinalIgnoreCase)) return TagClassification.None;
+            if (string.Equals(text.Layer, "VPORTS", StringComparison.OrdinalIgnoreCase) || string.Equals(text.Layer, "SLP-TXT", StringComparison.OrdinalIgnoreCase)) return TagClassification.None;
             string raw = text.Text ?? string.Empty;
             if (StructureLegacy.IsMatch(raw)) return TagClassification.Structure;
 
@@ -106,8 +108,11 @@ namespace EngiSentry.Semantics
         }
         private static CoordinateEvidence? ParseCoordinate(TextSnapshot text)
         {
-            Match match = Coordinate.Match(text.Text ?? string.Empty); decimal value; if (!match.Success || !TryParseEngineeringNumber(match.Groups[2].Value, out value)) return null;
-            return new CoordinateEvidence { RawText=text.Text, Axis=match.Groups[1].Value.ToUpperInvariant(), Value=value, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
+            Match match = Coordinate.Match(text.Text ?? string.Empty);
+            bool local = match.Groups[3].Success;
+            decimal value; if (!match.Success || !TryParseEngineeringNumber(match.Groups[local ? 4 : 2].Value, out value)) return null;
+            string axis = local ? (string.Equals(match.Groups[3].Value, "X", StringComparison.OrdinalIgnoreCase) ? "E" : "N") : match.Groups[1].Value.ToUpperInvariant();
+            return new CoordinateEvidence { RawText=text.Text, Axis=axis, Value=value, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
         }
         private static ElevationEvidence? ParseElevation(TextSnapshot text)
         {

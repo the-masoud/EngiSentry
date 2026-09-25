@@ -36,6 +36,7 @@ namespace EngiSentry.Contracts
     public static class EquipmentTagGrammar
     {
         private static readonly Regex ThreePart = new Regex(@"^\s*([A-Za-z]{1,6})\s*-\s*([0-9]+)\s*-\s*([0-9]+)(?:\s*([A-Za-z][A-Za-z0-9]*(?:\s*/\s*[A-Za-z][A-Za-z0-9]*)*|[A-Za-z]\s*~\s*[A-Za-z]))?\s*$", RegexOptions.Compiled);
+        private static readonly Regex ShortHyphenated = new Regex(@"^\s*([A-Za-z]{1,6})\s*-\s*([0-9]{2})(?:\s*([A-Za-z][A-Za-z0-9]*(?:\s*/\s*[A-Za-z][A-Za-z0-9]*)*|[A-Za-z]\s*~\s*[A-Za-z]))?\s*$", RegexOptions.Compiled);
         private static readonly Regex Compact = new Regex(@"^\s*([A-Za-z]{1,6})(?:\s*-\s*|)([0-9]{3,6})(?:\s*([A-Za-z][A-Za-z0-9]*(?:\s*/\s*[A-Za-z][A-Za-z0-9]*)*|[A-Za-z]\s*~\s*[A-Za-z]))?\s*$", RegexOptions.Compiled);
 
         public static bool TryParse(string? value, out EquipmentTagParseResult result)
@@ -55,7 +56,8 @@ namespace EngiSentry.Contracts
             }
             else
             {
-                match = Compact.Match(value ?? string.Empty);
+                match = ShortHyphenated.Match(value ?? string.Empty);
+                if (!match.Success) match = Compact.Match(value ?? string.Empty);
                 if (!match.Success) return false;
                 prefix = match.Groups[1].Value.ToUpperInvariant();
                 unitNumber = null;

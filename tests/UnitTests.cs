@@ -44,8 +44,33 @@ namespace EngiSentry.Tests
             return builder.ToString();
         }
 
+        private static void PilotEquipmentCoordinateRegression()
+        {
+            var snapshot = new DrawingSnapshot();
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "P-01A", Handle = "EQ1", Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 100, PositionY = 100 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "SU-01", Handle = "EQ2", Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 200, PositionY = 200 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "TK-02", Handle = "EQ3", Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 300, PositionY = 300 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "CPS-00-01", Handle = "SL1", Layer = "SLP-TXT", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "CPS-00-05", Handle = "SL5", Layer = "SLP-TXT", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "MP-00-01", Handle = "VP1", Layer = "VPORTS", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "PK-0002", Handle = "VP2", Layer = "VPORTS", SpaceKind = "Paper" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "SU-01", Handle = "PT1", Layer = "Text", SpaceKind = "Paper" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "X= 5571950", Handle = "X1", Layer = "EQ-ID", SpaceKind = "Model", PositionX = 101, PositionY = 100 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "Y= 5282610", Handle = "Y1", Layer = "EQ-ID", SpaceKind = "Model", PositionX = 100, PositionY = 101 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "E. 1000", Handle = "E1", Layer = "EQ-ID", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "N 2000", Handle = "N1", Layer = "EQ-ID", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "X=bad", Handle = "BAD1", Layer = "EQ-ID", SpaceKind = "Model" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "Y= 12 extra", Handle = "BAD2", Layer = "EQ-ID", SpaceKind = "Model" });
+            EngineeringDrawingModel model = SemanticExtractor.Extract(snapshot);
+            Assert(model.EquipmentTags.Select(x => x.NormalizedTag).SequenceEqual(new[] { "P-01A", "SU-01", "TK-02" }), "Pilot equipment tags or layer/space exclusions failed.");
+            Assert(model.Coordinates.Count == 4 && model.Coordinates.Single(x => x.SourceHandle == "X1").Axis == "E" && model.Coordinates.Single(x => x.SourceHandle == "X1").Value == 5571950m && model.Coordinates.Single(x => x.SourceHandle == "Y1").Axis == "N" && model.Coordinates.Single(x => x.SourceHandle == "Y1").Value == 5282610m, "Pilot X/Y coordinate parsing failed.");
+            PlotPlanModel plan = PlotPlanBuilder.Build(EntityIndexer.Build(model), model, snapshot);
+            Assert(plan.EquipmentPlacements.Count == 3 && plan.EquipmentPlacements.Single(x => x.NormalizedTag == "P-01A").PlacementStatus == "Complete", "Pilot DrawingTag placement or X/Y association failed.");
+        }
+
         public static int Main()
         {
+            PilotEquipmentCoordinateRegression();
             CrossDocumentTests.Run();
             RevisionTests.Run();
             var snapshot = new DrawingSnapshot { FileName = "drawing.dwg", ScanTimestampUtc = new DateTime(2026, 9, 3, 12, 34, 56, 123, DateTimeKind.Utc) };
