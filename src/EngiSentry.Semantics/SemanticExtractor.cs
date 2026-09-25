@@ -21,12 +21,14 @@ namespace EngiSentry.Semantics
         private static readonly Regex BatteryLimitToken = new Regex(@"(?<![A-Za-z0-9_-])BATTERY\s+LIMIT(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BoundaryToken = new Regex(@"(?<![A-Za-z0-9_-])BOUNDARY(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BoundaryCoordinate = new Regex(@"\b(?:UNIT\s+LIMIT|BATTERY\s+LIMIT|BOUNDARY)\b.*?([EN])\s*(?:[.=]\s*|\s+)([+-]?[0-9][0-9.,]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex UnitDeclaration = new Regex(@"\b(?:DRAWING\s+UNITS|UNITS|(?:ALL\s+)?(?:DIMENSIONS|ELEVATIONS|COORDINATES)(?:\s*(?:,|AND)\s*(?:DIMENSIONS|ELEVATIONS|COORDINATES))*)\s*(?:(?:ARE|IS)\s+IN\s+|:\s*)(MILLIMETERS|MILLIMETRES|MM|CENTIMETERS|CENTIMETRES|CM|KILOMETERS|KILOMETRES|KM|METERS|METRES|M|INCHES|IN|FEET|FT|YARDS|YD|MILES|MI)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static EngineeringDrawingModel Extract(DrawingSnapshot snapshot)
         {
             var model = new EngineeringDrawingModel { Drawing = new SemanticDrawing { FileName = snapshot.FileName, FullPath = snapshot.FullPath, DwgVersion = snapshot.DwgVersion, CurrentLayout = snapshot.CurrentLayout, InsertionUnits = snapshot.InsertionUnits } };
             var layerVisibility = snapshot.Layers.Where(x => !string.IsNullOrWhiteSpace(x.Name)).ToDictionary(x => x.Name!, x => x.IsOn && !x.IsFrozen, StringComparer.OrdinalIgnoreCase);
             List<TextSnapshot> allText = snapshot.TextEntities.Concat(snapshot.InstantiatedTextEntities ?? new List<TextSnapshot>()).Where(x => !IsBlockDefinitionMetadata(x) && IsLayerActive(x.Layer, layerVisibility)).OrderBy(x => x.Handle, StringComparer.Ordinal).ThenBy(x => x.Text, StringComparer.Ordinal).ToList();
+            model.Drawing!.ExplicitUnitDeclarations = allText.Select(ParseUnitDeclaration).Where(x => x != null).Select(x => x!).ToList();
             foreach (TextSnapshot text in allText)
             {
                 TagClassification classification = ClassifyTag(text);
@@ -113,6 +115,25 @@ namespace EngiSentry.Semantics
             decimal value; if (!match.Success || !TryParseEngineeringNumber(match.Groups[local ? 4 : 2].Value, out value)) return null;
             string axis = local ? (string.Equals(match.Groups[3].Value, "X", StringComparison.OrdinalIgnoreCase) ? "E" : "N") : match.Groups[1].Value.ToUpperInvariant();
             return new CoordinateEvidence { RawText=text.Text, Axis=axis, Value=value, SourceHandle=text.Handle, SourceObjectType=text.ObjectType, SourceLayer=text.Layer, PositionX=text.PositionX, PositionY=text.PositionY, PositionZ=text.PositionZ };
+        }
+        private static DrawingUnitDeclaration? ParseUnitDeclaration(TextSnapshot text)
+        {
+            Match match = UnitDeclaration.Match(text.Text ?? string.Empty);
+            if (!match.Success) return null;
+            string token = match.Groups[1].Value.ToUpperInvariant();
+            string unit;
+            switch (token)
+            {
+                case "MILLIMETERS": case "MILLIMETRES": case "MM": unit = "Millimeters"; break;
+                case "CENTIMETERS": case "CENTIMETRES": case "CM": unit = "Centimeters"; break;
+                case "KILOMETERS": case "KILOMETRES": case "KM": unit = "Kilometers"; break;
+                case "METERS": case "METRES": case "M": unit = "Meters"; break;
+                case "INCHES": case "IN": unit = "Inches"; break;
+                case "FEET": case "FT": unit = "Feet"; break;
+                case "YARDS": case "YD": unit = "Yards"; break;
+                default: unit = "Miles"; break;
+            }
+            return new DrawingUnitDeclaration { Unit = unit, RawText = text.Text ?? string.Empty, SourceHandle = text.Handle ?? string.Empty, SourceLayer = text.Layer, SpaceKind = text.SpaceKind };
         }
         private static ElevationEvidence? ParseElevation(TextSnapshot text)
         {

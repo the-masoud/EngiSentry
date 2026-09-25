@@ -20,6 +20,14 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 12)] public string RequiredMeasurementBasisKey { get; set; } = string.Empty;
         [DataMember(Order = 13)] public string RequiredApplicabilityKey { get; set; } = string.Empty;
         [DataMember(Order = 14, EmitDefaultValue = false)] public EngineeringDistanceCriteriaProvenance? CriteriaProvenance { get; set; }
+        [DataMember(Order = 15, EmitDefaultValue = false)] public DrawingUnitConflictEvidence? UnitConflict { get; set; }
+    }
+
+    [DataContract]
+    public sealed class DrawingUnitConflictEvidence
+    {
+        [DataMember(Order = 1)] public string Insunits { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public List<DrawingUnitDeclaration> ExplicitDeclarations { get; set; } = new List<DrawingUnitDeclaration>();
     }
 
     [DataContract]

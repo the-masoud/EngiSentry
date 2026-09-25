@@ -5,6 +5,7 @@ using EngiSentry.AutoCAD2021;
 using EngiSentry.Contracts;
 using EngiSentry.PlotPlan;
 using EngiSentry.Rules;
+using EngiSentry.Semantics;
 using EngiSentry.Standards;
 
 namespace EngiSentry.Tests
@@ -13,6 +14,7 @@ namespace EngiSentry.Tests
     {
         internal static void Run()
         {
+            RunDrawingUnitConflictGate();
             RunP102C1Presentation();
             List<KnownQaRule> catalog = Catalog();
             ProfileResolution defaults = ProfileResolver.Resolve(catalog, new EngineeringStandardProfile[0]);
@@ -454,6 +456,38 @@ namespace EngiSentry.Tests
             RunP92C2A();
             RunP92C2B();
             RunP92C2C();
+        }
+
+        private static void RunDrawingUnitConflictGate()
+        {
+            const string declaration = "1-ALL DIMENSIONS, ELEVATIONS AND COORDINATES ARE IN MILLIMETERS.";
+            var snapshot = new DrawingSnapshot { InsertionUnits = "Meters" };
+            snapshot.TextEntities.Add(new TextSnapshot { Text = declaration, Handle = "NOTE-1", Layer = "Text", SpaceKind = "Paper" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "ALL EQUIPMENT AND SUMPS DIMENSIONS ARE APPROXIMATE.", Handle = "NOTE-2", SpaceKind = "Paper" });
+            SemanticDrawing drawing = SemanticExtractor.Extract(snapshot).Drawing!;
+            Assert(drawing.ExplicitUnitDeclarations.Count == 1 && drawing.ExplicitUnitDeclarations[0].Unit == "Millimeters" && drawing.ExplicitUnitDeclarations[0].SourceHandle == "NOTE-1", "Explicit drawing unit note was not captured with provenance.");
+            PlotPlanModel plot = EvaluationPlot("Meters", EvaluationMeasurement("unit-road", "unit-placement", "Road", 2d, EngineeringDistanceEvidenceKeys.AccessRoadEdge, EngineeringDistanceEvidenceKeys.ProcessingEquipment));
+            plot.Drawing = drawing;
+            ProjectDistanceCriteria criteria = ProjectDistanceCriteriaStore.CreateDefaults(System.IO.Path.GetTempPath());
+            QaReport gated = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base());
+            Assert(gated.EngineeringDistanceSummary!.Evaluations.All(x => x.Status == "INSUFFICIENT_EVIDENCE" && x.EvaluatedSubjectCount == 0 && x.ViolationCount == 0 && x.MetersPerDrawingUnit == 0d && x.MinimumDistanceDrawingUnits == 0d && x.UnitConflict != null && x.UnitConflict.Insunits == "Meters" && x.UnitConflict.ExplicitDeclarations.Single().RawText == declaration && x.UnitConflict.ExplicitDeclarations.Single().SourceHandle == "NOTE-1"), "Unit conflict produced a trusted distance verdict or lost either source.");
+            Assert(gated.RuleResults.Where(x => gated.EngineeringDistanceSummary.Evaluations.Any(e => e.RuleId == x.RuleId)).All(x => x.Status == "INSUFFICIENT_EVIDENCE") && gated.OverallStatus != "PASS" && gated.OverallStatus != "FAIL", "Unit conflict QA was not review-required or insufficient.");
+            using (var stream = new System.IO.MemoryStream())
+            {
+                new System.Runtime.Serialization.Json.DataContractJsonSerializer(typeof(QaReport)).WriteObject(stream, gated);
+                string json = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+                Assert(json.Contains("NOTE-1") && json.Contains("Millimeters") && json.Contains("Meters") && json.Contains("UnitConflict"), "Serialized QA did not retain both unit sources.");
+            }
+            var bounded = new BoundedConstraint { ConstraintId = "unit-gated", MeasurementKind = "EquipmentToRoad2D", MinimumDistanceMeters = 3m, RequiredMeasurementBasisKey = EngineeringDistanceEvidenceKeys.AccessRoadEdge, RequiredApplicabilityKey = EngineeringDistanceEvidenceKeys.ProcessingEquipment };
+            Assert(EngineeringDistanceRuleEvaluator.EvaluateGovernedConstraint(bounded, plot).Status == "INSUFFICIENT_EVIDENCE", "Governed distance evaluation bypassed the unit conflict gate.");
+            snapshot.InsertionUnits = "Millimeters";
+            plot.Drawing = SemanticExtractor.Extract(snapshot).Drawing;
+            Assert(ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base()).EngineeringDistanceSummary!.Evaluations.All(x => x.UnitConflict == null), "Matching drawing unit evidence was treated as a conflict.");
+            snapshot.TextEntities.Clear();
+            plot.Drawing = SemanticExtractor.Extract(snapshot).Drawing;
+            Assert(ProjectEngineeringDistanceRuntime.Evaluate(criteria, plot, P412Base()).EngineeringDistanceSummary!.Evaluations.All(x => x.UnitConflict == null), "Absent drawing unit declaration was treated as a conflict.");
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "DRAWING UNITS: FEET", Handle = "GENERIC", SpaceKind = "Model" });
+            Assert(SemanticExtractor.Extract(snapshot).Drawing!.ExplicitUnitDeclarations.Single().Unit == "Feet", "Generic drawing unit declaration was missed.");
         }
 
         private static void RunP91()

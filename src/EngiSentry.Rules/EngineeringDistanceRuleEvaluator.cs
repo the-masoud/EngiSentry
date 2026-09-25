@@ -19,6 +19,10 @@ namespace EngiSentry.Rules
             if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
             if (plotPlan.Drawing == null) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation Drawing is required");
 
+            DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
+            if (conflict != null)
+                return ruleRegistry.Rules.OrderBy(x => x.RuleId, StringComparer.Ordinal)
+                    .Select(rule => ConflictEvaluation(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters, rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance, conflict)).ToList();
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
@@ -51,6 +55,9 @@ namespace EngiSentry.Rules
             if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
             if (plotPlan.Drawing == null) throw new EngineeringDistanceRuleEvaluationException("governed engineering distance evaluation Drawing is required");
 
+            DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
+            if (conflict != null)
+                return ConflictEvaluation(constraint.Rule?.RuleId ?? constraint.ConstraintId, constraint.MeasurementKind, constraint.MinimumDistanceMeters, constraint.RequiredMeasurementBasisKey, constraint.RequiredApplicabilityKey, null, conflict);
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
@@ -168,6 +175,28 @@ namespace EngiSentry.Rules
         }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static DrawingUnitConflictEvidence? UnitConflict(SemanticDrawing drawing)
+        {
+            List<DrawingUnitDeclaration> declarations = drawing.ExplicitUnitDeclarations ?? new List<DrawingUnitDeclaration>();
+            if (!declarations.Any(x => !string.Equals(x.Unit, drawing.InsertionUnits, StringComparison.Ordinal))) return null;
+            return new DrawingUnitConflictEvidence
+            {
+                Insunits = drawing.InsertionUnits ?? string.Empty,
+                ExplicitDeclarations = declarations.Select(x => new DrawingUnitDeclaration { Unit = x.Unit, RawText = x.RawText, SourceHandle = x.SourceHandle, SourceLayer = x.SourceLayer, SpaceKind = x.SpaceKind }).ToList()
+            };
+        }
+
+        private static EngineeringDistanceRuleEvaluation ConflictEvaluation(string ruleId, string measurementKind, decimal minimumDistanceMeters, string requiredMeasurementBasisKey, string requiredApplicabilityKey, EngineeringDistanceCriteriaProvenance? criteriaProvenance, DrawingUnitConflictEvidence conflict)
+        {
+            return new EngineeringDistanceRuleEvaluation
+            {
+                RuleId = ruleId, MeasurementKind = measurementKind, MinimumDistanceMeters = minimumDistanceMeters,
+                InsertionUnits = conflict.Insunits, RequiredMeasurementBasisKey = requiredMeasurementBasisKey,
+                RequiredApplicabilityKey = requiredApplicabilityKey, CriteriaProvenance = CopyCriteriaProvenance(criteriaProvenance),
+                Status = "INSUFFICIENT_EVIDENCE", UnitConflict = conflict
+            };
+        }
 
         private static EngineeringDistanceCriteriaProvenance? CopyCriteriaProvenance(EngineeringDistanceCriteriaProvenance? provenance) => provenance == null ? null : new EngineeringDistanceCriteriaProvenance
         {
