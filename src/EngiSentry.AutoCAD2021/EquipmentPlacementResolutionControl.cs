@@ -67,11 +67,10 @@ namespace EngiSentry.AutoCAD2021
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
             this.resolutionService = resolutionService ?? throw new ArgumentNullException(nameof(resolutionService));
             this.pickProvider = pickProvider ?? throw new ArgumentNullException(nameof(pickProvider));
-            unresolved = (plotPlan.EquipmentPlacements ?? new List<EquipmentPlacement>())
-                .Where(x => x != null && !string.Equals(x.PlacementStatus, "Complete", StringComparison.Ordinal))
-                .OrderBy(x => x.NormalizedTag, StringComparer.Ordinal)
-                .ThenBy(x => x.PlacementId, StringComparer.Ordinal)
-                .ToList();
+            // The queue is keyed by equipment identity: exactly one case per EquipmentEntityId, and
+            // an identity whose placement is already Complete is never queued. Placement
+            // occurrences are never presented as separate cases.
+            unresolved = EquipmentPlacementResolutionQueue.Build(plotPlan.EquipmentPlacements);
             Dock = DockStyle.Fill;
             BuildLayout();
             RefreshPlacements();
@@ -106,7 +105,7 @@ namespace EngiSentry.AutoCAD2021
             placementList.SelectedIndexChanged += (s, e) => { if (!loading) SelectPlacement(placementList.SelectedIndex); };
             var leftHost = new Panel { Dock = DockStyle.Fill };
             leftHost.Controls.Add(placementList);
-            leftHost.Controls.Add(new Label { Dock = DockStyle.Top, Height = 20, Text = "Unresolved equipment placements", TextAlign = ContentAlignment.MiddleLeft });
+            leftHost.Controls.Add(new Label { Dock = DockStyle.Top, Height = 20, Text = "Unresolved equipment", TextAlign = ContentAlignment.MiddleLeft });
             split.Controls.Add(leftHost, 0, 0);
 
             var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
@@ -339,7 +338,9 @@ namespace EngiSentry.AutoCAD2021
                 return;
             }
 
-            unresolved.Remove(target);
+            // A saved resolution resolves the whole equipment identity, so every queue entry for
+            // that identity leaves the queue — not just the one that was displayed.
+            EquipmentPlacementResolutionQueue.RemoveForEntity(unresolved, target.EquipmentEntityId);
             RefreshPlacements();
             ShowMessage("Resolution saved for " + target.NormalizedTag + ". A fresh plot-plan QA will mark it Complete.", false);
         }

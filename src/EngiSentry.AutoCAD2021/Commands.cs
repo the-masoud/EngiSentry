@@ -579,9 +579,9 @@ namespace EngiSentry.AutoCAD2021
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions);
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during placement resolution processing.");
-                int unresolved = plotPlan.EquipmentPlacements.Count(x => !string.Equals(x.PlacementStatus, "Complete", StringComparison.Ordinal));
-                document.Editor.WriteMessage("\nEngiSentry engineer-assisted equipment placement resolution\nDrawing: {0}\nDrawing SHA256: {1}\nUnresolved equipment placements: {2}\nTrusted engineer resolutions already applied: {3}\nDBMOD unchanged: YES\nStatus: ENGINEER INPUT REQUIRED | READ-ONLY\n", snapshot.FileName ?? "<unnamed>", drawingSha256, unresolved, engineerResolutions.Count);
-                if (unresolved == 0) WriteToActiveEditor("ES_PLACEMENTRESOLVE: no unresolved equipment placements remain.\n");
+                int unresolved = EquipmentPlacementResolutionQueue.CountUnresolved(plotPlan.EquipmentPlacements);
+                document.Editor.WriteMessage("\nEngiSentry engineer-assisted equipment placement resolution\nDrawing: {0}\nDrawing SHA256: {1}\nUnresolved equipment entities: {2}\nTrusted engineer resolutions already applied: {3}\nDBMOD unchanged: YES\nStatus: ENGINEER INPUT REQUIRED | READ-ONLY\n", snapshot.FileName ?? "<unnamed>", drawingSha256, unresolved, engineerResolutions.Count);
+                if (unresolved == 0) WriteToActiveEditor("ES_PLACEMENTRESOLVE: no unresolved equipment entities remain.\n");
                 VisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, snapshot.FileName ?? "<unnamed>", drawingSha256!, snapshot.InsertionUnits ?? string.Empty, new ProjectEngineerReviewService(), new EquipmentPlacementResolutionService(), new EditorEquipmentPlacementPickProvider(document));
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_PLACEMENTRESOLVE failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }

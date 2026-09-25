@@ -43,6 +43,7 @@ namespace EngiSentry.Tests
                 IdentityTests();
                 ValidatorTests();
                 PickRuleTests();
+                QueueIdentityTests();
                 AppendOnlyTests(reviewService, resolutionService);
                 TrustGatingTests(reviewService, resolutionService);
                 PlotPlanGatingTests(reviewService, resolutionService);
@@ -166,6 +167,65 @@ namespace EngiSentry.Tests
             // A pick without a proven handle or layer is never an entity pick.
             Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, false, null, "EQ-TAG") == null, "An entity pick without a proven handle must be rejected.");
             Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, false, "H1", null) == null, "An entity pick without a proven layer must be rejected.");
+        }
+
+        // ---- queue identity: one case per equipment identity ----------------------------------
+
+        // The engineer queue is keyed by equipment identity, never by placement occurrence. These
+        // rules are exercised directly because the pilot multiplicity (several placement
+        // occurrences per equipment identity) cannot be produced by a single simple fixture.
+        private static void QueueIdentityTests()
+        {
+            // The pilot shape: 25 placement occurrences across 19 equipment identities (six
+            // identities carry two occurrences each), none Complete. The queue and the command-line
+            // count must both report 19 unique unresolved entities, not 25 occurrences.
+            var pilot = new List<EquipmentPlacement>();
+            for (int i = 0; i < 19; i++)
+            {
+                string id = "equipment:PILOT-" + i.ToString("D2");
+                pilot.Add(QueuePlacement(id, "PILOT-" + i.ToString("D2"), "placement:" + id + ":A"));
+                if (i < 6) pilot.Add(QueuePlacement(id, "PILOT-" + i.ToString("D2"), "placement:" + id + ":B"));
+            }
+            Assert(pilot.Count == 25, "The pilot fixture must hold 25 placement occurrences.");
+            Assert(pilot.Select(x => x.EquipmentEntityId).Distinct(StringComparer.Ordinal).Count() == 19, "The pilot fixture must span 19 equipment identities.");
+            List<EquipmentPlacement> queue = EquipmentPlacementResolutionQueue.Build(pilot);
+            Assert(queue.Count == 19, "The queue must hold exactly one case per unresolved equipment identity. Actual: " + queue.Count);
+            Assert(queue.Select(x => x.EquipmentEntityId).Distinct(StringComparer.Ordinal).Count() == queue.Count, "Every queue case must be a distinct equipment identity.");
+            Assert(EquipmentPlacementResolutionQueue.CountUnresolved(pilot) == 19, "The command-line unresolved count must report unique unresolved equipment identities, not placement occurrences. Actual: " + EquipmentPlacementResolutionQueue.CountUnresolved(pilot));
+
+            // An identity with any Complete placement is never queued, even when it also has
+            // unresolved occurrences: one resolved occurrence resolves the whole identity.
+            var mixed = new List<EquipmentPlacement>
+            {
+                QueuePlacement("equipment:P-10A", "P-10A", "placement:equipment:P-10A:A"),
+                QueuePlacement("equipment:P-10A", "P-10A", "placement:equipment:P-10A:B", "Complete"),
+                QueuePlacement("equipment:P-11A", "P-11A", "placement:equipment:P-11A:A"),
+                QueuePlacement("equipment:P-12A", "P-12A", "placement:equipment:P-12A:A", "Complete"),
+                QueuePlacement("equipment:P-12A", "P-12A", "placement:equipment:P-12A:B")
+            };
+            List<EquipmentPlacement> mixedQueue = EquipmentPlacementResolutionQueue.Build(mixed);
+            Assert(mixedQueue.Count == 1 && mixedQueue[0].EquipmentEntityId == "equipment:P-11A", "An identity with any Complete placement must not be queued; only the fully unresolved identity remains. Actual: " + string.Join(",", mixedQueue.Select(x => x.EquipmentEntityId)));
+
+            // The representative is deterministic: the smallest PlacementId wins regardless of the
+            // order the occurrences are presented in.
+            var occurrences = new List<EquipmentPlacement>
+            {
+                QueuePlacement("equipment:P-20A", "P-20A", "placement:equipment:P-20A:Z"),
+                QueuePlacement("equipment:P-20A", "P-20A", "placement:equipment:P-20A:M"),
+                QueuePlacement("equipment:P-20A", "P-20A", "placement:equipment:P-20A:A")
+            };
+            Assert(EquipmentPlacementResolutionQueue.Build(occurrences).Single().PlacementId == "placement:equipment:P-20A:A", "The representative must be the deterministic smallest PlacementId.");
+            Assert(EquipmentPlacementResolutionQueue.Build(Enumerable.Reverse(occurrences).ToList()).Single().PlacementId == "placement:equipment:P-20A:A", "The representative must not depend on the input order.");
+
+            // Saving a resolution clears every queue entry for the identity, not just the one shown.
+            var duplicates = new List<EquipmentPlacement>
+            {
+                QueuePlacement("equipment:P-30A", "P-30A", "placement:equipment:P-30A:A"),
+                QueuePlacement("equipment:P-30A", "P-30A", "placement:equipment:P-30A:B"),
+                QueuePlacement("equipment:P-31A", "P-31A", "placement:equipment:P-31A:A")
+            };
+            int removed = EquipmentPlacementResolutionQueue.RemoveForEntity(duplicates, "equipment:P-30A");
+            Assert(removed == 2 && duplicates.Count == 1 && duplicates[0].EquipmentEntityId == "equipment:P-31A", "Saving a resolution must remove every queue entry for that equipment identity.");
         }
 
         // ---- append-only store ----------------------------------------------------------------
@@ -365,6 +425,28 @@ namespace EngiSentry.Tests
             Button(freeControl, "Pick Free Space").PerformClick();
             Assert(freeControl.CurrentPick != null && freeControl.CurrentPick.Handle == null, "A free-space pick must carry no source handle.");
             freeControl.Dispose();
+
+            // Two unresolved occurrences of one equipment identity present as a single case, and a
+            // saved resolution clears the whole identity from the queue.
+            var duplicatePlan = new PlotPlanModel();
+            duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97B", "P-97B", "placement:equipment:P-97B:A"));
+            duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97B", "P-97B", "placement:equipment:P-97B:B"));
+            duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97C", "P-97C", "placement:equipment:P-97C:A"));
+            var duplicatePick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.EntityPick, PointX = 5000, PointY = 6000, PointZ = 0, Handle = "H97B", Layer = "EQ-TAG" };
+            var duplicateControl = new EquipmentPlacementResolutionControl(duplicatePlan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(duplicatePick));
+            Assert(duplicateControl.UnresolvedCount == 2, "Two identities (one carrying two occurrences) must present as two cases. Actual: " + duplicateControl.UnresolvedCount);
+            Button(duplicateControl, "Pick Entity").PerformClick();
+            Box(duplicateControl, "ReviewerDisplayName").Text = "TEST-ONLY Reviewer";
+            Box(duplicateControl, "ReviewerRole").Text = "TEST-ONLY";
+            foreach (ProjectEngineerReviewQuestionDefinition question in EquipmentPlacementResolutionQuestions.All)
+            {
+                Control answer = AnswerControl(duplicateControl, question.QuestionId);
+                if (answer is ComboBox combo) combo.SelectedIndex = 1; else answer.Text = "test-only";
+            }
+            Combo(duplicateControl, "Classification").SelectedIndex = 1;
+            Button(duplicateControl, "Save Resolution").PerformClick();
+            Assert(duplicateControl.UnresolvedCount == 1, "Saving a resolution must remove the whole equipment identity from the queue. Actual: " + duplicateControl.UnresolvedCount);
+            duplicateControl.Dispose();
         }
 
         // ---- authority separation -------------------------------------------------------------
@@ -436,6 +518,9 @@ namespace EngiSentry.Tests
             snapshot.TextEntities.Add(new TextSnapshot { Text = tag, Handle = "EPR-" + tag, Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 100, PositionY = 100 });
             return snapshot;
         }
+
+        private static EquipmentPlacement QueuePlacement(string entityId, string tag, string placementId, string status = "Incomplete") =>
+            new EquipmentPlacement { PlacementId = placementId, EquipmentEntityId = entityId, NormalizedTag = tag, PlacementStatus = status };
 
         private static PlotGeometryPrimitive Line(string handle, string layer, double x1, double y1, double x2, double y2) =>
             new PlotGeometryPrimitive { SourceHandle = handle, SourceLayer = layer, GeometryKind = "Line", Vertices = new List<PlotGeometryVertex> { new PlotGeometryVertex { X = x1, Y = y1 }, new PlotGeometryVertex { X = x2, Y = y2 } } };
