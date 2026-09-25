@@ -37,8 +37,9 @@ namespace EngiSentry.PlotPlan
                 TextSnapshot text = source.Item3;
                 double scale = IsPositiveFinite(text.Height) ? text.Height : fallback;
                 string handle = source.Item2.SourceHandle!;
-                List<CoordinateCandidate> eastingCandidates = FindCandidates("E", text.PositionX, text.PositionY, scale, coordinates);
-                List<CoordinateCandidate> northingCandidates = FindCandidates("N", text.PositionX, text.PositionY, scale, coordinates);
+                List<CoordinateEvidence> compatibleCoordinates = coordinates.Where(c => IsCoordinateCompatible(source.Item2.SourceLayer ?? text.Layer, handle, c, textByHandle)).ToList();
+                List<CoordinateCandidate> eastingCandidates = FindCandidates("E", text.PositionX, text.PositionY, scale, compatibleCoordinates);
+                List<CoordinateCandidate> northingCandidates = FindCandidates("N", text.PositionX, text.PositionY, scale, compatibleCoordinates);
                 CoordinateAssociation easting = Associate("E", eastingCandidates, scale);
                 CoordinateAssociation northing = Associate("N", northingCandidates, scale);
                 PreferCoherentPair(easting, northing, eastingCandidates, northingCandidates, scale);
@@ -68,6 +69,36 @@ namespace EngiSentry.PlotPlan
         {
             double max = scale * MaxAssociationDistanceFactor;
             return all.Where(c => c.Axis == axis && !string.IsNullOrEmpty(c.SourceHandle)).Select(c => new CoordinateCandidate { SourceHandle = c.SourceHandle!, RawText = c.RawText, SourceLayer = c.SourceLayer, Value = c.Value, PositionX = c.PositionX, PositionY = c.PositionY, PositionZ = c.PositionZ, Distance = Distance(x, y, c.PositionX, c.PositionY) }).Where(c => !double.IsNaN(c.Distance) && !double.IsInfinity(c.Distance) && c.Distance <= max).OrderBy(c => c.Distance).ThenBy(c => c.SourceHandle, StringComparer.Ordinal).ToList();
+        }
+
+        private static bool IsCoordinateCompatible(string? equipmentLayer, string equipmentHandle, CoordinateEvidence coordinate, Dictionary<string, List<TextSnapshot>> textByHandle)
+        {
+            string coordinateLayer = coordinate.SourceLayer ?? string.Empty;
+            List<TextSnapshot>? sourceRecords = null;
+            bool hasSourceRecord = !string.IsNullOrEmpty(coordinate.SourceHandle) && textByHandle.TryGetValue(coordinate.SourceHandle!, out sourceRecords) && sourceRecords!.Count == 1;
+            TextSnapshot? source = hasSourceRecord ? sourceRecords![0] : null;
+
+            // Model-space scope is required when the source record is available. VPORTS is
+            // presentation infrastructure regardless of its recorded space.
+            if (string.Equals(coordinateLayer, "VPORTS", StringComparison.OrdinalIgnoreCase) ||
+                (source != null && string.Equals(source.Layer, "VPORTS", StringComparison.OrdinalIgnoreCase)) ||
+                (source != null && string.Equals(source.SpaceKind, "Paper", StringComparison.OrdinalIgnoreCase))) return false;
+
+            string? equipmentRoot = InstantiatedRoot(equipmentHandle);
+            string? coordinateRoot = InstantiatedRoot(coordinate.SourceHandle ?? string.Empty);
+            bool sharedOwner = equipmentRoot != null && coordinateRoot != null && string.Equals(equipmentRoot, coordinateRoot, StringComparison.Ordinal);
+
+            // Generic text identifiers carry no equipment ownership by themselves.
+            if (string.Equals(coordinateLayer, "TXT-ID", StringComparison.OrdinalIgnoreCase)) return sharedOwner;
+
+            // This is the explicit equipment coordinate family present in the pilot.
+            if (string.Equals(equipmentLayer, "EQ-TAG", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(coordinateLayer, "SLP-ID", StringComparison.OrdinalIgnoreCase)) return false;
+                return string.Equals(coordinateLayer, "EQ-ID", StringComparison.OrdinalIgnoreCase) || sharedOwner;
+            }
+
+            return sharedOwner;
         }
 
         private static CoordinateAssociation Associate(string axis, List<CoordinateCandidate> candidates, double scale)
