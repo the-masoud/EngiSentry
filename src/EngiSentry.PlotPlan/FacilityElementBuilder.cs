@@ -207,6 +207,7 @@ namespace EngiSentry.PlotPlan
         /// <summary>Portable label evidence handles for a subject, never null, deduplicated and Ordinal-ordered.</summary>
         private static List<string> LabelHandles(EngineeringSpatialSubject subject)
         {
+            if (subject.EvidenceSourceKind == "ModelLayer") return new List<string> { subject.GeometrySourceHandle };
             return (subject.LabelSourceHandles ?? new List<string>())
                 .Where(x => !string.IsNullOrEmpty(x))
                 .Distinct(StringComparer.Ordinal)
@@ -243,7 +244,7 @@ namespace EngiSentry.PlotPlan
         {
             if (string.IsNullOrEmpty(subject.SubjectId) || string.IsNullOrEmpty(subject.GeometrySourceHandle)
                 || string.IsNullOrEmpty(subject.GeometrySourceLayer) || string.IsNullOrEmpty(subject.GeometryKind)
-                || subject.LabelSourceHandles == null || subject.LabelSourceHandles.Count == 0)
+                || subject.LabelSourceHandles == null || (subject.LabelSourceHandles.Count == 0 && subject.EvidenceSourceKind != "ModelLayer"))
                 return null;
 
             List<PlotGeometryPrimitive> primitives = (geometry.Primitives ?? new List<PlotGeometryPrimitive>())
@@ -262,6 +263,11 @@ namespace EngiSentry.PlotPlan
         /// </summary>
         private static string ClassifyReferenceSubject(PlotGeometryModel geometry, EngineeringSpatialSubject subject, PlotGeometryPrimitive primitive, out string basis)
         {
+            if (subject.EvidenceSourceKind == "ModelLayer")
+            {
+                basis = "Explicit Model-space layer " + primitive.SourceLayer + " on geometry handle " + primitive.SourceHandle;
+                return ClassificationConfidence.Medium;
+            }
             List<GeometryAssociation> associations = (geometry.Associations ?? new List<GeometryAssociation>())
                 .Where(x => x != null && subject.AssociationIds != null && subject.AssociationIds.Contains(x.AssociationId, StringComparer.Ordinal))
                 .ToList();

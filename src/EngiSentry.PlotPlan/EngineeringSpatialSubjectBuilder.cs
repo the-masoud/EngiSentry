@@ -35,8 +35,28 @@ namespace EngiSentry.PlotPlan
                     GeometrySourceHandle = first.Primitive.SourceHandle,
                     GeometrySourceLayer = first.Primitive.SourceLayer,
                     GeometryKind = first.Primitive.GeometryKind,
+                    EvidenceSourceKind = "ModelLabelAssociation",
                     AssociationIds = group.Select(x => x.Association.AssociationId).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList(),
                     LabelSourceHandles = group.Select(x => x.LabelSourceHandle).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList()
+                });
+            }
+
+            var layerHandles = new HashSet<string>(StringComparer.Ordinal);
+            foreach (PlotGeometryPrimitive primitive in geometry.Primitives.Where(x => x != null).OrderBy(x => x.SourceHandle, StringComparer.Ordinal))
+            {
+                string? basis = LayerBasis(primitive.SourceLayer);
+                if (basis == null) continue;
+                ValidatePrimitive(primitive);
+                if (!layerHandles.Add(primitive.SourceHandle)) throw new InvalidOperationException("Explicit layer geometry has duplicate source handle: " + primitive.SourceHandle);
+                string subjectKind = basis == EngineeringDistanceEvidenceKeys.AccessRoadEdge ? "Road" : "Boundary";
+                EngineeringSpatialSubject? existing = result.FirstOrDefault(x => x.GeometrySourceHandle == primitive.SourceHandle && x.EngineeringMeasurementBasisKey == basis);
+                if (existing != null) { existing.EvidenceSourceKind = "ModelLayerAndLabel"; continue; }
+                result.Add(new EngineeringSpatialSubject
+                {
+                    SubjectId = "engineering-spatial-subject:" + basis.ToLowerInvariant() + ":" + primitive.SourceHandle,
+                    SubjectKind = subjectKind, EngineeringMeasurementBasisKey = basis,
+                    GeometrySourceHandle = primitive.SourceHandle, GeometrySourceLayer = primitive.SourceLayer,
+                    GeometryKind = primitive.GeometryKind, EvidenceSourceKind = "ModelLayer"
                 });
             }
 
@@ -74,6 +94,15 @@ namespace EngiSentry.PlotPlan
             }
             string value = normalized.ToString().Trim();
             return value == "ACCESS ROAD EDGE" || value == "ROAD EDGE" || value == "EDGE OF ROAD" || value == "EDGE OF ACCESS ROAD";
+        }
+
+        private static string? LayerBasis(string? rawLayer)
+        {
+            if (string.IsNullOrWhiteSpace(rawLayer)) return null;
+            string layer = string.Join(" ", rawLayer!.Trim().ToUpperInvariant().Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries));
+            if (layer == "ROAD" || layer == "NEW ROAD" || layer == "ACCESS ROAD" || layer == "ROAD EDGE" || layer == "ACCESS ROAD EDGE") return EngineeringDistanceEvidenceKeys.AccessRoadEdge;
+            if (layer == "FENCE" || layer == "SECURITY FENCE" || layer == "PLANT FENCE") return EngineeringDistanceEvidenceKeys.SecurityFence;
+            return null;
         }
 
         internal static void ValidatePrimitive(PlotGeometryPrimitive primitive)

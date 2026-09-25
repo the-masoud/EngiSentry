@@ -165,7 +165,7 @@ namespace EngiSentry.PlotPlan
 
         private static PlotGeometryPrimitive ResolvePrimitive(PlotGeometryModel geometry, EngineeringSpatialSubject subject)
         {
-            if (subject == null || string.IsNullOrEmpty(subject.SubjectId) || string.IsNullOrEmpty(subject.GeometrySourceHandle) || string.IsNullOrEmpty(subject.GeometrySourceLayer) || string.IsNullOrEmpty(subject.GeometryKind) || subject.LabelSourceHandles == null || subject.LabelSourceHandles.Count == 0)
+            if (subject == null || string.IsNullOrEmpty(subject.SubjectId) || string.IsNullOrEmpty(subject.GeometrySourceHandle) || string.IsNullOrEmpty(subject.GeometrySourceLayer) || string.IsNullOrEmpty(subject.GeometryKind) || subject.LabelSourceHandles == null || (subject.LabelSourceHandles.Count == 0 && subject.EvidenceSourceKind != "ModelLayer"))
                 throw new InvalidOperationException("Engineering spatial subject is invalid.");
             List<PlotGeometryPrimitive> primitives = geometry.Primitives.Where(x => x != null && string.Equals(x.SourceHandle, subject.GeometrySourceHandle, StringComparison.Ordinal)).ToList();
             if (primitives.Count != 1) throw new InvalidOperationException("Engineering spatial subject cannot resolve exactly one primitive: " + subject.GeometrySourceHandle);
@@ -203,7 +203,7 @@ namespace EngiSentry.PlotPlan
                 MeasurementId = "distance:equipment-engineering-spatial:" + placement.PlacementId + ":" + subject.SubjectId,
                 PlacementId = placement.PlacementId, EquipmentEntityId = placement.EquipmentEntityId, NormalizedTag = placement.NormalizedTag, EquipmentEasting = placement.Easting, EquipmentNorthing = placement.Northing,
                 ConstraintId = subject.SubjectId, SubjectKind = subject.SubjectKind, Axis = string.Empty, CoordinateValue = 0m,
-                LabelSourceHandle = subject.LabelSourceHandles.OrderBy(x => x, StringComparer.Ordinal).First(), GeometrySourceHandle = primitive.SourceHandle, GeometrySourceLayer = primitive.SourceLayer, GeometryKind = primitive.GeometryKind,
+                LabelSourceHandle = subject.LabelSourceHandles.OrderBy(x => x, StringComparer.Ordinal).FirstOrDefault() ?? string.Empty, GeometrySourceHandle = primitive.SourceHandle, GeometrySourceLayer = primitive.SourceLayer, GeometryKind = primitive.GeometryKind,
                 SegmentIndex = governing.Index, SegmentStartX = governing.StartX, SegmentStartY = governing.StartY, SegmentEndX = governing.EndX, SegmentEndY = governing.EndY, ClosestPointX = governing.ClosestX, ClosestPointY = governing.ClosestY, Distance2D = governing.Distance,
                 EngineeringMeasurementBasisKey = subject.EngineeringMeasurementBasisKey, EngineeringApplicabilityKey = placement.EngineeringApplicabilityKey
             };

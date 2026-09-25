@@ -14,5 +14,6 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 6)] public string GeometryKind { get; set; } = string.Empty;
         [DataMember(Order = 7)] public List<string> AssociationIds { get; set; } = new List<string>();
         [DataMember(Order = 8)] public List<string> LabelSourceHandles { get; set; } = new List<string>();
+        [DataMember(Order = 9, EmitDefaultValue = false)] public string? EvidenceSourceKind { get; set; }
     }
 }

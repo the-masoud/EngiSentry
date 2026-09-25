@@ -91,6 +91,7 @@ namespace EngiSentry.Tests
             Throws(() => PlotSpatialMeasurementBuilder.Build(new[] { Placement("placement:x", 0m, 0m) }, new[] { Constraint("constraint:nonfinite", "Road", double.NaN, 0, 1, 1) }), "Non-finite selected segment was not rejected.");
 
             RunP410QualificationTests();
+            RunModelLayerEvidenceTests();
 
             var index = new EngineeringEntityIndex();
             var plotWithoutMeasurements = new PlotPlanModel { Geometry = new PlotGeometryModel { SpatialConstraints = new List<SpatialCoordinateConstraint> { new SpatialCoordinateConstraint { ConstraintId = "spatial-constraint:boundary:B1", Status = "Ambiguous", LabelSourceHandle = "B1" } } } };
@@ -110,6 +111,29 @@ namespace EngiSentry.Tests
             string json;
             using (var stream = new MemoryStream()) { new DataContractJsonSerializer(typeof(PlotPlanQaReport)).WriteObject(stream, compact); json = Encoding.UTF8.GetString(stream.ToArray()); }
             Assert(json.Contains("\"Primitives\":[]") && json.Contains("\"EngineeringSpatialSubjects\"") && json.Contains(compactSubject.SubjectId) && json.Contains("\"ProfileResolution\""), "Compact artifact serialization did not preserve its contract.");
+        }
+
+        private static void RunModelLayerEvidenceTests()
+        {
+            var snapshot = new DrawingSnapshot();
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "ACCESS ROAD EDGE", Handle = "PAPER-LEGEND", Layer = "Text", SpaceKind = "Paper" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "UNIT LIMIT", Handle = "PAPER-UNIT", Layer = "Text", SpaceKind = "Paper" });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "FENCE", Handle = "PAPER-FENCE", Layer = "Text", SpaceKind = "Paper" });
+            EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+            Assert(semantic.RoadLabels.Count == 0 && semantic.BoundaryLabels.Count == 0, "Paper legend was accepted as Model-space geometry evidence.");
+            var capture = new PlotGeometryCapture();
+            PlotGeometryPrimitive road = Primitive("ROAD-1", 0, 0, 10, 0); road.SourceLayer = "Road";
+            PlotGeometryPrimitive newRoad = Primitive("ROAD-2", 0, 10, 10, 10); newRoad.SourceLayer = "NEW ROAD";
+            PlotGeometryPrimitive fence = Primitive("FENCE-1", 0, 20, 10, 20); fence.SourceLayer = "FENCE";
+            PlotGeometryPrimitive genericBoundary = Primitive("BOUNDARY-1", 0, 30, 10, 30); genericBoundary.SourceLayer = "BOUNDARY";
+            PlotGeometryPrimitive centerline = Primitive("CENTERLINE-1", 0, 40, 10, 40); centerline.SourceLayer = "ROAD-CEN";
+            capture.Primitives.AddRange(new[] { road, newRoad, fence, genericBoundary, centerline });
+            PlotGeometryModel geometry = PlotGeometryBuilder.Build(semantic, capture);
+            geometry.EngineeringSpatialSubjects = EngineeringSpatialSubjectBuilder.Build(semantic, geometry).ToList();
+            Assert(geometry.EngineeringSpatialSubjects.Count == 3 && geometry.EngineeringSpatialSubjects.Count(x => x.EngineeringMeasurementBasisKey == EngineeringDistanceEvidenceKeys.AccessRoadEdge) == 2 && geometry.EngineeringSpatialSubjects.Count(x => x.EngineeringMeasurementBasisKey == EngineeringDistanceEvidenceKeys.SecurityFence) == 1 && geometry.EngineeringSpatialSubjects.All(x => x.EngineeringMeasurementBasisKey != EngineeringDistanceEvidenceKeys.UnitBoundary), "Explicit Road/Fence layers or generic Boundary exclusion failed.");
+            Assert(geometry.EngineeringSpatialSubjects.All(x => x.EvidenceSourceKind == "ModelLayer" && x.AssociationIds.Count == 0 && x.LabelSourceHandles.Count == 0 && geometry.Primitives.Any(p => p.SourceHandle == x.GeometrySourceHandle && p.SourceLayer == x.GeometrySourceLayer)), "Layer subject provenance or source identity was lost.");
+            PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(new[] { Placement("placement:layer", 5m, 1m, applicability: EngineeringDistanceEvidenceKeys.Equipment) }, geometry);
+            Assert(measurements.EquipmentSpatialMeasurements.Count == 3 && measurements.Statistics.RoadMeasurementCount == 2 && measurements.Statistics.BoundaryMeasurementCount == 1 && measurements.EquipmentSpatialMeasurements.All(x => x.LabelSourceHandle == string.Empty && x.GeometrySourceHandle.Length > 0 && x.GeometrySourceLayer.Length > 0), "Layer-qualified measurement provenance failed.");
         }
 
         private static void RunP410QualificationTests()
