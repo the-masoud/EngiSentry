@@ -89,72 +89,99 @@ namespace EngiSentry.Tests
 
         private static void EquipmentCenterlinePlacementRegression()
         {
-            PlotPlanModel resolved = BuildCenterlineFixture(10, 9.5,
+            // The tag text extents straddle the crossing, so exactly one vertical/horizontal pair qualifies.
+            PlotPlanModel resolved = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) });
             EquipmentPlacement placement = resolved.EquipmentPlacements.Single();
-            Assert(placement.PlacementStatus == "Complete" && placement.Easting.SelectedValue == 10m && placement.Northing.SelectedValue == 5m, "EQ-CEN did not set final placement to the unique orthogonal intersection.");
+            Assert(placement.PlacementStatus == "Complete" && placement.Easting.SelectedValue == 10m && placement.Northing.SelectedValue == 5m, "EQ-CEN did not set final placement to the unique orthogonal intersection crossing the tag extents.");
             Assert(placement.CenterlineEvidence?.Status == "Resolved" && placement.CenterlineEvidence.Selected?.VerticalSourceHandle == "VERT" && placement.CenterlineEvidence.Selected.HorizontalSourceHandle == "HORIZ" && placement.Easting.SelectedSourceLayer == "EQ-CEN" && placement.Northing.SelectedSourceLayer == "EQ-CEN", "EQ-CEN intersection source handles, layers, or provenance were lost.");
 
-            PlotPlanModel transformed = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel transformed = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT-TRANSFORMED", "EQ-CEN", 10, 0, 10.0000001, 10), Centerline("HORIZ-TRANSFORMED", "EQ-CEN", 10, 5, 20, 5.0000001) });
             Assert(transformed.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && transformed.EquipmentPlacements.Single().CenterlineEvidence == null, "Nonorthogonal EQ-CEN lines were rounded into an intersection.");
 
-            PlotPlanModel instantiated = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel instantiated = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("MODELREF:VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("MODELREF:HORIZ", "EQ-CEN", 10, 5, 20, 5) });
             Assert(instantiated.EquipmentPlacements.Single().PlacementStatus == "Complete" && instantiated.EquipmentPlacements.Single().CenterlineEvidence?.Selected?.VerticalSourceHandle == "MODELREF:VERT", "Instantiated Model-space EQ-CEN source handles were discarded.");
 
+            // Pilot P-03A/P-03B: the captured text extents stop short of the vertical centerlines, so the
+            // deterministic extents-crossing rule fails closed instead of falling back to a proximity rule.
             PlotPlanModel pilotP03A = BuildCenterlineFixture(5603140.9008938977, 5316041.4104981972,
-                new[] { Centerline("39FF7D", "EQ-CEN", 5603025, 5312555.802, 5603025, 5316041.508), Centerline("39FF7E", "EQ-CEN", 5602690.689, 5313837.5, 5603344.213, 5313837.5) }, tagHeight: 240);
-            Assert(pilotP03A.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && pilotP03A.EquipmentPlacements.Single().CenterlineEvidence == null, "P-03A was linked to EQ-CEN using proximity without deterministic point linkage.");
+                new[] { Centerline("39FF7D", "EQ-CEN", 5603025, 5312555.802, 5603025, 5316041.508), Centerline("39FF7E", "EQ-CEN", 5602690.689, 5313837.5, 5603344.213, 5313837.5) }, tagHeight: 240,
+                boxMinX: 5603140.900893898, boxMinY: 5314852.839069625, boxMaxX: 5603380.900893898, boxMaxY: 5315995.696212483);
+            Assert(pilotP03A.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && pilotP03A.EquipmentPlacements.Single().CenterlineEvidence == null, "P-03A was linked even though its captured extents do not cross any EQ-CEN centerline.");
 
             PlotPlanModel pilotP03B = BuildCenterlineFixture(5604705.554594002, 5316041.4104981972,
-                new[] { Centerline("3A4461", "EQ-CEN", 5604575, 5312555.802, 5604575, 5316041.508), Centerline("39FF81", "EQ-CEN", 5604241.824, 5313836.018, 5604895.348, 5313836.018) }, tagHeight: 240);
-            Assert(pilotP03B.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && pilotP03B.EquipmentPlacements.Single().CenterlineEvidence == null, "P-03B was linked to EQ-CEN using proximity without deterministic point linkage.");
+                new[] { Centerline("3A4461", "EQ-CEN", 5604575, 5312555.802, 5604575, 5316041.508), Centerline("39FF81", "EQ-CEN", 5604241.824, 5313836.018, 5604895.348, 5313836.018) }, tagHeight: 240,
+                boxMinX: 5604705.554594002, boxMinY: 5314841.410498197, boxMaxX: 5604945.554594002, boxMaxY: 5315995.696212483);
+            Assert(pilotP03B.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && pilotP03B.EquipmentPlacements.Single().CenterlineEvidence == null, "P-03B was linked even though its captured extents do not cross any EQ-CEN centerline.");
 
-            PlotPlanModel multiple = BuildCenterlineFixture(10, 9.5,
-                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ-A", "EQ-CEN", 10, 3, 20, 3), Centerline("HORIZ-B", "EQ-CEN", 10, 7, 20, 7) });
+            // Both horizontals cross the extents and intersect the vertical, so the linkage stays ambiguous.
+            PlotPlanModel multiple = BuildCenterlineFixture(10, 5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ-A", "EQ-CEN", 10, 3, 20, 3), Centerline("HORIZ-B", "EQ-CEN", 10, 7, 20, 7) },
+                boxMinY: 2, boxMaxY: 8);
             Assert(multiple.EquipmentPlacements.Single().PlacementStatus == "Ambiguous" && multiple.EquipmentPlacements.Single().CenterlineEvidence?.Status == "Ambiguous" && multiple.EquipmentPlacements.Single().CenterlineEvidence!.Candidates.Count == 2, "Multiple EQ-CEN intersections were selected instead of remaining ambiguous.");
 
-            PlotPlanModel endpointGap = BuildCenterlineFixture(10, 9.5,
+            // The horizontal crosses the extents but stops short of the vertical, so no intersection exists.
+            PlotPlanModel endpointGap = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ-GAP", "EQ-CEN", 10.01, 5, 20, 5) });
             Assert(endpointGap.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && endpointGap.EquipmentPlacements.Single().CenterlineEvidence == null, "A gap at the EQ-CEN endpoint was extended into a false intersection.");
 
-            PlotPlanModel linkedCallout = BuildCenterlineFixture(10, 9.5,
+            // A single crossing centerline without a crossing partner yields no linkage.
+            PlotPlanModel verticalOnly = BuildCenterlineFixture(10, 5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ-FAR", "EQ-CEN", 10, 5, 20, 5) },
+                boxMinY: 7, boxMaxY: 9);
+            Assert(verticalOnly.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && verticalOnly.EquipmentPlacements.Single().CenterlineEvidence == null, "A single crossing centerline was accepted without a crossing partner.");
+
+            // Missing captured extents must fail closed rather than fall back to the insertion point.
+            PlotPlanModel missingExtents = BuildCenterlineFixture(10, 5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, omitExtents: true);
+            Assert(missingExtents.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && missingExtents.EquipmentPlacements.Single().CenterlineEvidence == null, "Linkage proceeded without captured EQ-TAG extents.");
+
+            PlotPlanModel linkedCallout = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 10m, 5m);
             EquipmentPlacement confirmed = linkedCallout.EquipmentPlacements.Single();
             Assert(confirmed.PlacementStatus == "Complete" && confirmed.CenterlineEvidence?.Status == "ConfirmedByCoordinateCallouts" && confirmed.CenterlineEvidence.CalloutEastingSourceLayer == "EQ-ID" && confirmed.CenterlineEvidence.CalloutNorthingSourceLayer == "EQ-ID" && confirmed.Easting.SelectedValue == 10m && confirmed.Northing.SelectedValue == 5m, "Agreeing EQ-ID callouts were not retained as combined centerline evidence.");
 
-            PlotPlanModel conflict = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel conflict = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 30m, 40m);
             EquipmentPlacement conflicted = conflict.EquipmentPlacements.Single();
             Assert(conflicted.PlacementStatus == "Ambiguous" && conflicted.CenterlineEvidence?.Status == "Conflict" && conflicted.Easting.SelectedValue == 30m && conflicted.Northing.SelectedValue == 40m, "Conflicting trusted callout and EQ-CEN placements silently selected a point.");
 
-            PlotPlanModel partialCallout = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel partialCallout = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 10m);
             EquipmentPlacement partial = partialCallout.EquipmentPlacements.Single();
             Assert(partial.PlacementStatus == "Incomplete" && partial.CenterlineEvidence?.Status == "CalloutEvidenceIncomplete" && partial.Easting.SelectedValue == 10m && partial.Northing.Status == "Missing", "Partial callout evidence was silently upgraded or replaced by EQ-CEN.");
 
-            PlotPlanModel ambiguousCallout = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel ambiguousCallout = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 10m, 5m, ambiguousCallout: true);
             Assert(ambiguousCallout.EquipmentPlacements.Single().PlacementStatus == "Ambiguous" && ambiguousCallout.EquipmentPlacements.Single().Easting.Status == "Ambiguous" && ambiguousCallout.EquipmentPlacements.Single().CenterlineEvidence?.Status == "CalloutEvidenceIncomplete", "Ambiguous callout evidence was silently upgraded by EQ-CEN.");
 
-            PlotPlanModel conflictingUnits = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel conflictingUnits = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 10m, 5m, unitConflict: true);
             Assert(conflictingUnits.EquipmentPlacements.Single().PlacementStatus == "Ambiguous" && conflictingUnits.EquipmentPlacements.Single().CenterlineEvidence?.Status == "UnitEvidenceUnresolved", "Callout and centerline values were compared despite conflicting drawing units.");
 
-            PlotPlanModel unrelated = BuildCenterlineFixture(10, 9.5,
+            PlotPlanModel unrelated = BuildCenterlineFixture(10, 5,
                 new[] { Centerline("VERT", "EQ", 10, 0, 10, 10), Centerline("HORIZ", "EQ", 10, 5, 20, 5) });
             Assert(unrelated.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && unrelated.EquipmentPlacements.Single().CenterlineEvidence == null, "Generic EQ geometry created equipment-center placement evidence.");
 
-            PlotPlanModel notLocal = BuildCenterlineFixture(10.1, 9.5,
+            PlotPlanModel notLocal = BuildCenterlineFixture(12, 5,
                 new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) });
-            Assert(notLocal.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && notLocal.EquipmentPlacements.Single().CenterlineEvidence == null, "A tag offset from the centerline was linked by a distance threshold.");
+            Assert(notLocal.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && notLocal.EquipmentPlacements.Single().CenterlineEvidence == null, "A tag whose extents do not cross the centerlines was linked by proximity.");
         }
 
-        private static PlotPlanModel BuildCenterlineFixture(double tagX, double tagY, IEnumerable<PlotGeometryPrimitive> lines, decimal? calloutEasting = null, decimal? calloutNorthing = null, double tagHeight = 1, bool unitConflict = false, bool ambiguousCallout = false)
+        private static PlotPlanModel BuildCenterlineFixture(double tagX, double tagY, IEnumerable<PlotGeometryPrimitive> lines, decimal? calloutEasting = null, decimal? calloutNorthing = null, double tagHeight = 1, bool unitConflict = false, bool ambiguousCallout = false, bool omitExtents = false, double? boxMinX = null, double? boxMinY = null, double? boxMaxX = null, double? boxMaxY = null)
         {
             var snapshot = new DrawingSnapshot();
-            snapshot.TextEntities.Add(new TextSnapshot { Text = "P-03A", Handle = "TAG-CEN", Layer = "EQ-TAG", SpaceKind = "Model", Height = tagHeight, PositionX = tagX, PositionY = tagY });
+            var tag = new TextSnapshot { Text = "P-03A", Handle = "TAG-CEN", Layer = "EQ-TAG", SpaceKind = "Model", Height = tagHeight, PositionX = tagX, PositionY = tagY };
+            if (!omitExtents)
+            {
+                tag.ExtentMinX = boxMinX ?? tagX - 1;
+                tag.ExtentMinY = boxMinY ?? tagY - 1;
+                tag.ExtentMaxX = boxMaxX ?? tagX + 1;
+                tag.ExtentMaxY = boxMaxY ?? tagY + 1;
+            }
+            snapshot.TextEntities.Add(tag);
             var model = new EngineeringDrawingModel { Drawing = new SemanticDrawing { InsertionUnits = unitConflict ? "Meters" : "Millimeters" } };
             if (unitConflict) model.Drawing.ExplicitUnitDeclarations.Add(new DrawingUnitDeclaration { Unit = "Millimeters", RawText = "coordinates in millimeters" });
             model.EquipmentTags.Add(new EquipmentTag { NormalizedTag = "P-03A", SourceHandle = "TAG-CEN", SourceLayer = "EQ-TAG" });

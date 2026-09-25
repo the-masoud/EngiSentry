@@ -107,6 +107,13 @@ namespace EngiSentry.PlotPlan
         private static void ApplyCenterlineEvidence(EquipmentPlacement placement, TextSnapshot tag, IEnumerable<PlotGeometryPrimitive>? primitives, SemanticDrawing? drawing)
         {
             if (primitives == null || !string.Equals(placement.TagSourceLayer, "EQ-TAG", StringComparison.OrdinalIgnoreCase)) return;
+
+            // Deterministic linkage is anchored on the captured EQ-TAG text extents. When the extents
+            // are unavailable (GeometricExtents threw, was non-finite, or degenerate) the linkage fails
+            // closed instead of falling back to the insertion point or a text-height heuristic.
+            TagExtents? tagExtents = TagExtents.From(tag);
+            if (tagExtents == null) return;
+
             List<PlotGeometryPrimitive> centerlines = primitives.Where(x => x != null
                     && string.Equals(x.SourceLayer, "EQ-CEN", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(x.GeometryKind, "Line", StringComparison.OrdinalIgnoreCase)
@@ -117,9 +124,11 @@ namespace EngiSentry.PlotPlan
                 .OrderBy(x => x.SourceHandle, StringComparer.Ordinal).ToList();
             List<CenterlineSegment> verticals = centerlines.Select(ToCenterlineSegment).Where(x => x != null && x.IsVertical).Select(x => x!).ToList();
             List<CenterlineSegment> horizontals = centerlines.Select(ToCenterlineSegment).Where(x => x != null && x.IsHorizontal).Select(x => x!).ToList();
+            List<CenterlineSegment> crossingVerticals = verticals.Where(x => tagExtents.CrossesVertical(x)).ToList();
+            List<CenterlineSegment> crossingHorizontals = horizontals.Where(x => tagExtents.CrossesHorizontal(x)).ToList();
             List<EquipmentCenterlineIntersection> candidates = new List<EquipmentCenterlineIntersection>();
-            foreach (CenterlineSegment vertical in verticals.Where(x => tag.PositionX == x.FixedX && tag.PositionY >= x.MinimumY && tag.PositionY <= x.MaximumY))
-            foreach (CenterlineSegment horizontal in horizontals)
+            foreach (CenterlineSegment vertical in crossingVerticals)
+            foreach (CenterlineSegment horizontal in crossingHorizontals)
             {
                 double x = vertical.FixedX;
                 double y = horizontal.FixedY;
@@ -243,6 +252,38 @@ namespace EngiSentry.PlotPlan
             public double MaximumX { get; set; }
             public double MinimumY { get; set; }
             public double MaximumY { get; set; }
+        }
+
+        // The captured WCS axis-aligned extents of an EQ-TAG text. A centerline segment "crosses" these
+        // extents only when the segment actually intersects the rectangle: the fixed ordinate falls
+        // inside the corresponding rectangle span and the segment's real span overlaps the other span.
+        private sealed class TagExtents
+        {
+            public double MinimumX { get; private set; }
+            public double MinimumY { get; private set; }
+            public double MaximumX { get; private set; }
+            public double MaximumY { get; private set; }
+
+            public static TagExtents? From(TextSnapshot tag)
+            {
+                if (!tag.ExtentMinX.HasValue || !tag.ExtentMinY.HasValue || !tag.ExtentMaxX.HasValue || !tag.ExtentMaxY.HasValue) return null;
+                double minimumX = tag.ExtentMinX.Value, minimumY = tag.ExtentMinY.Value, maximumX = tag.ExtentMaxX.Value, maximumY = tag.ExtentMaxY.Value;
+                if (!IsFinite(minimumX) || !IsFinite(minimumY) || !IsFinite(maximumX) || !IsFinite(maximumY)) return null;
+                if (maximumX <= minimumX || maximumY <= minimumY) return null;
+                return new TagExtents { MinimumX = minimumX, MinimumY = minimumY, MaximumX = maximumX, MaximumY = maximumY };
+            }
+
+            public bool CrossesVertical(CenterlineSegment vertical)
+            {
+                return vertical.FixedX >= MinimumX && vertical.FixedX <= MaximumX
+                    && vertical.MinimumY <= MaximumY && vertical.MaximumY >= MinimumY;
+            }
+
+            public bool CrossesHorizontal(CenterlineSegment horizontal)
+            {
+                return horizontal.FixedY >= MinimumY && horizontal.FixedY <= MaximumY
+                    && horizontal.MinimumX <= MaximumX && horizontal.MaximumX >= MinimumX;
+            }
         }
 
         private static CoordinateAssociation Associate(string axis, List<CoordinateCandidate> candidates, double scale)

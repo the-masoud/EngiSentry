@@ -188,12 +188,15 @@ namespace EngiSentry.AutoCAD2021.Scanning
                 Point3d position = Transform(attribute.Position, parentTransforms);
                 string source = depth == 0 ? Handle(attribute) : path + ":" + Handle(attribute);
                 string layer = EffectiveLayer(attribute.Layer, referenceLayer);
-                snapshot.InstantiatedTextEntities.Add(new TextSnapshot
+                var attributeSnapshot = new TextSnapshot
                 {
                     Type = "ATTRIB", Handle = source, ObjectType = attribute.GetRXClass().DxfName, Layer = layer, Text = attribute.TextString,
                     PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, SpaceKind = "Model",
                     Height = TransformHeight(attribute.Height, parentTransforms), Rotation = attribute.Rotation, Style = attribute.TextStyleName
-                });
+                };
+                CaptureAlignmentPoint(attribute, parentTransforms, attributeSnapshot);
+                CaptureExtents(attribute, parentTransforms, attributeSnapshot);
+                snapshot.InstantiatedTextEntities.Add(attributeSnapshot);
                 if (geometry != null && LayerActive(layer, layerStates)) geometry.ModelSpaceTextSources.Add(new PlotTextSourceRecord { SourceHandle = source, SourceLayer = layer, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = TransformHeight(attribute.Height, parentTransforms) });
             }
 
@@ -219,14 +222,19 @@ namespace EngiSentry.AutoCAD2021.Scanning
                     {
                         Point3d position = Transform(text.Position, currentTransforms);
                         double height = TransformHeight(text.Height, currentTransforms);
-                        snapshot.InstantiatedTextEntities.Add(new TextSnapshot { Type = "TEXT", Handle = source, ObjectType = text.GetRXClass().DxfName, Layer = layer, Text = text.TextString, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = "Model" });
+                        var textSnapshot = new TextSnapshot { Type = "TEXT", Handle = source, ObjectType = text.GetRXClass().DxfName, Layer = layer, Text = text.TextString, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = "Model" };
+                        CaptureAlignmentPoint(text, currentTransforms, textSnapshot);
+                        CaptureExtents(text, currentTransforms, textSnapshot);
+                        snapshot.InstantiatedTextEntities.Add(textSnapshot);
                         if (geometry != null && LayerActive(layer, layerStates)) geometry.ModelSpaceTextSources.Add(new PlotTextSourceRecord { SourceHandle = source, SourceLayer = layer, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height });
                     }
                     else if (entity is MText mtext)
                     {
                         Point3d position = Transform(mtext.Location, currentTransforms);
                         double height = TransformHeight(mtext.TextHeight, currentTransforms);
-                        snapshot.InstantiatedTextEntities.Add(new TextSnapshot { Type = "MTEXT", Handle = source, ObjectType = mtext.GetRXClass().DxfName, Layer = layer, Text = mtext.Contents, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height, Rotation = mtext.Rotation, Style = mtext.TextStyleName, SpaceKind = "Model" });
+                        var textSnapshot = new TextSnapshot { Type = "MTEXT", Handle = source, ObjectType = mtext.GetRXClass().DxfName, Layer = layer, Text = mtext.Contents, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height, Rotation = mtext.Rotation, Style = mtext.TextStyleName, SpaceKind = "Model" };
+                        CaptureExtents(mtext, currentTransforms, textSnapshot);
+                        snapshot.InstantiatedTextEntities.Add(textSnapshot);
                         if (geometry != null && LayerActive(layer, layerStates)) geometry.ModelSpaceTextSources.Add(new PlotTextSourceRecord { SourceHandle = source, SourceLayer = layer, PositionX = position.X, PositionY = position.Y, PositionZ = position.Z, Height = height });
                     }
                     if (geometry != null && LayerActive(layer, layerStates))
@@ -252,11 +260,55 @@ namespace EngiSentry.AutoCAD2021.Scanning
             return !layerStates.TryGetValue(layer!, out active) || active;
         }
 
+        private static readonly Matrix3d[] NoTransforms = new Matrix3d[0];
+
         private static Point3d Transform(Point3d point, IEnumerable<Matrix3d> transforms)
         {
             Point3d result = point;
             foreach (Matrix3d transform in transforms) result = result.TransformBy(transform);
             return result;
+        }
+
+        private static bool IsFinite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+
+        private static bool IsFinite(Point3d point) { return IsFinite(point.X) && IsFinite(point.Y) && IsFinite(point.Z); }
+
+        private static void CaptureAlignmentPoint(DBText text, IEnumerable<Matrix3d> transforms, TextSnapshot snapshot)
+        {
+            Point3d alignment = Transform(text.AlignmentPoint, transforms);
+            if (!IsFinite(alignment)) return;
+            snapshot.AlignmentX = alignment.X;
+            snapshot.AlignmentY = alignment.Y;
+            snapshot.AlignmentZ = alignment.Z;
+        }
+
+        // GeometricExtents is captured in WCS. For block-instantiated text the raw extents live in the
+        // block definition coordinate system, so every corner of the box is transformed by the accumulated
+        // block transforms and the axis-aligned bounds are recomputed. Non-finite or degenerate boxes are
+        // rejected (left unset) so downstream linkage can fail closed instead of inventing geometry.
+        private static void CaptureExtents(Entity entity, IEnumerable<Matrix3d> transforms, TextSnapshot snapshot)
+        {
+            Extents3d extents;
+            try { extents = entity.GeometricExtents; }
+            catch { return; }
+            if (!IsFinite(extents.MinPoint) || !IsFinite(extents.MaxPoint)) return;
+            if (extents.MaxPoint.X <= extents.MinPoint.X || extents.MaxPoint.Y <= extents.MinPoint.Y) return;
+            double minimumX = double.PositiveInfinity, minimumY = double.PositiveInfinity, minimumZ = double.PositiveInfinity;
+            double maximumX = double.NegativeInfinity, maximumY = double.NegativeInfinity, maximumZ = double.NegativeInfinity;
+            for (int corner = 0; corner < 8; corner++)
+            {
+                Point3d point = Transform(new Point3d(
+                    (corner & 1) == 0 ? extents.MinPoint.X : extents.MaxPoint.X,
+                    (corner & 2) == 0 ? extents.MinPoint.Y : extents.MaxPoint.Y,
+                    (corner & 4) == 0 ? extents.MinPoint.Z : extents.MaxPoint.Z), transforms);
+                if (!IsFinite(point)) return;
+                minimumX = Math.Min(minimumX, point.X); maximumX = Math.Max(maximumX, point.X);
+                minimumY = Math.Min(minimumY, point.Y); maximumY = Math.Max(maximumY, point.Y);
+                minimumZ = Math.Min(minimumZ, point.Z); maximumZ = Math.Max(maximumZ, point.Z);
+            }
+            if (maximumX <= minimumX || maximumY <= minimumY) return;
+            snapshot.ExtentMinX = minimumX; snapshot.ExtentMinY = minimumY; snapshot.ExtentMinZ = minimumZ;
+            snapshot.ExtentMaxX = maximumX; snapshot.ExtentMaxY = maximumY; snapshot.ExtentMaxZ = maximumZ;
         }
 
         private static double TransformHeight(double height, IEnumerable<Matrix3d> transforms)
@@ -291,8 +343,19 @@ namespace EngiSentry.AutoCAD2021.Scanning
             snapshot.BlockReferences.Add(result);
         }
 
-        private static TextSnapshot Text(DBText text, string type, string spaceKind) => new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.TextString, PositionX = text.Position.X, PositionY = text.Position.Y, PositionZ = text.Position.Z, Height = text.Height, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = spaceKind };
-        private static TextSnapshot Text(MText text, string type, string spaceKind) => new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.Contents, PositionX = text.Location.X, PositionY = text.Location.Y, PositionZ = text.Location.Z, Height = text.TextHeight, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = spaceKind };
+        private static TextSnapshot Text(DBText text, string type, string spaceKind)
+        {
+            var snapshot = new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.TextString, PositionX = text.Position.X, PositionY = text.Position.Y, PositionZ = text.Position.Z, Height = text.Height, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = spaceKind };
+            CaptureAlignmentPoint(text, NoTransforms, snapshot);
+            CaptureExtents(text, NoTransforms, snapshot);
+            return snapshot;
+        }
+        private static TextSnapshot Text(MText text, string type, string spaceKind)
+        {
+            var snapshot = new TextSnapshot { Type = type, Handle = Handle(text), ObjectType = text.GetRXClass().DxfName, Layer = text.Layer, Text = text.Contents, PositionX = text.Location.X, PositionY = text.Location.Y, PositionZ = text.Location.Z, Height = text.TextHeight, Rotation = text.Rotation, Style = text.TextStyleName, SpaceKind = spaceKind };
+            CaptureExtents(text, NoTransforms, snapshot);
+            return snapshot;
+        }
         private static PlotTextSourceRecord TextSource(DBText text) => new PlotTextSourceRecord { SourceHandle = Handle(text), SourceLayer = text.Layer, PositionX = text.Position.X, PositionY = text.Position.Y, PositionZ = text.Position.Z, Height = text.Height };
         private static PlotTextSourceRecord TextSource(MText text) => new PlotTextSourceRecord { SourceHandle = Handle(text), SourceLayer = text.Layer, PositionX = text.Location.X, PositionY = text.Location.Y, PositionZ = text.Location.Z, Height = text.TextHeight };
         private static PlotGeometryPrimitive? Geometry(Entity entity, Transaction transaction)
