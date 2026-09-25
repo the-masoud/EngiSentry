@@ -15,6 +15,15 @@
         <Command Global="ES_REVBASELINE" Local="ES_REVBASELINE" />
         <Command Global="ES_REVISION" Local="ES_REVISION" />
         <Command Global="ES_DISTANCESETTINGS" Local="ES_DISTANCESETTINGS" />
+        <Command Global="ES_SUGGEST" Local="ES_SUGGEST" />
+        <Command Global="ES_APPROVALPREP" Local="ES_APPROVALPREP" />
+        <Command Global="ES_APPROVALPACKAGE" Local="ES_APPROVALPACKAGE" />
+        <Command Global="ES_APPROVALINTAKE" Local="ES_APPROVALINTAKE" />
+        <Command Global="ES_JEVASSIST" Local="ES_JEVASSIST" />
+        <Command Global="ES_JEVCALIBRATE" Local="ES_JEVCALIBRATE" />
+        <Command Global="ES_JEVLABEL" Local="ES_JEVLABEL" />
+        <Command Global="ES_ENGINEERREVIEW" Local="ES_ENGINEERREVIEW" />
+        <Command Global="ES_PLACEMENTRESOLVE" Local="ES_PLACEMENTRESOLVE" />
       </Commands>
     </ComponentEntry>
   </Components>
