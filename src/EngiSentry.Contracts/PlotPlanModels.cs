@@ -31,6 +31,33 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 13)] public CoordinateAssociation Northing { get; set; } = new CoordinateAssociation { Axis = "N" };
         [DataMember(Order = 14)] public string PlacementStatus { get; set; } = "Incomplete";
         [DataMember(Order = 15, EmitDefaultValue = false)] public string? EngineeringApplicabilityKey { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public EquipmentCenterlineEvidence? CenterlineEvidence { get; set; }
+    }
+
+    [DataContract]
+    public sealed class EquipmentCenterlineEvidence
+    {
+        [DataMember(Order = 1)] public string Status { get; set; } = "Resolved";
+        [DataMember(Order = 2)] public string? CalloutEastingSourceHandle { get; set; }
+        [DataMember(Order = 3)] public string? CalloutEastingSourceLayer { get; set; }
+        [DataMember(Order = 4)] public decimal? CalloutEastingValue { get; set; }
+        [DataMember(Order = 5)] public string? CalloutNorthingSourceHandle { get; set; }
+        [DataMember(Order = 6)] public string? CalloutNorthingSourceLayer { get; set; }
+        [DataMember(Order = 7)] public decimal? CalloutNorthingValue { get; set; }
+        [DataMember(Order = 8)] public List<EquipmentCenterlineIntersection> Candidates { get; set; } = new List<EquipmentCenterlineIntersection>();
+        [DataMember(Order = 9, EmitDefaultValue = false)] public EquipmentCenterlineIntersection? Selected { get; set; }
+    }
+
+    [DataContract]
+    public sealed class EquipmentCenterlineIntersection
+    {
+        [DataMember(Order = 1)] public double X { get; set; }
+        [DataMember(Order = 2)] public double Y { get; set; }
+        [DataMember(Order = 3)] public string VerticalSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 4)] public string HorizontalSourceHandle { get; set; } = string.Empty;
+        [DataMember(Order = 5)] public string VerticalSourceLayer { get; set; } = string.Empty;
+        [DataMember(Order = 6)] public string HorizontalSourceLayer { get; set; } = string.Empty;
+        [DataMember(Order = 7)] public double TagToVerticalDistance { get; set; }
     }
 
     [DataContract]

@@ -9,6 +9,8 @@ namespace EngiSentry.PlotPlan
     {
         public const double MaxAssociationDistanceFactor = 30.0;
         public const double AmbiguityMarginFactor = 2.0;
+        private const double MaxCenterlineLinkDistanceFactor = 3.0;
+        private const decimal CenterlineCalloutAgreementTolerance = 1m;
 
         public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null)
         {
@@ -45,8 +47,11 @@ namespace EngiSentry.PlotPlan
                 PreferCoherentPair(easting, northing, eastingCandidates, northingCandidates, scale);
                 var placement = new EquipmentPlacement { PlacementId = "placement:" + source.Item1.CanonicalId + ":" + handle, EquipmentEntityId = source.Item1.CanonicalId, NormalizedTag = source.Item2.NormalizedTag ?? source.Item1.NormalizedTag, TagSourceHandle = handle, TagSourceLayer = source.Item2.SourceLayer ?? text.Layer, TagPositionX = text.PositionX, TagPositionY = text.PositionY, TagPositionZ = text.PositionZ, TagTextHeight = text.Height, TagRotation = text.Rotation, AssociationScale = scale, Easting = easting, Northing = northing, EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment };
                 placement.PlacementStatus = placement.Easting.Status == "Ambiguous" || placement.Northing.Status == "Ambiguous" ? "Ambiguous" : placement.Easting.Status == "Resolved" && placement.Northing.Status == "Resolved" ? "Complete" : "Incomplete";
+                ApplyCenterlineEvidence(placement, text, geometryCapture?.Primitives, scale);
                 placements.Add(placement);
             }
+            HashSet<string> unresolvedCenterlineEntities = new HashSet<string>(placements.Where(x => x.CenterlineEvidence?.Status == "Ambiguous" || x.CenterlineEvidence?.Status == "Conflict").Select(x => x.EquipmentEntityId), StringComparer.Ordinal);
+            foreach (EquipmentPlacement placement in placements.Where(x => unresolvedCenterlineEntities.Contains(x.EquipmentEntityId))) placement.PlacementStatus = "Ambiguous";
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
             PlotGeometryModel geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture);
             if (geometryCapture != null)
@@ -99,6 +104,124 @@ namespace EngiSentry.PlotPlan
             }
 
             return sharedOwner;
+        }
+
+        private static void ApplyCenterlineEvidence(EquipmentPlacement placement, TextSnapshot tag, IEnumerable<PlotGeometryPrimitive>? primitives, double scale)
+        {
+            if (primitives == null || !string.Equals(placement.TagSourceLayer, "EQ-TAG", StringComparison.OrdinalIgnoreCase) || !IsPositiveFinite(scale)) return;
+            List<PlotGeometryPrimitive> centerlines = primitives.Where(x => x != null
+                    && string.Equals(x.SourceLayer, "EQ-CEN", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(x.GeometryKind, "Line", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(x.SourceHandle)
+                    && x.Vertices != null && x.Vertices.Count == 2
+                    && IsFinite(x.Vertices[0].X) && IsFinite(x.Vertices[0].Y)
+                    && IsFinite(x.Vertices[1].X) && IsFinite(x.Vertices[1].Y))
+                .OrderBy(x => x.SourceHandle, StringComparer.Ordinal).ToList();
+            double orthogonalityTolerance = Math.Max(0.000001, scale * 0.000001);
+            List<CenterlineSegment> verticals = centerlines.Select(x => ToCenterlineSegment(x, orthogonalityTolerance)).Where(x => x != null && x.IsVertical).Select(x => x!).ToList();
+            List<CenterlineSegment> horizontals = centerlines.Select(x => ToCenterlineSegment(x, orthogonalityTolerance)).Where(x => x != null && x.IsHorizontal).Select(x => x!).ToList();
+            double linkLimit = scale * MaxCenterlineLinkDistanceFactor;
+            double intersectionExtension = scale;
+            List<EquipmentCenterlineIntersection> candidates = new List<EquipmentCenterlineIntersection>();
+            foreach (CenterlineSegment vertical in verticals.Where(x => tag.PositionY >= x.MinimumY && tag.PositionY <= x.MaximumY && Math.Abs(tag.PositionX - x.FixedX) <= linkLimit))
+            foreach (CenterlineSegment horizontal in horizontals)
+            {
+                double x = vertical.FixedX;
+                double y = horizontal.FixedY;
+                if (x < horizontal.MinimumX - intersectionExtension || x > horizontal.MaximumX + intersectionExtension ||
+                    y < vertical.MinimumY - intersectionExtension || y > vertical.MaximumY + intersectionExtension) continue;
+                candidates.Add(new EquipmentCenterlineIntersection
+                {
+                    X = x, Y = y,
+                    VerticalSourceHandle = vertical.SourceHandle, HorizontalSourceHandle = horizontal.SourceHandle,
+                    VerticalSourceLayer = vertical.SourceLayer, HorizontalSourceLayer = horizontal.SourceLayer,
+                    TagToVerticalDistance = Math.Abs(tag.PositionX - x)
+                });
+            }
+            candidates = candidates.OrderBy(x => x.X).ThenBy(x => x.Y).ThenBy(x => x.VerticalSourceHandle, StringComparer.Ordinal).ThenBy(x => x.HorizontalSourceHandle, StringComparer.Ordinal).ToList();
+            if (candidates.Count == 0) return;
+
+            var evidence = new EquipmentCenterlineEvidence
+            {
+                Status = candidates.Count == 1 ? "Resolved" : "Ambiguous",
+                CalloutEastingSourceHandle = placement.Easting.SelectedSourceHandle,
+                CalloutEastingSourceLayer = placement.Easting.SelectedSourceLayer,
+                CalloutEastingValue = placement.Easting.SelectedValue,
+                CalloutNorthingSourceHandle = placement.Northing.SelectedSourceHandle,
+                CalloutNorthingSourceLayer = placement.Northing.SelectedSourceLayer,
+                CalloutNorthingValue = placement.Northing.SelectedValue,
+                Candidates = candidates
+            };
+            placement.CenterlineEvidence = evidence;
+            if (candidates.Count != 1)
+            {
+                placement.PlacementStatus = "Ambiguous";
+                return;
+            }
+
+            EquipmentCenterlineIntersection selected = candidates[0];
+            bool trustedCallout = placement.PlacementStatus == "Complete" && placement.Easting.SelectedValue.HasValue && placement.Northing.SelectedValue.HasValue;
+            if (trustedCallout)
+            {
+                decimal centerEasting = ToDecimal(selected.X);
+                decimal centerNorthing = ToDecimal(selected.Y);
+                if (Math.Abs(placement.Easting.SelectedValue!.Value - centerEasting) > CenterlineCalloutAgreementTolerance ||
+                    Math.Abs(placement.Northing.SelectedValue!.Value - centerNorthing) > CenterlineCalloutAgreementTolerance)
+                {
+                    evidence.Status = "Conflict";
+                    placement.PlacementStatus = "Ambiguous";
+                    return;
+                }
+                evidence.Status = "ConfirmedByCoordinateCallouts";
+            }
+            evidence.Selected = selected;
+            placement.Easting = CenterlineAssociation("E", selected.X, selected.VerticalSourceHandle, selected.VerticalSourceLayer);
+            placement.Northing = CenterlineAssociation("N", selected.Y, selected.HorizontalSourceHandle, selected.HorizontalSourceLayer);
+            placement.PlacementStatus = "Complete";
+        }
+
+        private static CoordinateAssociation CenterlineAssociation(string axis, double value, string sourceHandle, string sourceLayer) => new CoordinateAssociation
+        {
+            Axis = axis, Status = "Resolved", SelectedSourceHandle = sourceHandle, SelectedValue = ToDecimal(value),
+            SelectedRawText = "EQ-CEN orthogonal centerline intersection", SelectedSourceLayer = sourceLayer
+        };
+
+        private static CenterlineSegment? ToCenterlineSegment(PlotGeometryPrimitive primitive, double orthogonalityTolerance)
+        {
+            double x1 = primitive.Vertices[0].X, y1 = primitive.Vertices[0].Y;
+            double x2 = primitive.Vertices[1].X, y2 = primitive.Vertices[1].Y;
+            bool vertical = Math.Abs(x1 - x2) <= orthogonalityTolerance && Math.Abs(y1 - y2) > orthogonalityTolerance;
+            bool horizontal = Math.Abs(y1 - y2) <= orthogonalityTolerance && Math.Abs(x1 - x2) > orthogonalityTolerance;
+            if (!vertical && !horizontal) return null;
+            return new CenterlineSegment
+            {
+                SourceHandle = primitive.SourceHandle, SourceLayer = primitive.SourceLayer,
+                IsVertical = vertical, IsHorizontal = horizontal,
+                FixedX = vertical ? (x1 + x2) / 2d : 0d, FixedY = horizontal ? (y1 + y2) / 2d : 0d,
+                MinimumX = Math.Min(x1, x2), MaximumX = Math.Max(x1, x2),
+                MinimumY = Math.Min(y1, y2), MaximumY = Math.Max(y1, y2)
+            };
+        }
+
+        private static decimal ToDecimal(double value)
+        {
+            if (!IsFinite(value)) throw new InvalidOperationException("EQ-CEN intersection coordinates must be finite.");
+            try { return Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture); }
+            catch (OverflowException exception) { throw new InvalidOperationException("EQ-CEN intersection coordinates exceed supported range.", exception); }
+        }
+
+        private sealed class CenterlineSegment
+        {
+            public string SourceHandle { get; set; } = string.Empty;
+            public string SourceLayer { get; set; } = string.Empty;
+            public bool IsVertical { get; set; }
+            public bool IsHorizontal { get; set; }
+            public double FixedX { get; set; }
+            public double FixedY { get; set; }
+            public double MinimumX { get; set; }
+            public double MaximumX { get; set; }
+            public double MinimumY { get; set; }
+            public double MaximumY { get; set; }
         }
 
         private static CoordinateAssociation Associate(string axis, List<CoordinateCandidate> candidates, double scale)
@@ -164,7 +287,8 @@ namespace EngiSentry.PlotPlan
         }
         private static void Select(CoordinateAssociation association, CoordinateCandidate candidate) { association.SelectedSourceHandle = candidate.SourceHandle; association.SelectedValue = candidate.Value; association.SelectedRawText = candidate.RawText; association.SelectedSourceLayer = candidate.SourceLayer; association.SelectedDistance = candidate.Distance; }
         private static double Distance(double x1, double y1, double x2, double y2) { double dx = x1 - x2, dy = y1 - y2; return Math.Sqrt(dx * dx + dy * dy); }
-        private static bool IsPositiveFinite(double value) { return value > 0 && !double.IsNaN(value) && !double.IsInfinity(value); }
+        private static bool IsFinite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+        private static bool IsPositiveFinite(double value) { return value > 0 && IsFinite(value); }
         private static double Median(List<double> values) { if (values.Count == 0) return 0; int middle = values.Count / 2; return values.Count % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2.0; }
     }
 }

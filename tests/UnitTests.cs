@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Json;
@@ -86,9 +87,71 @@ namespace EngiSentry.Tests
             Assert(linkedPlacement.PlacementStatus == "Complete" && linkedPlacement.Easting.SelectedSourceLayer == "TXT-ID" && linkedPlacement.Northing.SelectedSourceLayer == "TXT-ID", "Deterministically owned TXT-ID coordinates were rejected.");
         }
 
+        private static void EquipmentCenterlinePlacementRegression()
+        {
+            PlotPlanModel resolved = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10.5, 5, 20, 5) });
+            EquipmentPlacement placement = resolved.EquipmentPlacements.Single();
+            Assert(placement.PlacementStatus == "Complete" && placement.Easting.SelectedValue == 10m && placement.Northing.SelectedValue == 5m, "EQ-CEN did not set final placement to the unique orthogonal intersection.");
+            Assert(placement.CenterlineEvidence?.Status == "Resolved" && placement.CenterlineEvidence.Selected?.VerticalSourceHandle == "VERT" && placement.CenterlineEvidence.Selected.HorizontalSourceHandle == "HORIZ" && placement.Easting.SelectedSourceLayer == "EQ-CEN" && placement.Northing.SelectedSourceLayer == "EQ-CEN", "EQ-CEN intersection source handles, layers, or provenance were lost.");
+
+            PlotPlanModel transformed = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT-TRANSFORMED", "EQ-CEN", 10, 0, 10.0000001, 10), Centerline("HORIZ-TRANSFORMED", "EQ-CEN", 10, 5, 20, 5.0000001) });
+            Assert(transformed.EquipmentPlacements.Single().PlacementStatus == "Complete" && transformed.EquipmentPlacements.Single().CenterlineEvidence?.Selected?.VerticalSourceHandle == "VERT-TRANSFORMED", "Numerical block-transform noise prevented an orthogonal EQ-CEN intersection.");
+
+            PlotPlanModel instantiated = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("MODELREF:VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("MODELREF:HORIZ", "EQ-CEN", 10, 5, 20, 5) });
+            Assert(instantiated.EquipmentPlacements.Single().PlacementStatus == "Complete" && instantiated.EquipmentPlacements.Single().CenterlineEvidence?.Selected?.VerticalSourceHandle == "MODELREF:VERT", "Instantiated Model-space EQ-CEN source handles were discarded.");
+
+            PlotPlanModel pilotP03A = BuildCenterlineFixture(5603140.9008938977, 5316041.4104981972,
+                new[] { Centerline("39FF7D", "EQ-CEN", 5603025, 5312555.802, 5603025, 5316041.508), Centerline("39FF7E", "EQ-CEN", 5602690.689, 5313837.5, 5603344.213, 5313837.5) }, tagHeight: 240);
+            Assert(pilotP03A.EquipmentPlacements.Single().PlacementStatus == "Complete" && pilotP03A.EquipmentPlacements.Single().CenterlineEvidence?.Selected?.VerticalSourceHandle == "39FF7D", "Pilot P-03A EQ-CEN evidence did not resolve to the orthogonal intersection.");
+
+            PlotPlanModel pilotP03B = BuildCenterlineFixture(5604705.554594002, 5316041.4104981972,
+                new[] { Centerline("3A4461", "EQ-CEN", 5604575, 5312555.802, 5604575, 5316041.508), Centerline("39FF81", "EQ-CEN", 5604241.824, 5313836.018, 5604895.348, 5313836.018) }, tagHeight: 240);
+            Assert(pilotP03B.EquipmentPlacements.Single().PlacementStatus == "Complete" && pilotP03B.EquipmentPlacements.Single().CenterlineEvidence?.Selected?.HorizontalSourceHandle == "39FF81", "Pilot P-03B EQ-CEN evidence did not resolve to the orthogonal intersection.");
+
+            PlotPlanModel multiple = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ-A", "EQ-CEN", 10, 3, 20, 3), Centerline("HORIZ-B", "EQ-CEN", 10, 7, 20, 7) });
+            Assert(multiple.EquipmentPlacements.Single().PlacementStatus == "Ambiguous" && multiple.EquipmentPlacements.Single().CenterlineEvidence?.Status == "Ambiguous" && multiple.EquipmentPlacements.Single().CenterlineEvidence!.Candidates.Count == 2, "Multiple EQ-CEN intersections were selected instead of remaining ambiguous.");
+
+            PlotPlanModel linkedCallout = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 10m, 5m);
+            EquipmentPlacement confirmed = linkedCallout.EquipmentPlacements.Single();
+            Assert(confirmed.PlacementStatus == "Complete" && confirmed.CenterlineEvidence?.Status == "ConfirmedByCoordinateCallouts" && confirmed.CenterlineEvidence.CalloutEastingSourceLayer == "EQ-ID" && confirmed.CenterlineEvidence.CalloutNorthingSourceLayer == "EQ-ID" && confirmed.Easting.SelectedValue == 10m && confirmed.Northing.SelectedValue == 5m, "Agreeing EQ-ID callouts were not retained as combined centerline evidence.");
+
+            PlotPlanModel conflict = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) }, 30m, 40m);
+            EquipmentPlacement conflicted = conflict.EquipmentPlacements.Single();
+            Assert(conflicted.PlacementStatus == "Ambiguous" && conflicted.CenterlineEvidence?.Status == "Conflict" && conflicted.Easting.SelectedValue == 30m && conflicted.Northing.SelectedValue == 40m, "Conflicting trusted callout and EQ-CEN placements silently selected a point.");
+
+            PlotPlanModel unrelated = BuildCenterlineFixture(10.5, 9.5,
+                new[] { Centerline("VERT", "EQ", 10, 0, 10, 10), Centerline("HORIZ", "EQ", 10, 5, 20, 5) });
+            Assert(unrelated.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && unrelated.EquipmentPlacements.Single().CenterlineEvidence == null, "Generic EQ geometry created equipment-center placement evidence.");
+
+            PlotPlanModel notLocal = BuildCenterlineFixture(14, 9.5,
+                new[] { Centerline("VERT", "EQ-CEN", 10, 0, 10, 10), Centerline("HORIZ", "EQ-CEN", 10, 5, 20, 5) });
+            Assert(notLocal.EquipmentPlacements.Single().PlacementStatus == "Incomplete" && notLocal.EquipmentPlacements.Single().CenterlineEvidence == null, "A nonlocal tag was linked to EQ-CEN geometry.");
+        }
+
+        private static PlotPlanModel BuildCenterlineFixture(double tagX, double tagY, IEnumerable<PlotGeometryPrimitive> lines, decimal? calloutEasting = null, decimal? calloutNorthing = null, double tagHeight = 1)
+        {
+            var snapshot = new DrawingSnapshot();
+            snapshot.TextEntities.Add(new TextSnapshot { Text = "P-03A", Handle = "TAG-CEN", Layer = "EQ-TAG", SpaceKind = "Model", Height = tagHeight, PositionX = tagX, PositionY = tagY });
+            var model = new EngineeringDrawingModel();
+            model.EquipmentTags.Add(new EquipmentTag { NormalizedTag = "P-03A", SourceHandle = "TAG-CEN", SourceLayer = "EQ-TAG" });
+            if (calloutEasting.HasValue) { snapshot.TextEntities.Add(new TextSnapshot { Text = "X= " + calloutEasting.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), Handle = "CALL-E", Layer = "EQ-ID", SpaceKind = "Model", PositionX = tagX, PositionY = tagY }); model.Coordinates.Add(new CoordinateEvidence { Axis = "E", Value = calloutEasting.Value, SourceHandle = "CALL-E", SourceLayer = "EQ-ID", PositionX = tagX, PositionY = tagY, ParseStatus = "Parsed" }); }
+            if (calloutNorthing.HasValue) { snapshot.TextEntities.Add(new TextSnapshot { Text = "Y= " + calloutNorthing.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), Handle = "CALL-N", Layer = "EQ-ID", SpaceKind = "Model", PositionX = tagX, PositionY = tagY }); model.Coordinates.Add(new CoordinateEvidence { Axis = "N", Value = calloutNorthing.Value, SourceHandle = "CALL-N", SourceLayer = "EQ-ID", PositionX = tagX, PositionY = tagY, ParseStatus = "Parsed" }); }
+            var capture = new PlotGeometryCapture(); capture.Primitives.AddRange(lines);
+            return PlotPlanBuilder.Build(EntityIndexer.Build(model), model, snapshot, capture);
+        }
+
+        private static PlotGeometryPrimitive Centerline(string handle, string layer, double x1, double y1, double x2, double y2) => new PlotGeometryPrimitive { SourceHandle = handle, SourceLayer = layer, GeometryKind = "Line", Vertices = new List<PlotGeometryVertex> { new PlotGeometryVertex { X = x1, Y = y1 }, new PlotGeometryVertex { X = x2, Y = y2 } } };
+
         public static int Main()
         {
             PilotEquipmentCoordinateRegression();
+            EquipmentCenterlinePlacementRegression();
             CrossDocumentTests.Run();
             RevisionTests.Run();
             var snapshot = new DrawingSnapshot { FileName = "drawing.dwg", ScanTimestampUtc = new DateTime(2026, 9, 3, 12, 34, 56, 123, DateTimeKind.Utc) };
