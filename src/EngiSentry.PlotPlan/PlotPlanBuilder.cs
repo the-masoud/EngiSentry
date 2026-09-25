@@ -38,8 +38,8 @@ namespace EngiSentry.PlotPlan
                 double scale = IsPositiveFinite(text.Height) ? text.Height : fallback;
                 string handle = source.Item2.SourceHandle!;
                 List<CoordinateEvidence> compatibleCoordinates = coordinates.Where(c => IsCoordinateCompatible(source.Item2.SourceLayer ?? text.Layer, handle, c, textByHandle)).ToList();
-                List<CoordinateCandidate> eastingCandidates = FindCandidates("E", text.PositionX, text.PositionY, scale, compatibleCoordinates);
-                List<CoordinateCandidate> northingCandidates = FindCandidates("N", text.PositionX, text.PositionY, scale, compatibleCoordinates);
+                List<CoordinateCandidate> eastingCandidates = FindCandidates("E", text.PositionX, text.PositionY, scale, compatibleCoordinates, handle);
+                List<CoordinateCandidate> northingCandidates = FindCandidates("N", text.PositionX, text.PositionY, scale, compatibleCoordinates, handle);
                 CoordinateAssociation easting = Associate("E", eastingCandidates, scale);
                 CoordinateAssociation northing = Associate("N", northingCandidates, scale);
                 PreferCoherentPair(easting, northing, eastingCandidates, northingCandidates, scale);
@@ -68,10 +68,10 @@ namespace EngiSentry.PlotPlan
             return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
         }
 
-        private static List<CoordinateCandidate> FindCandidates(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all)
+        private static List<CoordinateCandidate> FindCandidates(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all, string equipmentHandle)
         {
             double max = scale * MaxAssociationDistanceFactor;
-            return all.Where(c => c.Axis == axis && !string.IsNullOrEmpty(c.SourceHandle)).Select(c => new CoordinateCandidate { SourceHandle = c.SourceHandle!, RawText = c.RawText, SourceLayer = c.SourceLayer, Value = c.Value, PositionX = c.PositionX, PositionY = c.PositionY, PositionZ = c.PositionZ, Distance = Distance(x, y, c.PositionX, c.PositionY) }).Where(c => !double.IsNaN(c.Distance) && !double.IsInfinity(c.Distance) && c.Distance <= max).OrderBy(c => c.Distance).ThenBy(c => c.SourceHandle, StringComparer.Ordinal).ToList();
+            return all.Where(c => c.Axis == axis && !string.IsNullOrEmpty(c.SourceHandle)).Select(c => new CoordinateCandidate { SourceHandle = c.SourceHandle!, RawText = c.RawText, SourceLayer = c.SourceLayer, Value = c.Value, PositionX = c.PositionX, PositionY = c.PositionY, PositionZ = c.PositionZ, Distance = Distance(x, y, c.PositionX, c.PositionY), DeterministicallyOwned = SharesInstantiatedOwner(equipmentHandle, c.SourceHandle!) }).Where(c => !double.IsNaN(c.Distance) && !double.IsInfinity(c.Distance) && c.Distance <= max).OrderBy(c => c.Distance).ThenBy(c => c.SourceHandle, StringComparer.Ordinal).ToList();
         }
 
         private static bool IsCoordinateCompatible(string? equipmentLayer, string equipmentHandle, CoordinateEvidence coordinate, Dictionary<string, List<TextSnapshot>> textByHandle)
@@ -87,14 +87,14 @@ namespace EngiSentry.PlotPlan
                 (source != null && string.Equals(source.Layer, "VPORTS", StringComparison.OrdinalIgnoreCase)) ||
                 (source != null && string.Equals(source.SpaceKind, "Paper", StringComparison.OrdinalIgnoreCase))) return false;
 
-            string? equipmentRoot = InstantiatedRoot(equipmentHandle);
-            string? coordinateRoot = InstantiatedRoot(coordinate.SourceHandle ?? string.Empty);
-            bool sharedOwner = equipmentRoot != null && coordinateRoot != null && string.Equals(equipmentRoot, coordinateRoot, StringComparison.Ordinal);
+            bool sharedOwner = SharesInstantiatedOwner(equipmentHandle, coordinate.SourceHandle ?? string.Empty);
 
             // Generic text identifiers carry no equipment ownership by themselves.
             if (string.Equals(coordinateLayer, "TXT-ID", StringComparison.OrdinalIgnoreCase)) return sharedOwner;
 
-            // This is the explicit equipment coordinate family present in the pilot.
+            // The explicit equipment coordinate family present in the pilot. Layer compatibility alone
+            // is only enough to retain the coordinate as a diagnostic proximity candidate; it is never
+            // enough to resolve a trusted placement. See Associate and SharesInstantiatedOwner.
             if (string.Equals(equipmentLayer, "EQ-TAG", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.Equals(coordinateLayer, "SLP-ID", StringComparison.OrdinalIgnoreCase)) return false;
@@ -102,6 +102,16 @@ namespace EngiSentry.PlotPlan
             }
 
             return sharedOwner;
+        }
+
+        // Deterministic ownership is the only trusted coordinate linkage: the coordinate text and the
+        // equipment tag are attributes of the same instantiated block occurrence (shared instantiation
+        // root). Layer compatibility and proximity are diagnostics, never trusted ownership.
+        private static bool SharesInstantiatedOwner(string equipmentHandle, string coordinateHandle)
+        {
+            string? equipmentRoot = InstantiatedRoot(equipmentHandle);
+            string? coordinateRoot = InstantiatedRoot(coordinateHandle);
+            return equipmentRoot != null && coordinateRoot != null && string.Equals(equipmentRoot, coordinateRoot, StringComparison.Ordinal);
         }
 
         private static void ApplyCenterlineEvidence(EquipmentPlacement placement, TextSnapshot tag, IEnumerable<PlotGeometryPrimitive>? primitives, SemanticDrawing? drawing)
@@ -165,14 +175,24 @@ namespace EngiSentry.PlotPlan
 
             EquipmentCenterlineIntersection selected = candidates[0];
             evidence.Selected = selected;
-            bool hasCalloutEvidence = placement.Easting.Status != "Missing" || placement.Northing.Status != "Missing";
-            bool completeCalloutEvidence = placement.Easting.Status == "Resolved" && placement.Northing.Status == "Resolved" && placement.Easting.SelectedValue.HasValue && placement.Northing.SelectedValue.HasValue;
-            if (hasCalloutEvidence && !completeCalloutEvidence)
+            // Only deterministically owned callouts are trusted callout evidence. Ambiguous callouts
+            // still fail closed. Proximity-only callouts neither block nor confirm: the unique EQ-CEN
+            // intersection is existing explicit deterministic evidence and remains trusted on its own.
+            bool eastingAmbiguous = placement.Easting.Status == "Ambiguous";
+            bool northingAmbiguous = placement.Northing.Status == "Ambiguous";
+            if (eastingAmbiguous || northingAmbiguous)
             {
                 evidence.Status = "CalloutEvidenceIncomplete";
                 return;
             }
-            if (completeCalloutEvidence)
+            bool eastingTrusted = placement.Easting.Status == "Resolved" && placement.Easting.SelectedValue.HasValue;
+            bool northingTrusted = placement.Northing.Status == "Resolved" && placement.Northing.SelectedValue.HasValue;
+            if (eastingTrusted != northingTrusted)
+            {
+                evidence.Status = "CalloutEvidenceIncomplete";
+                return;
+            }
+            if (eastingTrusted && northingTrusted)
             {
                 bool unitConflict = HasDrawingUnitConflict(drawing);
                 if (unitConflict || !IsUnitComparable(drawing))
@@ -290,14 +310,33 @@ namespace EngiSentry.PlotPlan
         {
             var result = new CoordinateAssociation { Axis = axis, Candidates = candidates };
             if (candidates.Count == 0) { result.Status = "Missing"; return result; }
-            if (candidates.Count == 1) { result.Status = "Resolved"; Select(result, candidates[0]); return result; }
-            if (candidates[1].Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor) { result.Status = "Ambiguous"; result.Candidates = candidates.Where(c => c.Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor).ToList(); return result; }
-            result.Status = "Resolved"; result.Candidates = new List<CoordinateCandidate> { candidates[0] }; Select(result, candidates[0]); return result;
+
+            // Only deterministically owned coordinates may resolve. Proximity-only candidates (for
+            // example EQ-ID layer compatibility without shared instantiated ownership) are retained as
+            // diagnostic evidence but never trusted to resolve a placement or drive engineering distances.
+            List<CoordinateCandidate> owned = candidates.Where(x => x.DeterministicallyOwned).ToList();
+            if (owned.Count == 0)
+            {
+                if (candidates.Count > 1 && candidates[1].Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor)
+                {
+                    result.Status = "Ambiguous";
+                    result.Candidates = candidates.Where(c => c.Distance - candidates[0].Distance <= scale * AmbiguityMarginFactor).ToList();
+                    return result;
+                }
+                result.Status = "ProximityOnly";
+                return result;
+            }
+
+            if (owned.Count == 1) { result.Status = "Resolved"; result.Candidates = new List<CoordinateCandidate> { owned[0] }; Select(result, owned[0]); return result; }
+            if (owned[1].Distance - owned[0].Distance <= scale * AmbiguityMarginFactor) { result.Status = "Ambiguous"; result.Candidates = owned.Where(c => c.Distance - owned[0].Distance <= scale * AmbiguityMarginFactor).ToList(); return result; }
+            result.Status = "Resolved"; result.Candidates = new List<CoordinateCandidate> { owned[0] }; Select(result, owned[0]); return result;
         }
         private static void PreferCoherentPair(CoordinateAssociation easting, CoordinateAssociation northing, List<CoordinateCandidate> eastingCandidates, List<CoordinateCandidate> northingCandidates, double scale)
         {
             if (easting.Status == "Resolved" && northing.Status == "Resolved") return;
             if (easting.Status == "Missing" || northing.Status == "Missing") return;
+            // Proximity-only evidence is never upgraded into trusted ownership by coherence.
+            if (easting.Status == "ProximityOnly" || northing.Status == "ProximityOnly") return;
             IEnumerable<CoordinateCandidate> eastingPool = easting.Status == "Ambiguous" ? easting.Candidates : eastingCandidates.Where(x => string.Equals(x.SourceHandle, easting.SelectedSourceHandle, StringComparison.Ordinal));
             IEnumerable<CoordinateCandidate> northingPool = northing.Status == "Ambiguous" ? northing.Candidates : northingCandidates.Where(x => string.Equals(x.SourceHandle, northing.SelectedSourceHandle, StringComparison.Ordinal));
             List<CoordinatePairCandidate> pairs = eastingPool.SelectMany(e => northingPool.Select(n => new CoordinatePairCandidate { Easting = e, Northing = n, TotalDistance = e.Distance + n.Distance, CoherenceScore = CoherenceScore(e, n) })).Where(x => x.CoherenceScore > 0).OrderByDescending(x => x.CoherenceScore).ThenBy(x => x.TotalDistance).ThenBy(x => x.Easting.SourceHandle, StringComparer.Ordinal).ThenBy(x => x.Northing.SourceHandle, StringComparer.Ordinal).ToList();

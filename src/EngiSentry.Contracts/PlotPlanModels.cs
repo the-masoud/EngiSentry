@@ -84,6 +84,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 6)] public double PositionY { get; set; }
         [DataMember(Order = 7)] public double PositionZ { get; set; }
         [DataMember(Order = 8)] public double Distance { get; set; }
+        [DataMember(Order = 9)] public bool DeterministicallyOwned { get; set; }
     }
 
     [DataContract]
