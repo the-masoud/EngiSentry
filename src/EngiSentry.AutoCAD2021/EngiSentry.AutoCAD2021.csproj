@@ -66,6 +66,7 @@
     <Compile Include="JevEngineerLabelingControl.cs" />
     <Compile Include="ProjectEngineerReviewControl.cs" />
     <Compile Include="EquipmentPlacementPickProvider.cs" />
+    <Compile Include="EquipmentPlacementPickRules.cs" />
     <Compile Include="EquipmentPlacementResolutionControl.cs" />
     <Compile Include="ReviewLocalization.cs" />
     <Compile Include="ReviewDisplayText.cs" />

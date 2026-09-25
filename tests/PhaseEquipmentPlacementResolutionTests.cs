@@ -42,6 +42,7 @@ namespace EngiSentry.Tests
 
                 IdentityTests();
                 ValidatorTests();
+                PickRuleTests();
                 AppendOnlyTests(reviewService, resolutionService);
                 TrustGatingTests(reviewService, resolutionService);
                 PlotPlanGatingTests(reviewService, resolutionService);
@@ -108,6 +109,63 @@ namespace EngiSentry.Tests
             ExpectInvalid(() => EquipmentPlacementResolutionValidator.Validate(Mutate(RawRecord(DrawingSha, "equipment:P-90A", 1m, 2m, Units, EquipmentPlacementResolutionSources.EntityPick, "H1", "EQ-TAG", "RESP-1", "Reviewer", Utc(2026, 9, 25, 10, 0, 0)), x => x.RecordId = new string('E', 64))), "A tampered RecordId must be rejected.");
             ExpectInvalid(() => EquipmentPlacementResolutionValidator.Validate(Mutate(RawRecord(DrawingSha, "equipment:P-90A", 1m, 2m, Units, EquipmentPlacementResolutionSources.EntityPick, "H1", "EQ-TAG", "RESP-1", "Reviewer", Utc(2026, 9, 25, 10, 0, 0)), x => x.State = "UNKNOWN")), "An unsupported state must be rejected.");
             ExpectInvalid(() => EquipmentPlacementResolutionValidator.Validate(RawRecord(DrawingSha, "equipment:P-90A", 1m, 2m, Units, EquipmentPlacementResolutionSources.EntityPick, "H1", "EQ-TAG", "RESP-1", "Reviewer", DateTime.SpecifyKind(Utc(2026, 9, 25, 10, 0, 0), DateTimeKind.Local))), "A non-UTC timestamp must be rejected.");
+        }
+
+        // ---- pick rules: UCS -> WCS and Model-tab gating --------------------------------------
+
+        // Editor prompt points are always expressed in the current UCS, so a pick must be converted
+        // through the current UCS transform before it is stored, and it may only be taken from the
+        // true Model tab. These rules are exercised directly because the Autodesk editor cannot run
+        // in the offline test host.
+        private static void PickRuleTests()
+        {
+            var promptPoint = new EquipmentPlacementPoint(10, 20, 1);
+
+            // A UCS rotated 90 degrees about Z and translated by (100, 200, 5).
+            EquipmentPlacementUcsTransform rotatedAndTranslated = EquipmentPlacementUcsTransform.FromComponents(
+                0, -1, 0,
+                1, 0, 0,
+                0, 0, 1,
+                100, 200, 5);
+            EquipmentPlacementPoint world = EquipmentPlacementPickRules.ToWorld(promptPoint, rotatedAndTranslated);
+            Assert(world.X == 80 && world.Y == 210 && world.Z == 6, "A rotated and translated UCS must convert the prompt point to the correct WCS point. Actual: " + world.X + "," + world.Y + "," + world.Z);
+
+            // The same conversion is applied on both pick paths, and the raw prompt point is never stored.
+            EquipmentPlacementPick freeWorld = EquipmentPlacementPickRules.CreateFreeSpacePick(promptPoint, rotatedAndTranslated, true);
+            Assert(freeWorld != null && freeWorld.PointX == 80 && freeWorld.PointY == 210 && freeWorld.PointZ == 6 && freeWorld.Source == EquipmentPlacementResolutionSources.FreeSpace && freeWorld.Handle == null, "A free-space pick must store the UCS-converted WCS point.");
+            EquipmentPlacementPick entityWorld = EquipmentPlacementPickRules.CreateEntityPick(promptPoint, rotatedAndTranslated, true, true, false, "H1", "EQ-TAG");
+            Assert(entityWorld != null && entityWorld.PointX == 80 && entityWorld.PointY == 210 && entityWorld.PointZ == 6 && entityWorld.Source == EquipmentPlacementResolutionSources.EntityPick && entityWorld.Handle == "H1" && entityWorld.Layer == "EQ-TAG", "An entity pick must store the UCS-converted WCS point and keep the proven handle and layer.");
+            Assert(entityWorld.PointX != promptPoint.X && entityWorld.PointY != promptPoint.Y, "A prompt point must never be stored as if it were already WCS.");
+
+            // A rotation of 180 degrees with a negative translation, checked against exact values so
+            // the rotate-then-translate order is pinned.
+            EquipmentPlacementUcsTransform halfTurn = EquipmentPlacementUcsTransform.FromComponents(
+                -1, 0, 0,
+                0, -1, 0,
+                0, 0, 1,
+                50, -25, 2);
+            EquipmentPlacementPoint halfTurnWorld = EquipmentPlacementPickRules.ToWorld(new EquipmentPlacementPoint(7, 9, 3), halfTurn);
+            Assert(halfTurnWorld.X == 43 && halfTurnWorld.Y == -34 && halfTurnWorld.Z == 5, "A 180-degree UCS rotation with a negative translation must convert the prompt point to the correct WCS point. Actual: " + halfTurnWorld.X + "," + halfTurnWorld.Y + "," + halfTurnWorld.Z);
+
+            // A point picked in a layout is a paper-space point, never a model coordinate.
+            Assert(EquipmentPlacementPickRules.CreateFreeSpacePick(promptPoint, EquipmentPlacementUcsTransform.Identity, false) == null, "A free-space pick taken in a layout (paper space) must be rejected.");
+
+            // A model-space entity reached through a layout viewport is still not a Model-tab pick.
+            Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, false, true, false, "H1", "EQ-TAG") == null, "A model-space entity picked through a layout viewport must be rejected.");
+            // A paper-space entity is rejected even on the Model tab.
+            Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, false, false, "H1", "EQ-TAG") == null, "A paper-space entity must be rejected.");
+            // A viewport entity is never a placement source.
+            Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, true, "H1", "EQ-TAG") == null, "A viewport entity must be rejected.");
+
+            // A normal Model-tab pick under the WCS is unchanged.
+            EquipmentPlacementPick plainFree = EquipmentPlacementPickRules.CreateFreeSpacePick(promptPoint, EquipmentPlacementUcsTransform.Identity, true);
+            Assert(plainFree != null && plainFree.PointX == 10 && plainFree.PointY == 20 && plainFree.PointZ == 1 && plainFree.Source == EquipmentPlacementResolutionSources.FreeSpace && plainFree.Handle == null && plainFree.Layer == null, "A Model-tab WCS free-space pick must be stored unchanged.");
+            EquipmentPlacementPick plainEntity = EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, false, "H9", "EQ-TAG");
+            Assert(plainEntity != null && plainEntity.PointX == 10 && plainEntity.PointY == 20 && plainEntity.PointZ == 1 && plainEntity.Source == EquipmentPlacementResolutionSources.EntityPick && plainEntity.Handle == "H9" && plainEntity.Layer == "EQ-TAG", "A Model-tab WCS entity pick must be stored unchanged.");
+
+            // A pick without a proven handle or layer is never an entity pick.
+            Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, false, null, "EQ-TAG") == null, "An entity pick without a proven handle must be rejected.");
+            Assert(EquipmentPlacementPickRules.CreateEntityPick(promptPoint, EquipmentPlacementUcsTransform.Identity, true, true, false, "H1", null) == null, "An entity pick without a proven layer must be rejected.");
         }
 
         // ---- append-only store ----------------------------------------------------------------
