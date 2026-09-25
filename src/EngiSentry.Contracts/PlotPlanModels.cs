@@ -32,6 +32,11 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 14)] public string PlacementStatus { get; set; } = "Incomplete";
         [DataMember(Order = 15, EmitDefaultValue = false)] public string? EngineeringApplicabilityKey { get; set; }
         [DataMember(Order = 16, EmitDefaultValue = false)] public EquipmentCenterlineEvidence? CenterlineEvidence { get; set; }
+        /// <summary>
+        /// Present only when an ACTIVE, hash-valid, unit-valid engineer resolution made this
+        /// placement Complete. Deterministic evidence never populates this.
+        /// </summary>
+        [DataMember(Order = 17, EmitDefaultValue = false)] public EquipmentPlacementEngineerResolution? EngineerResolution { get; set; }
     }
 
     [DataContract]

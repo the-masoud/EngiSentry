@@ -65,6 +65,8 @@
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="JevEngineerLabelingControl.cs" />
     <Compile Include="ProjectEngineerReviewControl.cs" />
+    <Compile Include="EquipmentPlacementPickProvider.cs" />
+    <Compile Include="EquipmentPlacementResolutionControl.cs" />
     <Compile Include="ReviewLocalization.cs" />
     <Compile Include="ReviewDisplayText.cs" />
     <Compile Include="Scanning\SnapshotFileWriter.cs" />

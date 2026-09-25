@@ -166,7 +166,9 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("[ES_PLOTQA] Semantic model built\n");
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 WriteToActiveEditor("[ES_PLOTQA] Entity index built\n");
-                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
+                System.Collections.Generic.IReadOnlyList<EquipmentPlacementResolution> engineerResolutions = ResolveEngineerResolutions(document, snapshot.InsertionUnits);
+                WriteToActiveEditor("[ES_PLOTQA] Trusted engineer resolutions applied: {0}\n", engineerResolutions.Count);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions);
                 WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
                 QaReport baseQa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
                 string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
@@ -547,6 +549,73 @@ namespace EngiSentry.AutoCAD2021
         {
             try { VisualResultsPalette.ShowProjectEngineerReview(); }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_ENGINEERREVIEW failed\nReason: {0}\n", exception.Message); }
+        }
+
+        /// <summary>
+        /// Engineer-assisted equipment placement resolution. Only unresolved equipment placements are
+        /// presented, and each is resolved exclusively by an explicit engineer pick (a model-space
+        /// entity pick, or an explicit free-space point). The drawing is read only: the command scans,
+        /// computes the current DWG SHA, and opens the resolution surface; picks are read-only editor
+        /// prompts and no drawing modification is ever issued.
+        /// </summary>
+        [CommandMethod("ES_PLACEMENTRESOLVE")]
+        public void PlacementResolve()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nES_PLACEMENTRESOLVE requires an active drawing.\n"); VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", null, "<none>", "No active drawing."); return; }
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null)
+                {
+                    WriteToActiveEditor("\nES_PLACEMENTRESOLVE requires a drawing saved on disk so the resolution can be bound to its SHA-256.\n");
+                    VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", document, System.IO.Path.GetFileName(document.Name), "The drawing is not saved on disk; a resolution cannot be bound to a drawing hash.");
+                    return;
+                }
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometryCapture);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                System.Collections.Generic.IReadOnlyList<EquipmentPlacementResolution> engineerResolutions = ResolveEngineerResolutions(document, snapshot.InsertionUnits);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during placement resolution processing.");
+                int unresolved = plotPlan.EquipmentPlacements.Count(x => !string.Equals(x.PlacementStatus, "Complete", StringComparison.Ordinal));
+                document.Editor.WriteMessage("\nEngiSentry engineer-assisted equipment placement resolution\nDrawing: {0}\nDrawing SHA256: {1}\nUnresolved equipment placements: {2}\nTrusted engineer resolutions already applied: {3}\nDBMOD unchanged: YES\nStatus: ENGINEER INPUT REQUIRED | READ-ONLY\n", snapshot.FileName ?? "<unnamed>", drawingSha256, unresolved, engineerResolutions.Count);
+                if (unresolved == 0) WriteToActiveEditor("ES_PLACEMENTRESOLVE: no unresolved equipment placements remain.\n");
+                VisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, snapshot.FileName ?? "<unnamed>", drawingSha256!, snapshot.InsertionUnits ?? string.Empty, new ProjectEngineerReviewService(), new EquipmentPlacementResolutionService(), new EditorEquipmentPlacementPickProvider(document));
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_PLACEMENTRESOLVE failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
+        /// <summary>
+        /// Computes the SHA-256 of the on-disk DWG so a resolution can be bound to the exact drawing
+        /// revision. The file is opened read-only; a missing or unreadable file yields null.
+        /// </summary>
+        private static string? TryComputeDrawingSha256(Document? document)
+        {
+            try
+            {
+                string? path = document?.Name;
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return null;
+                return HumanEngineeringReviewDecisionFileStore.ComputeSha256(path!);
+            }
+            catch (System.Exception) { return null; }
+        }
+
+        /// <summary>
+        /// Loads the trusted engineer resolutions for the current drawing and units. A missing hash,
+        /// missing units, or any resolution-store problem simply yields no resolutions: unresolved
+        /// equipment stays unresolved and never blocks the rest of the QA run.
+        /// </summary>
+        private static System.Collections.Generic.IReadOnlyList<EquipmentPlacementResolution> ResolveEngineerResolutions(Document? document, string? insertionUnits)
+        {
+            try
+            {
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null || string.IsNullOrWhiteSpace(insertionUnits)) return System.Array.Empty<EquipmentPlacementResolution>();
+                return new EquipmentPlacementResolutionService().ResolveTrustedForDrawing(drawingSha256, insertionUnits!);
+            }
+            catch (System.Exception) { return System.Array.Empty<EquipmentPlacementResolution>(); }
         }
 
         /// <summary>

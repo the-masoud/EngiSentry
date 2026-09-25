@@ -32,6 +32,11 @@ namespace EngiSentry.AutoCAD2021
             InteractiveVisualResultsPalette.ShowProjectEngineerReview();
         }
 
+        public static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider)
+        {
+            InteractiveVisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider);
+        }
+
         public static void ShowHome(string command, Document document, string drawing, string status, string detail)
         {
             Publish(new VisualResultsData
@@ -689,6 +694,7 @@ namespace EngiSentry.AutoCAD2021
         private static VisualResultsControl control;
         private static JevEngineerLabelingControl labelingControl;
         private static ProjectEngineerReviewControl reviewControl;
+        private static EquipmentPlacementResolutionControl placementResolutionControl;
 
         internal static void Publish(VisualResultsData data)
         {
@@ -727,11 +733,21 @@ namespace EngiSentry.AutoCAD2021
             ShowControl(reviewControl, "EngiSentry - Project Engineer Review", new Size(1000, 960));
         }
 
+        // The engineer-assisted equipment placement surface is rebuilt for every invocation so it
+        // always reflects the current plot plan, drawing hash, and units. Picks are performed by the
+        // supplied editor-backed provider; the surface itself never touches the drawing database.
+        internal static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider)
+        {
+            EnsureWindow();
+            placementResolutionControl = new EquipmentPlacementResolutionControl(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider) { Dock = DockStyle.Fill };
+            ShowControl(placementResolutionControl, "EngiSentry - Equipment Placement Resolution", new Size(1180, 820));
+        }
+
         private static void EnsureWindow()
         {
             if (window != null && !window.IsDisposed) return;
             window = new Form { Text = "EngiSentry Results", StartPosition = FormStartPosition.CenterScreen, Size = new Size(930, 680), MinimumSize = new Size(520, 360), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = true, ShowInTaskbar = true, BackColor = Color.FromArgb(30, 31, 34) };
-            window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; reviewControl = null; };
+            window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; reviewControl = null; placementResolutionControl = null; };
             Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
         }
 

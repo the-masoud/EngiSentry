@@ -10,7 +10,7 @@ namespace EngiSentry.PlotPlan
         public const double MaxAssociationDistanceFactor = 30.0;
         public const double AmbiguityMarginFactor = 2.0;
 
-        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null)
+        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null, IReadOnlyList<EquipmentPlacementResolution>? engineerResolutions = null)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
             if (model == null) throw new ArgumentNullException(nameof(model));
@@ -50,6 +50,7 @@ namespace EngiSentry.PlotPlan
             }
             HashSet<string> unresolvedCenterlineEntities = new HashSet<string>(placements.Where(x => x.CenterlineEvidence?.Status == "Ambiguous" || x.CenterlineEvidence?.Status == "Conflict").Select(x => x.EquipmentEntityId), StringComparer.Ordinal);
             foreach (EquipmentPlacement placement in placements.Where(x => unresolvedCenterlineEntities.Contains(x.EquipmentEntityId))) placement.PlacementStatus = "Ambiguous";
+            ApplyEngineerResolutions(placements, engineerResolutions, model.Drawing);
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
             PlotGeometryModel geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture);
             if (geometryCapture != null)
@@ -66,6 +67,69 @@ namespace EngiSentry.PlotPlan
             geometry.EngineeringSpatialSubjects = EngineeringSpatialSubjectBuilder.Build(model, geometry).ToList();
             PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(placements, geometry);
             return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
+        }
+
+        // An explicit engineer pick is the only way an otherwise-unresolved placement becomes
+        // Complete. Only trusted resolutions reach this method: the caller (the resolution service)
+        // has already verified ACTIVE state, both identities, the drawing-hash binding, the review
+        // envelope, and the unit binding. Unit validity is re-checked here against the drawing so a
+        // resolution can never complete a placement in a drawing whose units differ. Deterministic
+        // evidence is never overwritten: only unresolved placements are resolved.
+        private static void ApplyEngineerResolutions(List<EquipmentPlacement> placements, IReadOnlyList<EquipmentPlacementResolution>? resolutions, SemanticDrawing? drawing)
+        {
+            if (resolutions == null || resolutions.Count == 0) return;
+            var trusted = new Dictionary<string, EquipmentPlacementResolution>(StringComparer.Ordinal);
+            foreach (EquipmentPlacementResolution resolution in resolutions)
+            {
+                if (resolution == null || string.IsNullOrWhiteSpace(resolution.EquipmentEntityId)) continue;
+                if (!IsResolutionUnitValid(resolution, drawing)) continue;
+                if (!trusted.TryGetValue(resolution.EquipmentEntityId, out EquipmentPlacementResolution? existing) || resolution.ResponseTimestampUtc >= existing.ResponseTimestampUtc) trusted[resolution.EquipmentEntityId] = resolution;
+            }
+            if (trusted.Count == 0) return;
+            foreach (EquipmentPlacement placement in placements)
+            {
+                if (placement.PlacementStatus == "Complete") continue;
+                if (!trusted.TryGetValue(placement.EquipmentEntityId, out EquipmentPlacementResolution? resolution)) continue;
+                placement.Easting = EngineerAssociation("E", resolution);
+                placement.Northing = EngineerAssociation("N", resolution);
+                placement.PlacementStatus = "Complete";
+                placement.EngineerResolution = new EquipmentPlacementEngineerResolution
+                {
+                    ResolutionId = resolution.ResolutionId,
+                    RecordId = resolution.RecordId,
+                    Source = resolution.Source,
+                    SourceHandle = resolution.SourceHandle,
+                    SourceLayer = resolution.SourceLayer,
+                    ReviewerDisplayName = resolution.ReviewerDisplayName,
+                    ReviewerRole = resolution.ReviewerRole,
+                    ResponseTimestampUtc = resolution.ResponseTimestampUtc
+                };
+            }
+        }
+
+        private static bool IsResolutionUnitValid(EquipmentPlacementResolution resolution, SemanticDrawing? drawing)
+        {
+            if (drawing == null || string.IsNullOrWhiteSpace(drawing.InsertionUnits)) return false;
+            if (!string.Equals(resolution.InsertionUnits, drawing.InsertionUnits, StringComparison.Ordinal)) return false;
+            if (!IsFinite((double)resolution.Easting) || !IsFinite((double)resolution.Northing)) return false;
+            try { DrawingUnitResolver.Resolve(drawing.InsertionUnits!); return true; }
+            catch (DrawingUnitResolutionException) { return false; }
+        }
+
+        private static CoordinateAssociation EngineerAssociation(string axis, EquipmentPlacementResolution resolution)
+        {
+            bool entityPick = string.Equals(resolution.Source, EquipmentPlacementResolutionSources.EntityPick, StringComparison.Ordinal);
+            return new CoordinateAssociation
+            {
+                Axis = axis,
+                Status = "Resolved",
+                SelectedSourceHandle = entityPick ? resolution.SourceHandle : null,
+                SelectedValue = axis == "E" ? resolution.Easting : resolution.Northing,
+                SelectedRawText = entityPick ? "Engineer-confirmed entity pick" : "Engineer-confirmed free-space point",
+                SelectedSourceLayer = entityPick ? resolution.SourceLayer : null,
+                SelectedDistance = null,
+                Candidates = new List<CoordinateCandidate>()
+            };
         }
 
         private static List<CoordinateCandidate> FindCandidates(string axis, double x, double y, double scale, IEnumerable<CoordinateEvidence> all, string equipmentHandle)

@@ -24,6 +24,11 @@ namespace EngiSentry.Standards
     {
         public const string WorkflowSourcePilotP103 = "P10.3-SUPERVISED-ENGINEER-PILOT";
         public const string WorkflowSourceTestOnly = "TEST_ONLY";
+        /// <summary>
+        /// The engineer-assisted equipment placement resolution workflow. It records a human
+        /// placement observation only and never creates approval, authority, or rule activation.
+        /// </summary>
+        public const string WorkflowSourceEquipmentPlacement = "P11.0-EQUIPMENT-PLACEMENT-ENGINEER-RESOLUTION";
 
         public const string RequestFileName = "review-request.json";
         public const string ResponseFileName = "review-response.json";
@@ -73,11 +78,19 @@ namespace EngiSentry.Standards
 
         /// <summary>Builds a review request from explicit evidence. Nothing is inferred or synthesized.</summary>
         public ProjectEngineerReviewRequest CreateRequest(string workflowSourceType, string drawingName, string? drawingSha256, string reviewedCaseId, string reviewReason, IReadOnlyList<ProjectEngineerReviewEvidenceReference> evidence, string? softwareResult, string? softwareState)
+            => CreateRequest(workflowSourceType, drawingName, drawingSha256, reviewedCaseId, reviewReason, evidence, softwareResult, softwareState, ProjectEngineerReviewQuestions.All);
+
+        /// <summary>
+        /// Builds a review request from explicit evidence and an explicit governed question set. The
+        /// question set is supplied verbatim by the caller; the answer vocabularies are unchanged.
+        /// </summary>
+        public ProjectEngineerReviewRequest CreateRequest(string workflowSourceType, string drawingName, string? drawingSha256, string reviewedCaseId, string reviewReason, IReadOnlyList<ProjectEngineerReviewEvidenceReference> evidence, string? softwareResult, string? softwareState, IReadOnlyList<ProjectEngineerReviewQuestionDefinition> questions)
         {
             if (string.IsNullOrWhiteSpace(workflowSourceType)) throw new ArgumentException("workflowSourceType is required", nameof(workflowSourceType));
             if (string.IsNullOrWhiteSpace(drawingName)) throw new ArgumentException("drawingName is required", nameof(drawingName));
             if (string.IsNullOrWhiteSpace(reviewedCaseId)) throw new ArgumentException("reviewedCaseId is required", nameof(reviewedCaseId));
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
+            if (questions == null || questions.Count == 0) throw new ArgumentException("review questions are required", nameof(questions));
             var request = new ProjectEngineerReviewRequest
             {
                 SchemaVersion = ProjectEngineerReviewSchema.Current,
@@ -90,7 +103,7 @@ namespace EngiSentry.Standards
                 EvidenceReferences = evidence.OrderBy(x => x.Kind, StringComparer.Ordinal).ThenBy(x => x.Label ?? string.Empty, StringComparer.Ordinal).ToList(),
                 SoftwareResult = string.IsNullOrWhiteSpace(softwareResult) ? null : softwareResult,
                 SoftwareState = string.IsNullOrWhiteSpace(softwareState) ? null : softwareState,
-                Questions = ProjectEngineerReviewQuestions.All.ToList()
+                Questions = questions.ToList()
             };
             request.RequestSha256 = ComputeRequestSha256(request);
             request.ReviewRequestId = "PER-" + request.RequestSha256.Substring(0, 16);
