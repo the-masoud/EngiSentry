@@ -22,13 +22,13 @@ namespace EngiSentry.Rules
             DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
             if (conflict != null)
                 return ruleRegistry.Rules.OrderBy(x => x.RuleId, StringComparer.Ordinal)
-                    .Select(rule => ConflictEvaluation(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters, rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance, conflict)).ToList();
+                    .Select(rule => ConflictEvaluation(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters, rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance, conflict, ApplicablePlacements(plotPlan, rule.RequiredApplicabilityKey).Count)).ToList();
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
             return ruleRegistry.Rules
                 .OrderBy(x => x.RuleId, StringComparer.Ordinal)
-                .Select(rule => EvaluateRule(rule, measurements, unitResolution))
+                .Select(rule => EvaluateRule(rule, plotPlan, measurements, unitResolution))
                 .ToList();
         }
 
@@ -57,7 +57,7 @@ namespace EngiSentry.Rules
 
             DrawingUnitConflictEvidence? conflict = UnitConflict(plotPlan.Drawing);
             if (conflict != null)
-                return ConflictEvaluation(constraint.Rule?.RuleId ?? constraint.ConstraintId, constraint.MeasurementKind, constraint.MinimumDistanceMeters, constraint.RequiredMeasurementBasisKey, constraint.RequiredApplicabilityKey, null, conflict);
+                return ConflictEvaluation(constraint.Rule?.RuleId ?? constraint.ConstraintId, constraint.MeasurementKind, constraint.MinimumDistanceMeters, constraint.RequiredMeasurementBasisKey, constraint.RequiredApplicabilityKey, null, conflict, ApplicablePlacements(plotPlan, constraint.RequiredApplicabilityKey).Count);
             DrawingUnitResolution unitResolution = DrawingUnitResolver.Resolve(plotPlan.Drawing.InsertionUnits!);
             List<EquipmentSpatialMeasurement> measurements = ValidateMeasurements(plotPlan);
 
@@ -68,6 +68,7 @@ namespace EngiSentry.Rules
                 constraint.RequiredMeasurementBasisKey,
                 constraint.RequiredApplicabilityKey,
                 null,
+                ApplicablePlacements(plotPlan, constraint.RequiredApplicabilityKey),
                 measurements,
                 unitResolution);
         }
@@ -106,15 +107,18 @@ namespace EngiSentry.Rules
             string requiredMeasurementBasisKey,
             string requiredApplicabilityKey,
             EngineeringDistanceCriteriaProvenance? criteriaProvenance,
+            IReadOnlyList<EquipmentPlacement> applicablePlacements,
             IEnumerable<EquipmentSpatialMeasurement> measurements,
             DrawingUnitResolution unitResolution)
         {
             string subjectKind = measurementKind == "EquipmentToRoad2D" ? "Road" : "Boundary";
             double minimumDistanceDrawingUnits = DrawingUnitResolver.MetersToDrawingUnits(decimal.ToDouble(minimumDistanceMeters), unitResolution);
+            var evaluableIds = new HashSet<string>(applicablePlacements.Where(IsEvaluablePlacement).Select(x => x.PlacementId), StringComparer.Ordinal);
             List<EquipmentSpatialMeasurement> governing = measurements
                 .Where(x => string.Equals(x.SubjectKind, subjectKind, StringComparison.Ordinal)
                     && string.Equals(x.EngineeringMeasurementBasisKey, requiredMeasurementBasisKey, StringComparison.Ordinal)
-                    && string.Equals(x.EngineeringApplicabilityKey, requiredApplicabilityKey, StringComparison.Ordinal))
+                    && string.Equals(x.EngineeringApplicabilityKey, requiredApplicabilityKey, StringComparison.Ordinal)
+                    && evaluableIds.Contains(x.PlacementId))
                 .GroupBy(x => x.PlacementId, StringComparer.Ordinal)
                 .Select(x => x.OrderBy(y => y.Distance2D).ThenBy(y => y.MeasurementId, StringComparer.Ordinal).First())
                 .OrderBy(x => x.PlacementId, StringComparer.Ordinal)
@@ -133,7 +137,10 @@ namespace EngiSentry.Rules
                 RequiredMeasurementBasisKey = requiredMeasurementBasisKey,
                 RequiredApplicabilityKey = requiredApplicabilityKey,
                 CriteriaProvenance = CopyCriteriaProvenance(criteriaProvenance),
-                EvaluatedSubjectCount = governing.Count
+                EvaluatedSubjectCount = governing.Count,
+                TotalApplicablePlacementCount = applicablePlacements.Count,
+                EvaluatedPlacementCount = governing.Count,
+                UnresolvedPlacementCount = applicablePlacements.Count - governing.Count
             };
 
             foreach (EquipmentSpatialMeasurement measurement in governing)
@@ -162,17 +169,30 @@ namespace EngiSentry.Rules
 
             evaluation.Violations = evaluation.Violations.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ThenBy(x => x.MeasurementId, StringComparer.Ordinal).ToList();
             evaluation.ViolationCount = evaluation.Violations.Count;
-            evaluation.Status = governing.Count == 0 ? "INSUFFICIENT_EVIDENCE" : evaluation.ViolationCount == 0 ? "PASS" : "VIOLATIONS";
+            evaluation.Status = evaluation.ViolationCount > 0 ? "VIOLATIONS" : evaluation.TotalApplicablePlacementCount > 0 && evaluation.UnresolvedPlacementCount == 0 ? "PASS" : "INSUFFICIENT_EVIDENCE";
             return evaluation;
         }
 
         /// <summary>Registry path adapter: delegates to the shared core, carrying the rule's own provenance.</summary>
-        private static EngineeringDistanceRuleEvaluation EvaluateRule(EngineeringDistanceRuleDefinition rule, IEnumerable<EquipmentSpatialMeasurement> measurements, DrawingUnitResolution unitResolution)
+        private static EngineeringDistanceRuleEvaluation EvaluateRule(EngineeringDistanceRuleDefinition rule, PlotPlanModel plotPlan, IEnumerable<EquipmentSpatialMeasurement> measurements, DrawingUnitResolution unitResolution)
         {
             return EvaluateRuleCore(rule.RuleId, rule.MeasurementKind, rule.MinimumDistanceMeters,
                 rule.RequiredMeasurementBasisKey, rule.RequiredApplicabilityKey, rule.CriteriaProvenance,
+                ApplicablePlacements(plotPlan, rule.RequiredApplicabilityKey),
                 measurements, unitResolution);
         }
+
+        private static List<EquipmentPlacement> ApplicablePlacements(PlotPlanModel plotPlan, string key)
+        {
+            if (plotPlan.EquipmentPlacements == null) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation EquipmentPlacements are required");
+            List<EquipmentPlacement> applicable = plotPlan.EquipmentPlacements.Where(x => x != null && string.Equals(x.EngineeringApplicabilityKey, key, StringComparison.Ordinal)).ToList();
+            if (applicable.Any(x => string.IsNullOrWhiteSpace(x.PlacementId)) || applicable.GroupBy(x => x.PlacementId, StringComparer.Ordinal).Any(x => x.Count() != 1)) throw new EngineeringDistanceRuleEvaluationException("engineering distance evaluation applicable PlacementIds must be unique and nonempty");
+            return applicable;
+        }
+
+        private static bool IsEvaluablePlacement(EquipmentPlacement placement) =>
+            placement.PlacementStatus == "Complete" && placement.Easting?.Status == "Resolved" && placement.Northing?.Status == "Resolved"
+            && placement.Easting.SelectedValue.HasValue && placement.Northing.SelectedValue.HasValue;
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
@@ -187,14 +207,15 @@ namespace EngiSentry.Rules
             };
         }
 
-        private static EngineeringDistanceRuleEvaluation ConflictEvaluation(string ruleId, string measurementKind, decimal minimumDistanceMeters, string requiredMeasurementBasisKey, string requiredApplicabilityKey, EngineeringDistanceCriteriaProvenance? criteriaProvenance, DrawingUnitConflictEvidence conflict)
+        private static EngineeringDistanceRuleEvaluation ConflictEvaluation(string ruleId, string measurementKind, decimal minimumDistanceMeters, string requiredMeasurementBasisKey, string requiredApplicabilityKey, EngineeringDistanceCriteriaProvenance? criteriaProvenance, DrawingUnitConflictEvidence conflict, int applicableCount)
         {
             return new EngineeringDistanceRuleEvaluation
             {
                 RuleId = ruleId, MeasurementKind = measurementKind, MinimumDistanceMeters = minimumDistanceMeters,
                 InsertionUnits = conflict.Insunits, RequiredMeasurementBasisKey = requiredMeasurementBasisKey,
                 RequiredApplicabilityKey = requiredApplicabilityKey, CriteriaProvenance = CopyCriteriaProvenance(criteriaProvenance),
-                Status = "INSUFFICIENT_EVIDENCE", UnitConflict = conflict
+                Status = "INSUFFICIENT_EVIDENCE", UnitConflict = conflict,
+                TotalApplicablePlacementCount = applicableCount, UnresolvedPlacementCount = applicableCount
             };
         }
 

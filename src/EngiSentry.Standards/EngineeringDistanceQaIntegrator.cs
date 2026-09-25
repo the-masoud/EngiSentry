@@ -122,6 +122,7 @@ namespace EngiSentry.Standards
                 if (evaluation.ViolationCount < 0) throw new EngineeringDistanceQaIntegrationException("engineering distance QA ViolationCount is invalid: " + evaluation.RuleId);
                 if (evaluation.ViolationCount != evaluation.Violations.Count) throw new EngineeringDistanceQaIntegrationException("engineering distance QA ViolationCount is inconsistent: " + evaluation.RuleId);
                 if (evaluation.ViolationCount > evaluation.EvaluatedSubjectCount) throw new EngineeringDistanceQaIntegrationException("engineering distance QA violation count exceeds evaluated subjects: " + evaluation.RuleId);
+                if (evaluation.TotalApplicablePlacementCount < 0 || evaluation.EvaluatedPlacementCount < 0 || evaluation.UnresolvedPlacementCount < 0 || (evaluation.TotalApplicablePlacementCount > 0 && evaluation.EvaluatedPlacementCount + evaluation.UnresolvedPlacementCount != evaluation.TotalApplicablePlacementCount)) throw new EngineeringDistanceQaIntegrationException("engineering distance QA placement coverage is inconsistent: " + evaluation.RuleId);
                 ValidateStatus(evaluation);
                 ValidateCriteriaProvenance(evaluation);
                 ValidateViolations(evaluation);
@@ -132,7 +133,7 @@ namespace EngiSentry.Standards
         {
             if (evaluation.Status == "PASS")
             {
-                if (evaluation.EvaluatedSubjectCount <= 0 || evaluation.ViolationCount != 0) throw new EngineeringDistanceQaIntegrationException("engineering distance QA PASS state is inconsistent: " + evaluation.RuleId);
+                if (evaluation.EvaluatedSubjectCount <= 0 || evaluation.ViolationCount != 0 || evaluation.UnresolvedPlacementCount != 0) throw new EngineeringDistanceQaIntegrationException("engineering distance QA PASS state is inconsistent: " + evaluation.RuleId);
                 return;
             }
             if (evaluation.Status == "VIOLATIONS")
@@ -142,7 +143,7 @@ namespace EngiSentry.Standards
             }
             if (evaluation.Status == "INSUFFICIENT_EVIDENCE")
             {
-                if (evaluation.EvaluatedSubjectCount != 0 || evaluation.ViolationCount != 0) throw new EngineeringDistanceQaIntegrationException("engineering distance QA INSUFFICIENT_EVIDENCE state is inconsistent: " + evaluation.RuleId);
+                if (evaluation.ViolationCount != 0 || (evaluation.EvaluatedSubjectCount != 0 && evaluation.UnresolvedPlacementCount == 0)) throw new EngineeringDistanceQaIntegrationException("engineering distance QA INSUFFICIENT_EVIDENCE state is inconsistent: " + evaluation.RuleId);
                 return;
             }
             throw new EngineeringDistanceQaIntegrationException("unsupported engineering distance QA status: " + evaluation.RuleId + " | " + evaluation.Status);

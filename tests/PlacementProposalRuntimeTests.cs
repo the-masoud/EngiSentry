@@ -702,13 +702,7 @@ namespace EngiSentry.Tests
             PlotPlanModel model = EmptyPlotPlan(insertionUnits, metersPerDrawingUnit);
             model.Measurements = new PlotSpatialMeasurementModel();
             model.Measurements.EquipmentSpatialMeasurements.Add(RoadMeasurement(actualMeters, metersPerDrawingUnit));
-            model.EquipmentPlacements.Add(new EquipmentPlacement
-            {
-                PlacementId = PlacementId,
-                TagSourceHandle = "tag:equipment-1",
-                PlacementStatus = "Complete",
-                EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment
-            });
+            model.EquipmentPlacements.Add(PlacementFor(PlacementId, "tag:equipment-1"));
             return model;
         }
 
@@ -755,7 +749,9 @@ namespace EngiSentry.Tests
                 PlacementId = placementId,
                 TagSourceHandle = tagHandle,
                 PlacementStatus = "Complete",
-                EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment
+                EngineeringApplicabilityKey = EngineeringDistanceEvidenceKeys.Equipment,
+                Easting = new CoordinateAssociation { Axis = "E", Status = "Resolved", SelectedValue = 100m },
+                Northing = new CoordinateAssociation { Axis = "N", Status = "Resolved", SelectedValue = 10m }
             };
         }
 

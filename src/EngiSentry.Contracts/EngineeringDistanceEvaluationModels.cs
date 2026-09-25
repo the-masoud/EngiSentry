@@ -21,6 +21,9 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 13)] public string RequiredApplicabilityKey { get; set; } = string.Empty;
         [DataMember(Order = 14, EmitDefaultValue = false)] public EngineeringDistanceCriteriaProvenance? CriteriaProvenance { get; set; }
         [DataMember(Order = 15, EmitDefaultValue = false)] public DrawingUnitConflictEvidence? UnitConflict { get; set; }
+        [DataMember(Order = 16)] public int TotalApplicablePlacementCount { get; set; }
+        [DataMember(Order = 17)] public int EvaluatedPlacementCount { get; set; }
+        [DataMember(Order = 18)] public int UnresolvedPlacementCount { get; set; }
     }
 
     [DataContract]
