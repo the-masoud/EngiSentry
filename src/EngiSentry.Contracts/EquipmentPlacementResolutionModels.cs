@@ -26,8 +26,10 @@ namespace EngiSentry.Contracts
         public const string EntityPick = "ENTITY_PICK";
         /// <summary>An explicit free-space point: the picked WCS point only, with no source handle.</summary>
         public const string FreeSpace = "FREE_SPACE";
+        /// <summary>The engineer explicitly approved the generated proposal's proposed point.</summary>
+        public const string ProposalApproval = "PROPOSAL_APPROVAL";
 
-        public static readonly IReadOnlyList<string> All = new[] { EntityPick, FreeSpace };
+        public static readonly IReadOnlyList<string> All = new[] { EntityPick, FreeSpace, ProposalApproval };
     }
 
     public static class EquipmentPlacementResolutionStates
@@ -73,6 +75,10 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 23)] public DateTime ResponseTimestampUtc { get; set; }
         [DataMember(Order = 24)] public DateTime RecordedTimestampUtc { get; set; }
         [DataMember(Order = 25)] public string State { get; set; } = EquipmentPlacementResolutionStates.Active;
+        [DataMember(Order = 26, EmitDefaultValue = false)] public string? ProposalId { get; set; }
+        [DataMember(Order = 27, EmitDefaultValue = false)] public string? ProposalFingerprint { get; set; }
+        [DataMember(Order = 28, EmitDefaultValue = false)] public string? DispositionRecordId { get; set; }
+        [DataMember(Order = 29, EmitDefaultValue = false)] public string? SelectedPlacementFingerprint { get; set; }
     }
 
     /// <summary>
@@ -95,6 +101,10 @@ namespace EngiSentry.Contracts
         public string ReviewerDisplayName { get; set; } = string.Empty;
         public string ReviewerRole { get; set; } = string.Empty;
         public DateTime ResponseTimestampUtc { get; set; }
+        public string? ProposalId { get; set; }
+        public string? ProposalFingerprint { get; set; }
+        public string? DispositionRecordId { get; set; }
+        public string? SelectedPlacementFingerprint { get; set; }
     }
 
     /// <summary>Provenance carried on a placement that was made Complete by an explicit engineer pick.</summary>
@@ -109,5 +119,8 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 6)] public string ReviewerDisplayName { get; set; } = string.Empty;
         [DataMember(Order = 7)] public string ReviewerRole { get; set; } = string.Empty;
         [DataMember(Order = 8)] public DateTime ResponseTimestampUtc { get; set; }
+        [DataMember(Order = 9, EmitDefaultValue = false)] public string? ProposalId { get; set; }
+        [DataMember(Order = 10, EmitDefaultValue = false)] public string? ProposalFingerprint { get; set; }
+        [DataMember(Order = 11, EmitDefaultValue = false)] public string? DispositionRecordId { get; set; }
     }
 }

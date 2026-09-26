@@ -31,16 +31,20 @@ namespace EngiSentry.Standards
 
         private readonly string root;
         private readonly ProjectEngineerReviewService reviewService;
+        private readonly PlacementProposalDispositionService dispositionService;
 
-        public EquipmentPlacementResolutionService() : this(ResolveRoot(), new ProjectEngineerReviewService()) { }
-        public EquipmentPlacementResolutionService(string root) : this(root, new ProjectEngineerReviewService()) { }
-        public EquipmentPlacementResolutionService(string root, ProjectEngineerReviewService reviewService)
+        public EquipmentPlacementResolutionService() : this(ResolveRoot(), new ProjectEngineerReviewService(), new PlacementProposalDispositionService()) { }
+        public EquipmentPlacementResolutionService(string root) : this(root, new ProjectEngineerReviewService(), new PlacementProposalDispositionService()) { }
+        public EquipmentPlacementResolutionService(string root, ProjectEngineerReviewService reviewService) : this(root, reviewService, new PlacementProposalDispositionService()) { }
+        public EquipmentPlacementResolutionService(string root, ProjectEngineerReviewService reviewService, PlacementProposalDispositionService dispositionService)
         {
             this.root = root ?? throw new ArgumentNullException(nameof(root));
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
+            this.dispositionService = dispositionService ?? throw new ArgumentNullException(nameof(dispositionService));
         }
 
         public string Root => root;
+        public PlacementProposalDispositionService DispositionService => dispositionService;
 
         /// <summary>Appends a validated confirmation. An existing confirmation is never overwritten.</summary>
         public string Save(EquipmentPlacementResolutionRecord record) => EquipmentPlacementResolutionFileStore.Write(record, root);
@@ -78,7 +82,24 @@ namespace EngiSentry.Standards
                 if (!string.Equals(response.ResponseId, record.ResponseId, StringComparison.Ordinal)) return false;
                 if (!string.Equals(response.RequestSha256, record.RequestSha256, StringComparison.Ordinal)) return false;
                 if (!string.Equals(response.ReviewerDisplayName, record.ReviewerDisplayName, StringComparison.Ordinal)) return false;
-                return response.ResponseTimestampUtc.ToUniversalTime().Ticks == record.ResponseTimestampUtc.ToUniversalTime().Ticks;
+                if (response.ResponseTimestampUtc.ToUniversalTime().Ticks != record.ResponseTimestampUtc.ToUniversalTime().Ticks) return false;
+                if (string.IsNullOrWhiteSpace(record.ProposalId)) return true;
+                PlacementProposalDispositionRecord? disposition = dispositionService.GetCurrentRecord(record.ProposalId!, record.ProposalFingerprint!);
+                if (disposition == null || !string.Equals(disposition.RecordId, record.DispositionRecordId, StringComparison.Ordinal)) return false;
+                if (disposition.Disposition != PlacementProposalDispositions.Approved && disposition.Disposition != PlacementProposalDispositions.Modified) return false;
+                if (!string.Equals(disposition.ReviewResponseId, record.ResponseId, StringComparison.Ordinal)
+                    || !string.Equals(disposition.ReviewRequestId, record.ReviewRequestId, StringComparison.Ordinal)
+                    || !string.Equals(disposition.ReviewRequestSha256, record.RequestSha256, StringComparison.Ordinal)) return false;
+                PlacementProposalSelectedPlacement? selected = disposition.SelectedOrModifiedPlacement;
+                return selected != null
+                    && string.Equals(selected.PlacementFingerprint, record.SelectedPlacementFingerprint, StringComparison.Ordinal)
+                    && selected.Easting == record.Easting && selected.Northing == record.Northing
+                    && string.Equals(selected.EquipmentEntityId, record.EquipmentEntityId, StringComparison.Ordinal)
+                    && string.Equals(selected.NormalizedTag, record.NormalizedTag, StringComparison.Ordinal)
+                    && string.Equals(selected.Source, record.Source, StringComparison.Ordinal)
+                    && string.Equals(selected.SourceHandle, record.SourceHandle, StringComparison.Ordinal)
+                    && string.Equals(selected.SourceLayer, record.SourceLayer, StringComparison.Ordinal)
+                    && string.Equals(selected.InsertionUnits, record.InsertionUnits, StringComparison.Ordinal);
             }
             catch (Exception)
             {
@@ -139,7 +160,11 @@ namespace EngiSentry.Standards
             SourceLayer = record.SourceLayer,
             ReviewerDisplayName = record.ReviewerDisplayName,
             ReviewerRole = record.ReviewerRole,
-            ResponseTimestampUtc = record.ResponseTimestampUtc
+            ResponseTimestampUtc = record.ResponseTimestampUtc,
+            ProposalId = record.ProposalId,
+            ProposalFingerprint = record.ProposalFingerprint,
+            DispositionRecordId = record.DispositionRecordId,
+            SelectedPlacementFingerprint = record.SelectedPlacementFingerprint
         };
     }
 }

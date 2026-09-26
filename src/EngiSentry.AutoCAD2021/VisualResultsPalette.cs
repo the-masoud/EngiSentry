@@ -32,9 +32,9 @@ namespace EngiSentry.AutoCAD2021
             InteractiveVisualResultsPalette.ShowProjectEngineerReview();
         }
 
-        public static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider)
+        public static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider, IReadOnlyList<PlacementProposal> proposals = null, string drawingPath = null)
         {
-            InteractiveVisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider);
+            InteractiveVisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider, proposals, drawingPath);
         }
 
         public static void ShowHome(string command, Document document, string drawing, string status, string detail)
@@ -736,10 +736,10 @@ namespace EngiSentry.AutoCAD2021
         // The engineer-assisted equipment placement surface is rebuilt for every invocation so it
         // always reflects the current plot plan, drawing hash, and units. Picks are performed by the
         // supplied editor-backed provider; the surface itself never touches the drawing database.
-        internal static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider)
+        internal static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider, IReadOnlyList<PlacementProposal> proposals = null, string drawingPath = null)
         {
             EnsureWindow();
-            placementResolutionControl = new EquipmentPlacementResolutionControl(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider) { Dock = DockStyle.Fill };
+            placementResolutionControl = new EquipmentPlacementResolutionControl(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider, proposals, drawingPath) { Dock = DockStyle.Fill };
             ShowControl(placementResolutionControl, "EngiSentry - Equipment Placement Resolution", new Size(1180, 820));
         }
 

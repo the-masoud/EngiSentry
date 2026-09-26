@@ -102,7 +102,10 @@ namespace EngiSentry.PlotPlan
                     SourceLayer = resolution.SourceLayer,
                     ReviewerDisplayName = resolution.ReviewerDisplayName,
                     ReviewerRole = resolution.ReviewerRole,
-                    ResponseTimestampUtc = resolution.ResponseTimestampUtc
+                    ResponseTimestampUtc = resolution.ResponseTimestampUtc,
+                    ProposalId = resolution.ProposalId,
+                    ProposalFingerprint = resolution.ProposalFingerprint,
+                    DispositionRecordId = resolution.DispositionRecordId
                 };
             }
         }

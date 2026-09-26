@@ -29,6 +29,12 @@ namespace EngiSentry.Standards
         /// placement observation only and never creates approval, authority, or rule activation.
         /// </summary>
         public const string WorkflowSourceEquipmentPlacement = "P11.0-EQUIPMENT-PLACEMENT-ENGINEER-RESOLUTION";
+        /// <summary>
+        /// The P11.1 generated-placement-proposal disposition workflow. An engineer disposition is
+        /// recorded only through an explicit ES_PLACEMENTRESOLVE action bound to this source; it
+        /// never creates approval, authority, or rule activation.
+        /// </summary>
+        public const string WorkflowSourcePlacementProposal = "P11.1-PLACEMENT-PROPOSAL";
 
         public const string RequestFileName = "review-request.json";
         public const string ResponseFileName = "review-response.json";

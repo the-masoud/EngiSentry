@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using EngiSentry.Contracts;
+using EngiSentry.AutoCAD2021.Scanning;
 using EngiSentry.Standards;
 
 namespace EngiSentry.AutoCAD2021
@@ -24,11 +25,14 @@ namespace EngiSentry.AutoCAD2021
     internal sealed class EquipmentPlacementResolutionControl : UserControl
     {
         private readonly string drawingName;
+        private readonly string drawingPath;
         private readonly string drawingSha256;
         private readonly string insertionUnits;
         private readonly ProjectEngineerReviewService reviewService;
         private readonly EquipmentPlacementResolutionService resolutionService;
+        private readonly PlacementProposalDispositionService dispositionService;
         private readonly IEquipmentPlacementPickProvider pickProvider;
+        private readonly List<PlacementProposal> proposals;
 
         private readonly ListBox placementList = new ListBox();
         private readonly TextBox selectionInfo = new TextBox();
@@ -39,6 +43,7 @@ namespace EngiSentry.AutoCAD2021
         private readonly TextBox reviewerName = new TextBox();
         private readonly TextBox reviewerRole = new TextBox();
         private readonly ComboBox classification = new ComboBox();
+        private readonly ComboBox proposalDisposition = new ComboBox();
         private readonly TextBox comment = new TextBox();
         private readonly Button save = new Button();
         private readonly Label message = new Label();
@@ -48,8 +53,17 @@ namespace EngiSentry.AutoCAD2021
 
         private List<EquipmentPlacement> unresolved = new List<EquipmentPlacement>();
         private EquipmentPlacement current;
+        private PlacementProposal currentProposal;
         private EquipmentPlacementPick pick;
         private bool loading;
+
+        internal EquipmentPlacementResolutionControl(
+            PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits,
+            ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService,
+            IEquipmentPlacementPickProvider pickProvider)
+            : this(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider, null, null)
+        {
+        }
 
         internal EquipmentPlacementResolutionControl(
             PlotPlanModel plotPlan,
@@ -58,15 +72,23 @@ namespace EngiSentry.AutoCAD2021
             string insertionUnits,
             ProjectEngineerReviewService reviewService,
             EquipmentPlacementResolutionService resolutionService,
-            IEquipmentPlacementPickProvider pickProvider)
+            IEquipmentPlacementPickProvider pickProvider,
+            IReadOnlyList<PlacementProposal> proposals = null,
+            string drawingPath = null)
         {
             if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
             this.drawingName = drawingName ?? string.Empty;
+            this.drawingPath = string.IsNullOrWhiteSpace(drawingPath) ? drawingName : drawingPath;
             this.drawingSha256 = drawingSha256 ?? string.Empty;
             this.insertionUnits = insertionUnits ?? string.Empty;
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
             this.resolutionService = resolutionService ?? throw new ArgumentNullException(nameof(resolutionService));
+            dispositionService = resolutionService.DispositionService;
             this.pickProvider = pickProvider ?? throw new ArgumentNullException(nameof(pickProvider));
+            this.proposals = (proposals ?? Array.Empty<PlacementProposal>()).Where(x => x != null && x.EngineeringReviewRequired
+                && string.Equals(x.SourceDrawingSha256, drawingSha256, StringComparison.Ordinal)
+                && string.Equals(x.ProposalFingerprint, PlacementProposalFingerprint.Compute(x), StringComparison.Ordinal))
+                .OrderBy(x => x.ProposalId, StringComparer.Ordinal).ToList();
             // The queue is keyed by equipment identity: exactly one case per EquipmentEntityId, and
             // an identity whose placement is already Complete is never queued. Placement
             // occurrences are never presented as separate cases.
@@ -102,7 +124,7 @@ namespace EngiSentry.AutoCAD2021
 
             placementList.Dock = DockStyle.Fill;
             placementList.IntegralHeight = false;
-            placementList.SelectedIndexChanged += (s, e) => { if (!loading) SelectPlacement(placementList.SelectedIndex); };
+            placementList.SelectedIndexChanged += (s, e) => { if (!loading) SelectWorkItem(placementList.SelectedIndex); };
             var leftHost = new Panel { Dock = DockStyle.Fill };
             leftHost.Controls.Add(placementList);
             leftHost.Controls.Add(new Label { Dock = DockStyle.Top, Height = 20, Text = "Unresolved equipment", TextAlign = ContentAlignment.MiddleLeft });
@@ -155,11 +177,18 @@ namespace EngiSentry.AutoCAD2021
 
             var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             classification.Dock = DockStyle.Fill; classification.DropDownStyle = ComboBoxStyle.DropDownList; classification.AccessibleName = "Classification";
             classification.Items.Add(string.Empty); classification.Items.AddRange(ProjectEngineerReviewClassifications.All.Cast<object>().ToArray()); classification.SelectedIndex = 0;
             classification.SelectedIndexChanged += (s, e) => UpdateSaveState();
-            footer.Controls.Add(classification, 0, 0);
+            proposalDisposition.Dock = DockStyle.Fill; proposalDisposition.DropDownStyle = ComboBoxStyle.DropDownList; proposalDisposition.AccessibleName = "PlacementProposalDisposition";
+            proposalDisposition.Items.Add(string.Empty);
+            proposalDisposition.Items.AddRange(new object[] { PlacementProposalDispositions.Approved, PlacementProposalDispositions.Rejected, PlacementProposalDispositions.Modified, PlacementProposalDispositions.Cancelled });
+            proposalDisposition.SelectedIndex = 0; proposalDisposition.Visible = false; proposalDisposition.SelectedIndexChanged += (s, e) => UpdateSaveState();
+            var decisionPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            decisionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50)); decisionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            decisionPanel.Controls.Add(classification, 0, 0); decisionPanel.Controls.Add(proposalDisposition, 0, 1);
+            footer.Controls.Add(decisionPanel, 0, 0);
             save.Text = "Save Resolution"; save.Dock = DockStyle.Fill; save.Click += (s, e) => SaveResolution();
             footer.Controls.Add(save, 2, 0);
             message.Dock = DockStyle.Fill; message.TextAlign = ContentAlignment.MiddleLeft; message.AutoEllipsis = true;
@@ -208,20 +237,45 @@ namespace EngiSentry.AutoCAD2021
             loading = true;
             placementList.Items.Clear();
             foreach (EquipmentPlacement placement in unresolved) placementList.Items.Add(Label(placement));
+            foreach (PlacementProposal proposal in proposals)
+            {
+                string state = dispositionService.GetStatus(proposal).Disposition;
+                placementList.Items.Add("PROPOSAL | " + proposal.NormalizedTag + " | " + state + " | " + proposal.ProposalId);
+            }
             loading = false;
-            if (unresolved.Count > 0) placementList.SelectedIndex = 0; else SelectPlacement(-1);
+            if (placementList.Items.Count > 0) placementList.SelectedIndex = 0; else SelectWorkItem(-1);
         }
 
         private static string Label(EquipmentPlacement placement) =>
             placement.NormalizedTag + "  |  " + placement.EquipmentEntityId + "  |  " + placement.PlacementStatus;
 
-        private void SelectPlacement(int index)
+        private void SelectWorkItem(int index)
         {
             current = index >= 0 && index < unresolved.Count ? unresolved[index] : null;
+            currentProposal = index >= unresolved.Count && index < unresolved.Count + proposals.Count ? proposals[index - unresolved.Count] : null;
             pick = null;
-            selectionInfo.Text = current == null ? "No unresolved equipment placement is selected." : Describe(current);
+            if (current != null) selectionInfo.Text = Describe(current);
+            else if (currentProposal != null) selectionInfo.Text = DescribeProposal(currentProposal, dispositionService.GetStatus(currentProposal));
+            else selectionInfo.Text = "No unresolved equipment placement or generated proposal is selected.";
+            proposalDisposition.SelectedIndex = 0;
+            proposalDisposition.Visible = currentProposal != null;
+            save.Text = currentProposal == null ? "Save Resolution" : "Record Disposition";
             UpdatePickInfo();
             UpdateSaveState();
+        }
+
+        private static string DescribeProposal(PlacementProposal proposal, PlacementProposalDispositionStatus status)
+        {
+            var text = new StringBuilder();
+            text.AppendLine("Generated proposal: " + proposal.ProposalId);
+            text.AppendLine("Disposition: " + status.Disposition);
+            text.AppendLine("Equipment: " + proposal.NormalizedTag + " | " + proposal.EquipmentEntityId);
+            text.AppendLine("Original point: " + proposal.OriginalEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.OriginalNorthing.ToString("R", CultureInfo.InvariantCulture));
+            text.AppendLine("Proposed point: " + proposal.ProposedEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.ProposedNorthing.ToString("R", CultureInfo.InvariantCulture));
+            text.AppendLine("Generator: " + proposal.GeneratorIdentity + " | Units: " + proposal.InsertionUnits);
+            text.AppendLine("Proposal fingerprint: " + proposal.ProposalFingerprint);
+            text.AppendLine("Review required: " + (proposal.EngineeringReviewRequired ? "YES" : "NO"));
+            return text.ToString();
         }
 
         private static string Describe(EquipmentPlacement placement)
@@ -239,7 +293,7 @@ namespace EngiSentry.AutoCAD2021
 
         private void DoPick(bool entity)
         {
-            if (current == null) { ShowMessage("Select an unresolved equipment placement first.", true); return; }
+            if (current == null && (currentProposal == null || proposalDisposition.SelectedItem as string != PlacementProposalDispositions.Modified)) { ShowMessage("Select an unresolved placement or choose MODIFIED for a proposal first.", true); return; }
             EquipmentPlacementPick result;
             try { result = entity ? pickProvider.PickEntity() : pickProvider.PickFreeSpace(); }
             catch (Exception exception) { ShowMessage("Pick failed: " + exception.Message, true); return; }
@@ -274,10 +328,20 @@ namespace EngiSentry.AutoCAD2021
 
         private void UpdateSaveState()
         {
-            bool ready = current != null && pick != null
+            bool ready = (current != null ? pick != null : currentProposal != null && !string.IsNullOrWhiteSpace(proposalDisposition.SelectedItem as string))
                 && !string.IsNullOrWhiteSpace(reviewerName.Text)
                 && !string.IsNullOrWhiteSpace(reviewerRole.Text)
                 && !string.IsNullOrWhiteSpace(classification.SelectedItem as string);
+            if (ready && currentProposal != null)
+            {
+                string action = proposalDisposition.SelectedItem as string;
+                bool needsPick = action == PlacementProposalDispositions.Modified;
+                if (needsPick != (pick != null)) ready = false;
+                if (string.IsNullOrWhiteSpace(comment.Text)) ready = false;
+                if ((action == PlacementProposalDispositions.Rejected || action == PlacementProposalDispositions.Cancelled) && string.IsNullOrWhiteSpace(comment.Text)) ready = false;
+                if (action == PlacementProposalDispositions.Approved
+                    && (!EquipmentPlacementPickFormatting.ToStoredDecimal(currentProposal.ProposedEasting).HasValue || !EquipmentPlacementPickFormatting.ToStoredDecimal(currentProposal.ProposedNorthing).HasValue)) ready = false;
+            }
             if (ready)
             {
                 foreach (ProjectEngineerReviewQuestionDefinition question in EquipmentPlacementResolutionQuestions.All)
@@ -293,6 +357,7 @@ namespace EngiSentry.AutoCAD2021
 
         private void SaveResolution()
         {
+            if (currentProposal != null) { SaveProposalDisposition(); return; }
             if (current == null) { ShowMessage("Select an unresolved equipment placement first.", true); return; }
             if (pick == null) { ShowMessage("Capture an explicit engineer pick before saving.", true); return; }
             decimal? easting = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX);
@@ -343,6 +408,121 @@ namespace EngiSentry.AutoCAD2021
             EquipmentPlacementResolutionQueue.RemoveForEntity(unresolved, target.EquipmentEntityId);
             RefreshPlacements();
             ShowMessage("Resolution saved for " + target.NormalizedTag + ". A fresh plot-plan QA will mark it Complete.", false);
+        }
+
+        private void SaveProposalDisposition()
+        {
+            PlacementProposal proposal = currentProposal;
+            if (proposal == null) return;
+            string action = proposalDisposition.SelectedItem as string;
+            string latestDrawingSha = drawingSha256;
+            try
+            {
+                latestDrawingSha = HumanEngineeringReviewDecisionFileStore.ComputeSha256(drawingPath);
+                if (!string.Equals(latestDrawingSha, drawingSha256, StringComparison.Ordinal)) throw new InvalidOperationException("The drawing changed after this proposal was loaded; rerun ES_SUGGEST and ES_PLACEMENTRESOLVE.");
+                PlacementProposal latest = PlacementProposalSnapshotWriter.ReadCurrentForDrawing(drawingName, latestDrawingSha)
+                    .SingleOrDefault(x => string.Equals(x.ProposalId, proposal.ProposalId, StringComparison.Ordinal));
+                if (latest == null || !string.Equals(latest.ProposalFingerprint, proposal.ProposalFingerprint, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The proposal is stale or has changed; reload the current proposal before recording a disposition.");
+
+                PlacementProposalSelectedPlacement selected = null;
+                EquipmentPlacementPick resolutionPick = null;
+                if (action == PlacementProposalDispositions.Approved)
+                {
+                    decimal easting = EquipmentPlacementPickFormatting.ToStoredDecimal(proposal.ProposedEasting).Value;
+                    decimal northing = EquipmentPlacementPickFormatting.ToStoredDecimal(proposal.ProposedNorthing).Value;
+                    selected = BuildSelectedPlacement(proposal, easting, northing, EquipmentPlacementResolutionSources.ProposalApproval, null, null, proposal.ProposedEasting, proposal.ProposedNorthing, 0d);
+                    resolutionPick = new EquipmentPlacementPick { Source = selected.Source, PointX = selected.PickedPointX, PointY = selected.PickedPointY, PointZ = selected.PickedPointZ };
+                }
+                else if (action == PlacementProposalDispositions.Modified)
+                {
+                    decimal easting = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX).Value;
+                    decimal northing = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointY).Value;
+                    selected = BuildSelectedPlacement(proposal, easting, northing, pick.Source, pick.Handle, pick.Layer, pick.PointX, pick.PointY, pick.PointZ);
+                    resolutionPick = pick;
+                }
+
+                DateTime responseTimestamp = DateTime.UtcNow;
+                ProjectEngineerReviewRequest request = BuildProposalRequest(proposal, action, responseTimestamp);
+                Dictionary<string, string> answers = CaptureAnswers();
+                string incomplete = ProjectEngineerReviewService.FindIncompleteReason(request, reviewerName.Text, reviewerRole.Text, answers, classification.SelectedItem as string);
+                if (incomplete != null) throw new InvalidOperationException(incomplete);
+                var response = new ProjectEngineerReviewResponse
+                {
+                    SchemaVersion = ProjectEngineerReviewSchema.Current,
+                    ReviewRequestId = request.ReviewRequestId,
+                    RequestSha256 = request.RequestSha256,
+                    DrawingName = request.DrawingName,
+                    ReviewedCaseId = request.ReviewedCaseId,
+                    ReviewerDisplayName = reviewerName.Text.Trim(),
+                    ReviewerRole = reviewerRole.Text.Trim(),
+                    ResponseTimestampUtc = responseTimestamp,
+                    Answers = answers.Select(x => new ProjectEngineerReviewAnswer { QuestionId = x.Key, AnswerText = x.Value }).ToList(),
+                    EngineerComment = comment.Text.Trim(),
+                    Classification = classification.SelectedItem as string
+                };
+                reviewService.SaveResponse(request, response);
+                PlacementProposalDispositionStatus currentStatus = dispositionService.GetStatus(proposal);
+                PlacementProposalDispositionRecord disposition = dispositionService.Record(
+                    proposal, proposal.ProposalFingerprint, latest.ProposalFingerprint, action, selected,
+                    comment.Text.Trim(), reviewerName.Text.Trim(), reviewerRole.Text.Trim(), currentStatus.CurrentRecordId,
+                    request, response, DateTime.UtcNow);
+                if (action == PlacementProposalDispositions.Approved || action == PlacementProposalDispositions.Modified)
+                {
+                    EquipmentPlacementResolutionRecord resolution = EquipmentPlacementResolutionBuilder.Build(
+                        drawingName, drawingSha256, proposal.EquipmentEntityId, proposal.NormalizedTag,
+                        selected.Easting, selected.Northing, proposal.InsertionUnits,
+                        resolutionPick.Source, resolutionPick.Handle, resolutionPick.Layer,
+                        resolutionPick.PointX, resolutionPick.PointY, resolutionPick.PointZ,
+                        request, response, DateTime.UtcNow,
+                        proposal.ProposalId, proposal.ProposalFingerprint, disposition.RecordId, selected.PlacementFingerprint);
+                    PlacementProposalDispositionService.BindResolutionToDisposition(resolution, disposition);
+                    resolutionService.Save(resolution);
+                }
+                selectionInfo.Text = DescribeProposal(proposal, dispositionService.GetStatus(proposal));
+                UpdateSaveState();
+                ShowMessage("Engineer disposition recorded: " + action + ".", false);
+            }
+            catch (Exception exception) { ShowMessage("Disposition not recorded: " + exception.Message, true); }
+        }
+
+        private ProjectEngineerReviewRequest BuildProposalRequest(PlacementProposal proposal, string action, DateTime timestampUtc)
+        {
+            var evidence = new List<ProjectEngineerReviewEvidenceReference>
+            {
+                new ProjectEngineerReviewEvidenceReference { Kind = "PlacementProposalId", Label = "Generated proposal identity", Value = proposal.ProposalId },
+                new ProjectEngineerReviewEvidenceReference { Kind = "PlacementProposalFingerprint", Label = "Immutable proposal fingerprint", Value = proposal.ProposalFingerprint },
+                new ProjectEngineerReviewEvidenceReference { Kind = "PlacementId", Label = "Equipment placement identity", Value = proposal.PlacementId },
+                new ProjectEngineerReviewEvidenceReference { Kind = "EquipmentEntityId", Label = "Equipment identity", Value = proposal.EquipmentEntityId },
+                new ProjectEngineerReviewEvidenceReference { Kind = "OriginalPoint", Label = "Original equipment point", Value = proposal.OriginalEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.OriginalNorthing.ToString("R", CultureInfo.InvariantCulture) },
+                new ProjectEngineerReviewEvidenceReference { Kind = "ProposedPoint", Label = "Generated proposed point", Value = proposal.ProposedEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.ProposedNorthing.ToString("R", CultureInfo.InvariantCulture) },
+                new ProjectEngineerReviewEvidenceReference { Kind = "GeneratorIdentity", Label = "Deterministic generator", Value = proposal.GeneratorIdentity },
+                new ProjectEngineerReviewEvidenceReference { Kind = "EngineerDisposition", Label = "Engineer disposition", Value = action },
+                new ProjectEngineerReviewEvidenceReference { Kind = "DispositionTimestamp", Label = "Decision capture time (UTC)", Value = timestampUtc.ToString("O", CultureInfo.InvariantCulture) }
+            };
+            return reviewService.CreateRequest(ProjectEngineerReviewService.WorkflowSourcePlacementProposal, drawingName, drawingSha256,
+                "P11.1-" + proposal.ProposalId, "Engineer disposition of generated placement proposal " + proposal.ProposalId,
+                evidence, "PLACEMENT_PROPOSAL_REVIEW", action, EquipmentPlacementResolutionQuestions.All);
+        }
+
+        private static PlacementProposalSelectedPlacement BuildSelectedPlacement(PlacementProposal proposal, decimal easting, decimal northing, string source, string sourceHandle, string sourceLayer, double pointX, double pointY, double pointZ)
+        {
+            var selected = new PlacementProposalSelectedPlacement
+            {
+                EquipmentEntityId = proposal.EquipmentEntityId,
+                NormalizedTag = proposal.NormalizedTag,
+                Easting = easting,
+                Northing = northing,
+                InsertionUnits = proposal.InsertionUnits,
+                Source = source,
+                SourceHandle = sourceHandle,
+                SourceLayer = sourceLayer,
+                PickedPointX = pointX,
+                PickedPointY = pointY,
+                PickedPointZ = pointZ
+            };
+            selected.PlacementFingerprint = PlacementProposalDispositionService.ComputeSelectedPlacementFingerprint(selected);
+            return selected;
         }
 
         private ProjectEngineerReviewRequest BuildRequest(EquipmentPlacement target, EquipmentPlacementPick captured, decimal easting, decimal northing, DateTime responseTimestamp)

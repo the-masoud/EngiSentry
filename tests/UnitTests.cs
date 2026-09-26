@@ -207,8 +207,18 @@ namespace EngiSentry.Tests
 
         private static PlotGeometryPrimitive Centerline(string handle, string layer, double x1, double y1, double x2, double y2) => new PlotGeometryPrimitive { SourceHandle = handle, SourceLayer = layer, GeometryKind = "Line", Vertices = new List<PlotGeometryVertex> { new PlotGeometryVertex { X = x1, Y = y1 }, new PlotGeometryVertex { X = x2, Y = y2 } } };
 
-        public static int Main()
+        public static int Main(string[] args)
         {
+            if (args != null && args.Length == 1 && string.Equals(args[0], "--p11.1", StringComparison.OrdinalIgnoreCase))
+            {
+                P11ProposalDispositionTests.Run();
+                PlacementProposalTests.Run();
+                PlacementProposalRuntimeTests.Run();
+                PhaseEquipmentPlacementResolutionTests.Run();
+                PhaseJevAdvisoryTests.Run();
+                PhaseProjectEngineerReviewTests.Run();
+                return 0;
+            }
             PilotEquipmentCoordinateRegression();
             EquipmentCenterlinePlacementRegression();
             CrossDocumentTests.Run();

@@ -36,11 +36,13 @@ namespace EngiSentry.Standards
                 if (string.IsNullOrWhiteSpace(record.SourceHandle)) throw new EquipmentPlacementResolutionValidationException("an entity pick requires a proven source handle");
                 if (string.IsNullOrWhiteSpace(record.SourceLayer)) throw new EquipmentPlacementResolutionValidationException("an entity pick requires a proven source layer");
             }
-            else
+            else if (string.Equals(record.Source, EquipmentPlacementResolutionSources.FreeSpace, StringComparison.Ordinal))
             {
                 if (!string.IsNullOrWhiteSpace(record.SourceHandle)) throw new EquipmentPlacementResolutionValidationException("a free-space pick must not carry a source handle");
                 if (!string.IsNullOrWhiteSpace(record.SourceLayer)) throw new EquipmentPlacementResolutionValidationException("a free-space pick must not carry a source layer");
             }
+            else if (!string.IsNullOrWhiteSpace(record.SourceHandle) || !string.IsNullOrWhiteSpace(record.SourceLayer))
+                throw new EquipmentPlacementResolutionValidationException("an approved proposal must not claim a direct entity pick");
             if (string.IsNullOrWhiteSpace(record.ReviewedCaseId)) throw new EquipmentPlacementResolutionValidationException("ReviewedCaseId is required");
             if (string.IsNullOrWhiteSpace(record.ReviewRequestId)) throw new EquipmentPlacementResolutionValidationException("ReviewRequestId is required");
             if (!IsSha256(record.RequestSha256)) throw new EquipmentPlacementResolutionValidationException("RequestSha256 must be a 64-character hexadecimal SHA256");
@@ -50,6 +52,13 @@ namespace EngiSentry.Standards
             if (record.ResponseTimestampUtc.Kind != DateTimeKind.Utc) throw new EquipmentPlacementResolutionValidationException("resolution response timestamp must be UTC");
             if (record.RecordedTimestampUtc.Kind != DateTimeKind.Utc) throw new EquipmentPlacementResolutionValidationException("resolution recorded timestamp must be UTC");
             if (!EquipmentPlacementResolutionStates.All.Contains(record.State)) throw new EquipmentPlacementResolutionValidationException("unsupported resolution state: " + record.State);
+            bool hasProposalLink = !string.IsNullOrWhiteSpace(record.ProposalId) || !string.IsNullOrWhiteSpace(record.ProposalFingerprint)
+                || !string.IsNullOrWhiteSpace(record.DispositionRecordId) || !string.IsNullOrWhiteSpace(record.SelectedPlacementFingerprint);
+            if (hasProposalLink && (string.IsNullOrWhiteSpace(record.ProposalId) || !IsSha256(record.ProposalFingerprint)
+                || !IsSha256(record.DispositionRecordId) || !IsSha256(record.SelectedPlacementFingerprint)))
+                throw new EquipmentPlacementResolutionValidationException("proposal resolution link is incomplete or malformed");
+            if (string.Equals(record.Source, EquipmentPlacementResolutionSources.ProposalApproval, StringComparison.Ordinal) && !hasProposalLink)
+                throw new EquipmentPlacementResolutionValidationException("proposal approval requires a complete disposition link");
             if (!string.Equals(record.ResolutionId, EquipmentPlacementResolutionIdentity.ComputeResolutionId(record), StringComparison.Ordinal)) throw new EquipmentPlacementResolutionValidationException("ResolutionId does not match its content");
             if (!string.Equals(record.RecordId, EquipmentPlacementResolutionIdentity.ComputeRecordId(record), StringComparison.Ordinal)) throw new EquipmentPlacementResolutionValidationException("RecordId does not match its content");
         }

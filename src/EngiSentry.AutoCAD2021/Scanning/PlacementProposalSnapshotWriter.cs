@@ -56,5 +56,27 @@ namespace EngiSentry.AutoCAD2021.Scanning
                 return (List<PlacementProposal>)serializer.ReadObject(stream);
             }
         }
+
+        /// <summary>Loads the most recent immutable proposal sidecar for the exact drawing revision.</summary>
+        public static List<PlacementProposal> ReadCurrentForDrawing(string drawingName, string drawingSha256)
+        {
+            string directory = Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
+            if (!Directory.Exists(directory)) return new List<PlacementProposal>();
+            string prefix = SnapshotFileWriter.SanitizeFileName(drawingName ?? "unnamed") + ".";
+            string[] files = Directory.GetFiles(directory, prefix + "*.placement-proposal.json", SearchOption.TopDirectoryOnly)
+                .OrderByDescending(Path.GetFileName, StringComparer.Ordinal).ToArray();
+            foreach (string file in files)
+            {
+                List<PlacementProposal> proposals;
+                try { proposals = Read(file); }
+                catch (Exception exception) when (exception is IOException || exception is System.Runtime.Serialization.SerializationException) { continue; }
+                List<PlacementProposal> current = proposals.Where(proposal =>
+                    string.Equals(proposal.SourceDrawingSha256, drawingSha256, StringComparison.Ordinal)
+                    && string.Equals(proposal.ProposalFingerprint, EngiSentry.Standards.PlacementProposalFingerprint.Compute(proposal), StringComparison.Ordinal))
+                    .OrderBy(proposal => proposal.ProposalId, StringComparer.Ordinal).ToList();
+                if (current.Count > 0) return current;
+            }
+            return new List<PlacementProposal>();
+        }
     }
 }

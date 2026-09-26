@@ -42,7 +42,11 @@ namespace EngiSentry.Standards
                 record.RequestSha256 ?? string.Empty,
                 record.ResponseId ?? string.Empty,
                 record.ReviewerDisplayName ?? string.Empty,
-                NormalizeTimestamp(record.ResponseTimestampUtc).ToString("O", CultureInfo.InvariantCulture)
+                NormalizeTimestamp(record.ResponseTimestampUtc).ToString("O", CultureInfo.InvariantCulture),
+                record.ProposalId ?? string.Empty,
+                record.ProposalFingerprint ?? string.Empty,
+                record.DispositionRecordId ?? string.Empty,
+                record.SelectedPlacementFingerprint ?? string.Empty
             }));
         }
 

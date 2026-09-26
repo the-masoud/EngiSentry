@@ -378,6 +378,15 @@ namespace EngiSentry.AutoCAD2021
                 PlotPlanStandardsAuthorityRuntimeContext authorityContext = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
                 System.Collections.Generic.IReadOnlyList<StandardsPackRule> governedRules = StandardsPackProjectionBuilder.Build(authorityContext, ProjectDistanceRuleBinder.Create(criteria), BuildGovernedResolutions(governance));
                 PlacementProposalRunResult result = PlacementProposalRuntime.Build(plotPlan, governedRules, governance, out PlacementProposalRunDiagnostics diagnostics);
+                string? proposalDrawingSha256 = TryComputeDrawingSha256(document);
+                if (proposalDrawingSha256 != null)
+                {
+                    foreach (PlacementProposal proposal in result.Proposals)
+                    {
+                        proposal.SourceDrawingSha256 = proposalDrawingSha256;
+                        proposal.ProposalFingerprint = PlacementProposalFingerprint.Compute(proposal);
+                    }
+                }
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during placement suggestion processing.");
                 string path = PlacementProposalSnapshotWriter.Write(result.Proposals, snapshot.FileName, snapshot.ScanTimestampUtc);
@@ -586,7 +595,8 @@ namespace EngiSentry.AutoCAD2021
                 int unresolved = EquipmentPlacementResolutionQueue.CountUnresolved(plotPlan.EquipmentPlacements);
                 document.Editor.WriteMessage("\nEngiSentry engineer-assisted equipment placement resolution\nDrawing: {0}\nDrawing SHA256: {1}\nUnresolved equipment entities: {2}\nTrusted engineer resolutions already applied: {3}\nDBMOD unchanged: YES\nStatus: ENGINEER INPUT REQUIRED | READ-ONLY\n", snapshot.FileName ?? "<unnamed>", drawingSha256, unresolved, engineerResolutions.Count);
                 if (unresolved == 0) WriteToActiveEditor("ES_PLACEMENTRESOLVE: no unresolved equipment entities remain.\n");
-                VisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, snapshot.FileName ?? "<unnamed>", drawingSha256!, snapshot.InsertionUnits ?? string.Empty, new ProjectEngineerReviewService(), new EquipmentPlacementResolutionService(), new EditorEquipmentPlacementPickProvider(document));
+                System.Collections.Generic.IReadOnlyList<PlacementProposal> proposals = PlacementProposalSnapshotWriter.ReadCurrentForDrawing(snapshot.FileName ?? "<unnamed>", drawingSha256!);
+                VisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, snapshot.FileName ?? "<unnamed>", drawingSha256!, snapshot.InsertionUnits ?? string.Empty, new ProjectEngineerReviewService(), new EquipmentPlacementResolutionService(), new EditorEquipmentPlacementPickProvider(document), proposals, document.Name);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_PLACEMENTRESOLVE failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
         }

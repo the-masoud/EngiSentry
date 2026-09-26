@@ -23,6 +23,7 @@ namespace EngiSentry.Rules
     /// </summary>
     public static class PlacementProposalGenerator
     {
+        public const string GeneratorIdentity = "EngiSentry.PlacementProposalGenerator/1";
         private const string EngineeringReviewReason =
             "Phase D is advisory evidence: candidates are point-based, no equipment footprint, orientation or " +
             "extent is evaluated, and no general optimization is performed. Engineering review is required before " +
@@ -84,6 +85,11 @@ namespace EngiSentry.Rules
             return new PlacementProposal
             {
                 ProposalId = DeterministicProposalId(context, Array.Empty<PlacementProposalCandidate>()),
+                PlacementId = context.Violation.PlacementId,
+                EquipmentEntityId = context.Violation.EquipmentEntityId,
+                NormalizedTag = context.Violation.NormalizedTag,
+                InsertionUnits = context.UnitResolution.InsertionUnits,
+                GeneratorIdentity = GeneratorIdentity,
                 ViolatedRule = context.Rule,
                 ObservedDistanceMeters = context.Violation.ActualDistanceMeters,
                 ObservedMeasurementBasis = context.Violation.MeasurementBasisKey,
@@ -125,6 +131,11 @@ namespace EngiSentry.Rules
             return new PlacementProposal
             {
                 ProposalId = DeterministicProposalId(context, ranking.OrderedCandidates),
+                PlacementId = winner?.PlacementId ?? context.Violation.PlacementId,
+                EquipmentEntityId = winner?.EquipmentEntityId ?? context.Violation.EquipmentEntityId,
+                NormalizedTag = winner?.NormalizedTag ?? context.Violation.NormalizedTag,
+                InsertionUnits = context.UnitResolution.InsertionUnits,
+                GeneratorIdentity = GeneratorIdentity,
                 ViolatedRule = context.Rule,
                 ObservedDistanceMeters = context.Violation.ActualDistanceMeters,
                 ObservedMeasurementBasis = context.Violation.MeasurementBasisKey,

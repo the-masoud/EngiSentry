@@ -11,6 +11,17 @@ namespace EngiSentry.Standards
     /// </summary>
     public static class EquipmentPlacementResolutionBuilder
     {
+        // Preserve the original public API for already-built host integrations while the
+        // proposal-aware overload below adds explicit lifecycle bindings.
+        public static EquipmentPlacementResolutionRecord Build(
+            string drawingName, string drawingSha256, string equipmentEntityId, string normalizedTag,
+            decimal easting, decimal northing, string insertionUnits, string source,
+            string? sourceHandle, string? sourceLayer, double pickedPointX, double pickedPointY, double pickedPointZ,
+            ProjectEngineerReviewRequest request, ProjectEngineerReviewResponse response, DateTime recordedTimestampUtc)
+            => Build(drawingName, drawingSha256, equipmentEntityId, normalizedTag, easting, northing, insertionUnits, source,
+                sourceHandle, sourceLayer, pickedPointX, pickedPointY, pickedPointZ, request, response, recordedTimestampUtc,
+                null, null, null, null);
+
         public static EquipmentPlacementResolutionRecord Build(
             string drawingName,
             string drawingSha256,
@@ -27,7 +38,11 @@ namespace EngiSentry.Standards
             double pickedPointZ,
             ProjectEngineerReviewRequest request,
             ProjectEngineerReviewResponse response,
-            DateTime recordedTimestampUtc)
+            DateTime recordedTimestampUtc,
+            string? proposalId = null,
+            string? proposalFingerprint = null,
+            string? dispositionRecordId = null,
+            string? selectedPlacementFingerprint = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (response == null) throw new ArgumentNullException(nameof(response));
@@ -66,7 +81,11 @@ namespace EngiSentry.Standards
                 // byte-identical to the record that is read back from disk.
                 ResponseTimestampUtc = EquipmentPlacementResolutionIdentity.NormalizeTimestamp(response.ResponseTimestampUtc),
                 RecordedTimestampUtc = EquipmentPlacementResolutionIdentity.NormalizeTimestamp(recordedTimestampUtc),
-                State = EquipmentPlacementResolutionStates.Active
+                State = EquipmentPlacementResolutionStates.Active,
+                ProposalId = proposalId,
+                ProposalFingerprint = proposalFingerprint,
+                DispositionRecordId = dispositionRecordId,
+                SelectedPlacementFingerprint = selectedPlacementFingerprint
             };
             record.ResolutionId = EquipmentPlacementResolutionIdentity.ComputeResolutionId(record);
             record.RecordId = EquipmentPlacementResolutionIdentity.ComputeRecordId(record);

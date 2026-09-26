@@ -58,6 +58,16 @@ namespace EngiSentry.Contracts
 
         /// <summary>Mandatory non-empty in v1: statically includes the point-based limitation.</summary>
         [DataMember(Order = 28)] public List<string> KnownLimitations { get; set; } = new List<string>();
+
+        // Source binding added for engineer disposition. These are generated evidence and are
+        // covered by ProposalFingerprint; a disposition never edits them in place.
+        [DataMember(Order = 29, EmitDefaultValue = false)] public string? PlacementId { get; set; }
+        [DataMember(Order = 30, EmitDefaultValue = false)] public string? EquipmentEntityId { get; set; }
+        [DataMember(Order = 31, EmitDefaultValue = false)] public string? NormalizedTag { get; set; }
+        [DataMember(Order = 32, EmitDefaultValue = false)] public string? SourceDrawingSha256 { get; set; }
+        [DataMember(Order = 33, EmitDefaultValue = false)] public string? InsertionUnits { get; set; }
+        [DataMember(Order = 34, EmitDefaultValue = false)] public string? GeneratorIdentity { get; set; }
+        [DataMember(Order = 35, EmitDefaultValue = false)] public string? ProposalFingerprint { get; set; }
     }
 
     /// <summary>
