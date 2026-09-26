@@ -14,7 +14,9 @@ namespace EngiSentry.Standards
         public static string ComputeSha256(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("path is required", nameof(path));
-            using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            // ReadWrite sharing is required so the hash can be taken while AutoCAD still holds the
+            // drawing open for editing. The stream remains read-only, so analysis never modifies the DWG.
+            using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (SHA256 sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty);
         }
 
