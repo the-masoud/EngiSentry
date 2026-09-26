@@ -138,6 +138,7 @@ namespace EngiSentry.AutoCAD2021
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 QaReport report = QaEngine.Evaluate(index, BuiltInQaRules.All);
+                report = ExternalReferenceCompletenessGate.Apply(report, snapshot.Xrefs);
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during QA processing.");
                 string path = SnapshotFileWriter.WriteQaReport(report, snapshot.FileName, snapshot.ScanTimestampUtc);
@@ -174,6 +175,7 @@ namespace EngiSentry.AutoCAD2021
                 string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
                 ProjectDistanceGovernanceAggregateResult governance = ProjectDistanceGovernanceRuntimeLoader.LoadCanonical(criteria, approvalDirectory);
                 QaReport qa = ProjectEngineeringDistanceRuntime.Evaluate(criteria, plotPlan, baseQa, governance);
+                qa = ExternalReferenceCompletenessGate.Apply(qa, snapshot.Xrefs);
                 EngineeringDistanceRunSummary summary = qa.EngineeringDistanceSummary ?? throw new InvalidOperationException("ES_PLOTQA engineering distance summary is required.");
                 var evaluations = summary.Evaluations ?? throw new InvalidOperationException("ES_PLOTQA engineering distance evaluations are required.");
                 EngineeringDistanceRuleEvaluation roadEvaluation = evaluations.Single(x => x.RuleId == ProjectDistanceRuleBinder.EquipmentToRoadRuleId);
@@ -214,6 +216,7 @@ namespace EngiSentry.AutoCAD2021
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 QaReport qa = QaEngine.EvaluateWithProfile(index, BuiltInQaRules.All, plotPlan, ProfilePlotPlanQaRules.Create(resolution), resolution);
+                qa = ExternalReferenceCompletenessGate.Apply(qa, snapshot.Xrefs);
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during profile QA processing.");
                 string path = SnapshotFileWriter.WriteProfilePlotPlanQaReport(new PlotPlanQaReport { PlotPlan = plotPlan, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
@@ -241,6 +244,7 @@ namespace EngiSentry.AutoCAD2021
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 QaReport qa = QaEngine.EvaluateWithExternalRegister(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All, register, BuiltInCrossDocumentQaRules.All);
+                qa = ExternalReferenceCompletenessGate.Apply(qa, snapshot.Xrefs);
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during cross-document QA processing.");
                 string path = SnapshotFileWriter.WriteCrossDocumentQaReport(new CrossDocumentQaReport { PlotPlan = plotPlan, ExternalEquipmentRegister = register, Qa = qa }, snapshot.FileName, snapshot.ScanTimestampUtc);
