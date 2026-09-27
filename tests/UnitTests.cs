@@ -219,6 +219,7 @@ namespace EngiSentry.Tests
                 P11ProposalDispositionTests.Run();
                 ProjectRuleAuthorityBindingTests.Run();
                 ProjectRuleAuthorityBindingIntakeTests.Run();
+                StandardAuthorityPolicyIntakeTests.Run();
                 P11PlacementProposalAcceptanceTests.Run();
                 PlacementProposalTests.Run();
                 PlacementProposalRuntimeTests.Run();

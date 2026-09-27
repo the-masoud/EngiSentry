@@ -375,11 +375,15 @@ namespace EngiSentry.AutoCAD2021
                 PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture);
                 string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
                 ProjectDistanceGovernanceAggregateResult governance = ProjectDistanceGovernanceRuntimeLoader.LoadCanonical(criteria, approvalDirectory);
-                PlotPlanStandardsAuthorityRuntimeContext authorityContext = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
+                // The authority path is single and ordered: the accepted trust store first, then the verified
+                // signed standards-authority policy intake (which contributes policies ONLY into the normal
+                // registry → resolver → execution-gate chain), then the production context, then the verified
+                // signed project-rule binding intake. No artifact sets AutoExecutionAllowed directly.
+                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trustedIssuers = EngineeringDistanceApprovalAuthorityTrustStore.LoadCanonical();
+                PlotPlanStandardsAuthorityRuntimeContext authorityContext = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create(criteria.ProjectDirectory, trustedIssuers);
                 // Production bindings come ONLY from the verified intake loader: a binding reaches the projection
                 // exclusively as signed, trusted, in-scope, non-revoked, unambiguous material. With no such material
                 // installed the loader returns no binding and every project rule stays fail-closed (0 auto-executable).
-                EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trustedIssuers = EngineeringDistanceApprovalAuthorityTrustStore.LoadCanonical();
                 System.Collections.Generic.IReadOnlyList<ProjectRuleAuthorityBinding> authorityBindings =
                     ProjectRuleAuthorityBindingCatalog.LoadCanonical(criteria.ProjectDirectory, trustedIssuers);
                 System.Collections.Generic.IReadOnlyList<StandardsPackRule> governedRules = PlacementProposalGovernedRuleProjection.Build(criteria, governance, authorityContext, authorityBindings);

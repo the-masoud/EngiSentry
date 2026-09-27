@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using EngiSentry.Contracts;
 
 namespace EngiSentry.Standards
@@ -34,11 +36,55 @@ namespace EngiSentry.Standards
 
     public static class PlotPlanStandardsAuthorityRuntimeContextCatalog
     {
+        /// <summary>
+        /// The built-in-only baseline context. The built-in policies are the safe baseline and resolve every
+        /// source/clause to CONDITIONAL_REVIEW or NEVER_AUTO_ENFORCE, so this context yields 0 deterministic
+        /// gates. It is used where no project scope is available (report compaction) and remains the exact
+        /// production default.
+        /// </summary>
         public static PlotPlanStandardsAuthorityRuntimeContext Create()
         {
             StandardSourceRegistry sourceRegistry = StandardSourceRegistry.Create(Sources());
             StandardClauseRegistry clauseRegistry = StandardClauseRegistry.Create(sourceRegistry, Clauses());
-            StandardAuthorityPolicyRegistry policyRegistry = PlotPlanStandardsAuthorityPolicyCatalog.Create(sourceRegistry, clauseRegistry);
+            return CreateCore(sourceRegistry, clauseRegistry, PlotPlanStandardsAuthorityPolicyCatalog.Create(sourceRegistry, clauseRegistry));
+        }
+
+        /// <summary>
+        /// The production context for one project: the built-in safe baseline PLUS the external
+        /// standards-authority policies loaded by the verified signed intake loader. External policies enter
+        /// ONLY through the normal <see cref="StandardAuthorityPolicyRegistry"/>, so a valid external
+        /// DETERMINISTIC policy reaches executability exclusively through the regular
+        /// authority-policy → <see cref="StandardAuthorityResolver"/> → <see cref="StandardAuthorityExecutionGate"/>
+        /// path; there is no second authority path. Any conflict between an external policy and the built-in
+        /// baseline (or between external policies) fails closed here rather than being resolved by choice.
+        /// With no valid external material installed — the current real installation — this is identical to
+        /// <see cref="Create()"/>: 0 deterministic gates.
+        /// </summary>
+        public static PlotPlanStandardsAuthorityRuntimeContext Create(string projectDirectory, EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trustedIssuers)
+            => Create(projectDirectory, trustedIssuers, StandardAuthorityPolicyArtifactCatalog.CanonicalDirectory);
+
+        /// <summary>The same production composition with an explicit external policy directory, so isolated tests
+        /// can drive the real authority-policy → resolver → execution-gate merge without ever touching the
+        /// machine-wide production location.</summary>
+        internal static PlotPlanStandardsAuthorityRuntimeContext Create(string projectDirectory, EngineeringDistanceApprovalAuthorityTrustedIssuerRegistry trustedIssuers, string policyDirectory)
+        {
+            if (trustedIssuers == null) throw new ArgumentNullException(nameof(trustedIssuers));
+            if (string.IsNullOrWhiteSpace(projectDirectory)) throw new ArgumentException("A project directory is required to load external authority policies.", nameof(projectDirectory));
+
+            StandardSourceRegistry sourceRegistry = StandardSourceRegistry.Create(Sources());
+            StandardClauseRegistry clauseRegistry = StandardClauseRegistry.Create(sourceRegistry, Clauses());
+
+            // Built-in policies are always present and always first: an external policy that duplicates a
+            // built-in PolicyId, source-wide SourceId or ClauseId is rejected by the registry (fail closed),
+            // so the safe baseline — and the quarantine it carries — can never be overwritten from outside.
+            IEnumerable<StandardAuthorityPolicyDefinition> baseline = PlotPlanStandardsAuthorityPolicyCatalog.Create(sourceRegistry, clauseRegistry).Policies;
+            StandardAuthorityPolicyVerifiedCatalog external = StandardAuthorityPolicyArtifactCatalog.Load(policyDirectory, projectDirectory, trustedIssuers, sourceRegistry, clauseRegistry);
+
+            return CreateCore(sourceRegistry, clauseRegistry, StandardAuthorityPolicyRegistry.Create(sourceRegistry, clauseRegistry, baseline.Concat(external.Policies)));
+        }
+
+        private static PlotPlanStandardsAuthorityRuntimeContext CreateCore(StandardSourceRegistry sourceRegistry, StandardClauseRegistry clauseRegistry, StandardAuthorityPolicyRegistry policyRegistry)
+        {
             StandardRulePackDefinition pack = new StandardRulePackDefinition
             {
                 PackId = "runtime.plotplan.real-standards-authority",
