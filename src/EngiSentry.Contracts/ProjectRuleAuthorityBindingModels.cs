@@ -50,5 +50,12 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 9, EmitDefaultValue = false)] public string? ApprovalRecordId { get; set; }
         [DataMember(Order = 10, EmitDefaultValue = false)] public string? AuthorityState { get; set; }
         [DataMember(Order = 11, EmitDefaultValue = false)] public string? Rationale { get; set; }
+
+        /// <summary>The absolute project directory this binding is scoped to (normalized upper-cased form as
+        /// recorded by the signed intake artifact). A binding is authoritative only inside its own project scope;
+        /// the intake loader compares this against the current project before the binding is ever handed to the
+        /// projection. It is part of the signed payload, so it cannot be retargeted without invalidating the
+        /// signature.</summary>
+        [DataMember(Order = 12, EmitDefaultValue = false)] public string? ProjectDirectory { get; set; }
     }
 }

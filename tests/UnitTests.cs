@@ -218,6 +218,7 @@ namespace EngiSentry.Tests
             {
                 P11ProposalDispositionTests.Run();
                 ProjectRuleAuthorityBindingTests.Run();
+                ProjectRuleAuthorityBindingIntakeTests.Run();
                 P11PlacementProposalAcceptanceTests.Run();
                 PlacementProposalTests.Run();
                 PlacementProposalRuntimeTests.Run();
@@ -485,6 +486,7 @@ namespace EngiSentry.Tests
             PlacementProposalTests.Run();
             PlacementProposalRuntimeTests.Run();
             ProjectRuleAuthorityBindingTests.Run();
+            ProjectRuleAuthorityBindingIntakeTests.Run();
             P11PlacementProposalAcceptanceTests.Run();
             PhaseFPresentationTests.Run();
             PhaseGActivationReadinessTests.Run();
