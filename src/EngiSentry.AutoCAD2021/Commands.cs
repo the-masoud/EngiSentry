@@ -376,7 +376,9 @@ namespace EngiSentry.AutoCAD2021
                 string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
                 ProjectDistanceGovernanceAggregateResult governance = ProjectDistanceGovernanceRuntimeLoader.LoadCanonical(criteria, approvalDirectory);
                 PlotPlanStandardsAuthorityRuntimeContext authorityContext = PlotPlanStandardsAuthorityRuntimeContextCatalog.Create();
-                System.Collections.Generic.IReadOnlyList<StandardsPackRule> governedRules = StandardsPackProjectionBuilder.Build(authorityContext, ProjectDistanceRuleBinder.Create(criteria), BuildGovernedResolutions(governance));
+                // Production supplies no authority bindings, so no project rule receives execution authority
+                // through this path unless an explicit, evidence-backed binding is validated by the projection.
+                System.Collections.Generic.IReadOnlyList<StandardsPackRule> governedRules = PlacementProposalGovernedRuleProjection.Build(criteria, governance, authorityContext);
                 PlacementProposalRunResult result = PlacementProposalRuntime.Build(plotPlan, governedRules, governance, out PlacementProposalRunDiagnostics diagnostics);
                 string? proposalDrawingSha256 = TryComputeDrawingSha256(document);
                 if (proposalDrawingSha256 != null)
@@ -630,19 +632,6 @@ namespace EngiSentry.AutoCAD2021
                 return new EquipmentPlacementResolutionService().ResolveTrustedForDrawing(drawingSha256, insertionUnits!);
             }
             catch (System.Exception) { return System.Array.Empty<EquipmentPlacementResolution>(); }
-        }
-
-        /// <summary>
-        /// Maps the accepted P9 governance aggregate onto the governed-resolution lookup the Phase C projection
-        /// consumes. The aggregate is the single source: no resolution is re-derived or invented here.
-        /// </summary>
-        private static System.Collections.Generic.IReadOnlyDictionary<string, ProjectDistanceGovernedRuleResolution> BuildGovernedResolutions(ProjectDistanceGovernanceAggregateResult governance)
-        {
-            if (governance == null || governance.Items == null) return new System.Collections.Generic.Dictionary<string, ProjectDistanceGovernedRuleResolution>(System.StringComparer.Ordinal);
-            return governance.Items
-                .Where(x => x != null && x.Resolution != null && !string.IsNullOrEmpty(x.ProjectRuleId))
-                .GroupBy(x => x.ProjectRuleId!, StringComparer.Ordinal)
-                .ToDictionary(x => x.Key, x => x.OrderBy(y => y.CandidateId, StringComparer.Ordinal).First().Resolution!, StringComparer.Ordinal);
         }
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()

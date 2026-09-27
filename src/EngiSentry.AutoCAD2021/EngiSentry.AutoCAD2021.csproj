@@ -62,6 +62,7 @@
     <Compile Include="ProjectDistanceCriteriaDialog.cs" />
     <Compile Include="ProjectEngineeringDistanceRuntime.cs" />
     <Compile Include="ProjectDistanceGovernanceRuntimeLoader.cs" />
+    <Compile Include="PlacementProposalGovernedRuleProjection.cs" />
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="JevEngineerLabelingControl.cs" />
     <Compile Include="ProjectEngineerReviewControl.cs" />

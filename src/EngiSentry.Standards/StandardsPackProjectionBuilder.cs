@@ -9,19 +9,31 @@ namespace EngiSentry.Standards
     /// Builds the governed <see cref="StandardsPackRule"/> projection: a read-only view composed entirely of
     /// existing authoritative P6→P9 types. It never creates a source, clause, policy, approval, trust
     /// decision or distance. Authority, executability and currentness continue to be decided by the existing
-    /// authority chain exactly as they are today (authority/gate/review 4/4/4, auto-executable 0, flare
-    /// SOURCE_QUARANTINED).
+    /// authority chain exactly as they are today.
     ///
-    /// The projection reads only registered sources/clauses/policies and the resolved rule/authority/gate
-    /// chain. An empty registry yields an empty pack, which yields INSUFFICIENT_EVIDENCE downstream — never
-    /// a fabricated criterion. Any absent value stays absent; missing provenance is never synthesized.
+    /// Executability join (the P11.1 authority-binding fix): project distance rules and authority-chain rules
+    /// live in deliberately distinct identity namespaces, so they must NEVER be joined by exact rule id, by
+    /// naming convention or by a hard-coded mapping. Instead, executability flows to a project rule only
+    /// through an explicit, evidence-backed <see cref="ProjectRuleAuthorityBinding"/> that names the governing
+    /// authority rule and whose every recorded field is validated against the authority chain's actual
+    /// resolution by <see cref="ProjectRuleAuthorityBindingValidator"/>. With no validated binding a project
+    /// rule receives no execution authority, so the real production path — which supplies no binding — stays
+    /// fail-closed at 0 auto-executable rules. A governed-compatible numerical value alone (an approved
+    /// minimum distance) never grants executability: only confirmed DETERMINISTIC authority evidence does.
+    ///
+    /// The projection reads only registered sources/clauses/policies, the resolved rule/authority/gate chain,
+    /// and the supplied bindings. An empty registry yields an empty pack, which yields
+    /// INSUFFICIENT_EVIDENCE downstream — never a fabricated criterion. Any absent value stays absent;
+    /// missing provenance is never synthesized.
     /// </summary>
     public static class StandardsPackProjectionBuilder
     {
         /// <summary>
         /// Projects the resolved authority chain plus the executed engineering-distance rule set into governed
         /// pack rules. The rule set supplies the criterion (MinimumDistanceMeters) and the bounded
-        /// relationship; the authority chain supplies authority/executability/evidence/currentness.
+        /// relationship; the authority chain supplies authority/executability/evidence/currentness, reached
+        /// either directly (authority rules that carry their own gate decision) or through an explicit
+        /// validated <paramref name="authorityBindings"/> (project rules).
         ///
         /// Dependency layer: this builder lives in EngiSentry.Standards, which references
         /// EngiSentry.Contracts only (Phase A architecture A.1/A.2). It therefore accepts the rule set as the
@@ -36,7 +48,8 @@ namespace EngiSentry.Standards
             IReadOnlyDictionary<string, ProjectDistanceGovernedRuleResolution>? governedResolutions = null,
             IReadOnlyDictionary<string, EngineeringDistanceApprovalCurrentnessResult>? currentnessByRuleId = null,
             IReadOnlyDictionary<string, EngineeringDistanceApprovalAuthorityResult>? approvalAuthorityByRuleId = null,
-            IReadOnlyDictionary<string, string>? packNamesByPackId = null)
+            IReadOnlyDictionary<string, string>? packNamesByPackId = null,
+            IReadOnlyList<ProjectRuleAuthorityBinding>? authorityBindings = null)
         {
             if (authorityContext == null) throw new ArgumentNullException(nameof(authorityContext));
             if (rules == null) throw new ArgumentNullException(nameof(rules));
@@ -54,10 +67,34 @@ namespace EngiSentry.Standards
                 .Where(x => x != null && !string.IsNullOrEmpty(x.RuleId))
                 .ToDictionary(x => x.RuleId!, x => x, StringComparer.Ordinal);
 
+            // Only a validated binding can carry executability across the project/authority identity boundary.
+            // Invalid bindings are dropped here and their recorded reasons stay available to the caller.
+            Dictionary<string, ProjectRuleAuthorityBindingValidationResult> bindingsByProjectRuleId = ValidateBindings(authorityContext, authorityBindings, currentnessByRuleId, approvalAuthorityByRuleId);
+
             return rules
                 .OrderBy(x => x.RuleId, StringComparer.Ordinal)
-                .Select(rule => BuildRule(rule, effectiveByRuleId, authorityByRuleId, gateByRuleId, authorityContext, governedResolutions, currentnessByRuleId, approvalAuthorityByRuleId, packNamesByPackId))
+                .Select(rule => BuildRule(rule, effectiveByRuleId, authorityByRuleId, gateByRuleId, bindingsByProjectRuleId, governedResolutions, currentnessByRuleId, approvalAuthorityByRuleId, packNamesByPackId))
                 .ToList();
+        }
+
+        /// <summary>Validates every supplied binding and keeps the valid ones keyed by project rule id.
+        /// Duplicate bindings for one project rule resolve to the first valid one in deterministic order.</summary>
+        private static Dictionary<string, ProjectRuleAuthorityBindingValidationResult> ValidateBindings(
+            PlotPlanStandardsAuthorityRuntimeContext authorityContext,
+            IReadOnlyList<ProjectRuleAuthorityBinding>? authorityBindings,
+            IReadOnlyDictionary<string, EngineeringDistanceApprovalCurrentnessResult>? currentnessByRuleId,
+            IReadOnlyDictionary<string, EngineeringDistanceApprovalAuthorityResult>? approvalAuthorityByRuleId)
+        {
+            var valid = new Dictionary<string, ProjectRuleAuthorityBindingValidationResult>(StringComparer.Ordinal);
+            if (authorityBindings == null) return valid;
+
+            foreach (ProjectRuleAuthorityBinding binding in authorityBindings.Where(x => x != null).OrderBy(x => x.ProjectRuleId, StringComparer.Ordinal).ThenBy(x => x.AuthorityRuleId, StringComparer.Ordinal))
+            {
+                ProjectRuleAuthorityBindingValidationResult result = ProjectRuleAuthorityBindingValidator.Validate(binding, authorityContext, currentnessByRuleId, approvalAuthorityByRuleId);
+                if (result.IsValid && !string.IsNullOrEmpty(binding.ProjectRuleId) && !valid.ContainsKey(binding.ProjectRuleId))
+                    valid.Add(binding.ProjectRuleId, result);
+            }
+            return valid;
         }
 
         private static StandardsPackRule BuildRule(
@@ -65,7 +102,7 @@ namespace EngiSentry.Standards
             IDictionary<string, EffectiveStandardRuleDefinition> effectiveByRuleId,
             IDictionary<string, StandardRuleAuthorityResolution> authorityByRuleId,
             IDictionary<string, StandardRuleExecutionGateDecision> gateByRuleId,
-            PlotPlanStandardsAuthorityRuntimeContext authorityContext,
+            IDictionary<string, ProjectRuleAuthorityBindingValidationResult> bindingsByProjectRuleId,
             IReadOnlyDictionary<string, ProjectDistanceGovernedRuleResolution>? governedResolutions,
             IReadOnlyDictionary<string, EngineeringDistanceApprovalCurrentnessResult>? currentnessByRuleId,
             IReadOnlyDictionary<string, EngineeringDistanceApprovalAuthorityResult>? approvalAuthorityByRuleId,
@@ -73,16 +110,32 @@ namespace EngiSentry.Standards
         {
             effectiveByRuleId.TryGetValue(rule.RuleId, out EffectiveStandardRuleDefinition? effective);
             authorityByRuleId.TryGetValue(rule.RuleId, out StandardRuleAuthorityResolution? authority);
-            gateByRuleId.TryGetValue(rule.RuleId, out StandardRuleExecutionGateDecision gate);
+            gateByRuleId.TryGetValue(rule.RuleId, out StandardRuleExecutionGateDecision? gate);
+
+            // The authority-binding seam: a project rule may reach the authority chain's gate decision only
+            // through an explicit validated binding. Absent or invalid binding leaves the binding result null
+            // and executability solely to the rule's own gate lookup (null for project rules => fail-closed).
+            bindingsByProjectRuleId.TryGetValue(rule.RuleId, out ProjectRuleAuthorityBindingValidationResult? binding);
+
+            // The gate decision that governs this rule: its own (authority rules), or the bound authority rule's
+            // (project rules, and only when the binding was validated against the chain's actual resolution).
+            StandardRuleExecutionGateDecision? effectiveGate = gate ?? binding?.BoundGateDecision;
 
             string? packName = null;
             if (packNamesByPackId != null && effective != null && !string.IsNullOrEmpty(effective.WinningPackId))
                 packNamesByPackId.TryGetValue(effective.WinningPackId, out packName);
 
-            bool autoExecutionAllowed = gate != null && gate.AutoExecutionAllowed;
-            List<StandardClauseAuthorityResolution> clauses = authority != null && authority.Clauses != null
-                ? authority.Clauses.Where(x => x != null).OrderBy(x => x.ClauseId, StringComparer.Ordinal).Select(CopyClause).ToList()
-                : new List<StandardClauseAuthorityResolution>();
+            bool autoExecutionAllowed = effectiveGate != null && effectiveGate.AutoExecutionAllowed;
+
+            // Clause evidence: the rule's own authority resolution, or — for a project rule exercising a valid
+            // binding — the bound authority rule's resolved clauses, carried verbatim so no evidence is invented.
+            List<StandardClauseAuthorityResolution> clauses;
+            if (authority != null && authority.Clauses != null)
+                clauses = authority.Clauses.Where(x => x != null).OrderBy(x => x.ClauseId, StringComparer.Ordinal).Select(CopyClause).ToList();
+            else if (binding != null && binding.IsValid && binding.Clauses != null)
+                clauses = binding.Clauses.Where(x => x != null).OrderBy(x => x.ClauseId, StringComparer.Ordinal).Select(CopyClause).ToList();
+            else
+                clauses = new List<StandardClauseAuthorityResolution>();
 
             var packRule = new StandardsPackRule
             {
@@ -103,14 +156,17 @@ namespace EngiSentry.Standards
                 MinimumDistanceMeters = rule.MinimumDistanceMeters,
                 ApplicabilityKey = rule.RequiredApplicabilityKey,
                 AuthorityClass = FirstClause(clauses, x => x.AuthorityClass),
-                // Derived, never asserted: a rule is review-free only when the existing gate allows
-                // auto-execution and the decision state is clean. Today this is true for no rule.
-                EngineeringReviewRequired = !autoExecutionAllowed || !IsCleanDecision(gate),
-                EffectiveEnforcementMode = gate?.EffectiveEnforcementMode,
+                // Derived, never asserted: a rule is review-free only when the gate allows auto-execution with a
+                // clean decision state. Today this is true for no rule absent a validated authority binding.
+                EngineeringReviewRequired = !autoExecutionAllowed || !IsCleanDecision(effectiveGate),
+                EffectiveEnforcementMode = effectiveGate?.EffectiveEnforcementMode,
                 AutoExecutionAllowed = autoExecutionAllowed,
-                DecisionState = gate?.DecisionState,
+                DecisionState = effectiveGate?.DecisionState,
                 Clauses = clauses,
-                SourceSha256 = FirstClause(clauses, x => x.SourceSha256),
+                // Source-hash provenance: the clause's own recorded hash, or — for a project rule exercising a
+                // validated binding — the effective registered source hash the validator confirmed. Absent a
+                // binding this stays null, exactly as before, so no provenance is ever synthesized.
+                SourceSha256 = FirstClause(clauses, x => x.SourceSha256) ?? binding?.SourceSha256,
                 ConstraintTreatment = ResolveConstraintTreatment(rule, gate, clauses)
             };
 
@@ -201,7 +257,9 @@ namespace EngiSentry.Standards
 
             if (resolution.GovernanceProvenance != null)
             {
-                // An approved governed candidate supplies the authoritative criterion; it does not invent one.
+                // An approved governed candidate supplies the authoritative criterion; it does not invent one,
+                // and — critically — a governed-compatible value alone grants no execution authority here.
+                // Executability remains exclusively a property of the validated authority gate/binding.
                 if (resolution.GovernanceProvenance.ApprovedMinimumDistanceMeters > 0m)
                 {
                     packRule.MinimumDistanceMeters = resolution.GovernanceProvenance.ApprovedMinimumDistanceMeters;

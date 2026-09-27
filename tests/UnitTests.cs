@@ -212,6 +212,7 @@ namespace EngiSentry.Tests
             if (args != null && args.Length == 1 && string.Equals(args[0], "--p11.1", StringComparison.OrdinalIgnoreCase))
             {
                 P11ProposalDispositionTests.Run();
+                ProjectRuleAuthorityBindingTests.Run();
                 PlacementProposalTests.Run();
                 PlacementProposalRuntimeTests.Run();
                 PhaseEquipmentPlacementResolutionTests.Run();
@@ -477,6 +478,7 @@ namespace EngiSentry.Tests
             StandardsPackProjectionTests.Run();
             PlacementProposalTests.Run();
             PlacementProposalRuntimeTests.Run();
+            ProjectRuleAuthorityBindingTests.Run();
             PhaseFPresentationTests.Run();
             PhaseGActivationReadinessTests.Run();
             PhaseHApprovalOnboardingTests.Run();
