@@ -21,9 +21,30 @@ namespace EngiSentry.AutoCAD2021
     /// Presentation only: the surface never infers a location, never snaps, never searches for a
     /// nearest entity, and never writes anything unless the engineer explicitly saves a complete,
     /// confirmed resolution. Cancelling or failing a pick writes nothing.
+    ///
+    /// The layout follows the shared EngiSentry dark visual language (ReviewUi + ReviewUiControls,
+    /// the same primitives the accepted project-engineer review surface uses): a pinned header, a
+    /// single scrolling column of bordered cards in workflow order, and a pinned action bar. The
+    /// cards are Work item / proposal, Placement pick, Engineer review questions, Decision and
+    /// Reviewer, so every field the engineer must fill is explicitly labelled.
     /// </summary>
     internal sealed class EquipmentPlacementResolutionControl : UserControl
     {
+        // Base (96 DPI) metrics; every absolute size is passed through Scale() so the surface keeps
+        // its proportions when AutoCAD hosts the palette on a 125% / 150% display. Fonts are set in
+        // points, so without this the rows would stay pixel-fixed while the text grew.
+        private const int HeaderHeightBase = 86;
+        private const int FooterHeightBase = 78;
+        private const int QuestionRowHeightBase = 30;
+        private const int WorkItemBodyBase = 210;
+        private const int PickBodyBase = 168;
+        private const int DecisionBodyBase = 96;
+        private const int ReviewerBodyBase = 132;
+        private const int ListColumnBase = 300;
+        private const int AnswerColumnBase = 150;
+        private const int ButtonHeightBase = 28;
+        private const int PickButtonRowBase = 34;
+
         private readonly string drawingName;
         private readonly string drawingPath;
         private readonly string drawingSha256;
@@ -46,10 +67,15 @@ namespace EngiSentry.AutoCAD2021
         private readonly ComboBox proposalDisposition = new ComboBox();
         private readonly TextBox comment = new TextBox();
         private readonly Button save = new Button();
-        private readonly Label message = new Label();
+        private readonly SeverityMessage message = new SeverityMessage();
         private readonly Label header = new Label();
+        private readonly BadgeLabel countBadge = new BadgeLabel();
         private readonly TableLayoutPanel questionsGrid = new TableLayoutPanel();
         private readonly Dictionary<string, Control> answerControls = new Dictionary<string, Control>(StringComparer.Ordinal);
+
+        // the Disposition field is only meaningful for a generated proposal, so the whole labelled
+        // field (caption + combo) is shown/hidden together rather than leaving a stray caption
+        private Panel dispositionField;
 
         private List<EquipmentPlacement> unresolved = new List<EquipmentPlacement>();
         private EquipmentPlacement current;
@@ -101,125 +127,308 @@ namespace EngiSentry.AutoCAD2021
         internal int UnresolvedCount => unresolved.Count;
         internal EquipmentPlacementPick CurrentPick => pick;
 
+        // ---- layout ---------------------------------------------------------------------------
+
+        private int Scale(int value)
+        {
+            int dpi = DeviceDpi;
+            if (dpi <= 0) dpi = 96;
+            return Math.Max(1, (int)Math.Round(value * dpi / 96.0));
+        }
+
         private void BuildLayout()
         {
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(8) };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+            BackColor = ReviewUi.Background;
+            ForeColor = ReviewUi.Text;
+            Font = ReviewUi.BodyFont;
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+
+            // one pinned header row, one scrolling column of cards, one pinned action bar: the
+            // status line and the Save action can never be scrolled out of view, and the card
+            // column scrolls instead of clipping when the palette is short.
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(0),
+                BackColor = ReviewUi.Background, Margin = new Padding(0)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(HeaderHeightBase)));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(FooterHeightBase)));
+
+            BuildHeader(root);
+            BuildContent(root);
+            BuildFooter(root);
+            Controls.Add(root);
+        }
+
+        private void BuildHeader(TableLayoutPanel root)
+        {
+            var host = new BorderedPanel
+            {
+                Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, BottomLine = true,
+                Padding = new Padding(18, 10, 14, 10)
+            };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
 
             header.Dock = DockStyle.Fill;
             header.TextAlign = ContentAlignment.MiddleLeft;
-            header.Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold);
-            header.Text = "Engineer-Assisted Equipment Placement Resolution";
-            var subHeader = new Label { Dock = DockStyle.Bottom, Height = 20, TextAlign = ContentAlignment.MiddleLeft, Text = "Drawing: " + drawingName + "   |   Units: " + (string.IsNullOrEmpty(insertionUnits) ? "<unresolved>" : insertionUnits) + "   |   SHA256: " + Short(drawingSha256) };
-            var headerHost = new Panel { Dock = DockStyle.Fill };
-            headerHost.Controls.Add(header);
-            headerHost.Controls.Add(subHeader);
-            root.Controls.Add(headerHost, 0, 0);
+            header.Font = ReviewUi.TitleFont;
+            header.ForeColor = Color.White;
+            header.BackColor = ReviewUi.Surface;
+            header.AutoEllipsis = true;
+            header.Text = "Equipment Placement Resolution";
+            grid.Controls.Add(header, 0, 0);
 
-            var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-            split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
-            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var subHeader = new Label
+            {
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Font = ReviewUi.SubtitleFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true,
+                Text = "Drawing: " + drawingName + "   |   Units: " + (string.IsNullOrEmpty(insertionUnits) ? "<unresolved>" : insertionUnits) + "   |   SHA256: " + Short(drawingSha256)
+            };
+            grid.Controls.Add(subHeader, 0, 1);
+
+            countBadge.Dock = DockStyle.Fill;
+            countBadge.Font = ReviewUi.BadgeFont;
+            countBadge.TextAlign = ContentAlignment.MiddleCenter;
+            countBadge.BackColor = ReviewUi.Surface;
+            countBadge.ForeColor = ReviewUi.Pending;
+            countBadge.Tint = ReviewUi.PendingTint;
+            countBadge.Text = string.Empty;
+            grid.Controls.Add(countBadge, 1, 0);
+            grid.SetRowSpan(countBadge, 2);
+
+            var accent = new Panel { Dock = DockStyle.Left, Width = 3, BackColor = ReviewUi.Accent, Margin = new Padding(0, 24, 14, 24) };
+            host.Controls.Add(grid);
+            host.Controls.Add(accent);
+            root.Controls.Add(host, 0, 0);
+        }
+
+        private void BuildContent(TableLayoutPanel root)
+        {
+            var scroll = new Panel
+            {
+                Dock = DockStyle.Fill, BackColor = ReviewUi.Background, AutoScroll = true,
+                Padding = new Padding(0, 12, 0, 14)
+            };
+
+            Card workItem = BuildWorkItemCard();
+            Card pickCard = BuildPickCard();
+            Card questions = BuildQuestionsCard();
+            Card decision = BuildDecisionCard();
+            Card reviewer = BuildReviewerCard();
+
+            // Docking claims edges in reverse add order, so the cards are added bottom-first to stack
+            // top-down in workflow order: choose the case, capture the pick, answer the questions,
+            // record the decision, identify the reviewer.
+            reviewer.Dock = DockStyle.Top;
+            decision.Dock = DockStyle.Top;
+            questions.Dock = DockStyle.Top;
+            pickCard.Dock = DockStyle.Top;
+            workItem.Dock = DockStyle.Top;
+            scroll.Controls.Add(reviewer);
+            scroll.Controls.Add(decision);
+            scroll.Controls.Add(questions);
+            scroll.Controls.Add(pickCard);
+            scroll.Controls.Add(workItem);
+            root.Controls.Add(scroll, 0, 1);
+        }
+
+        // ---- cards ----------------------------------------------------------------------------
+
+        // B. Work item / proposal: the queue on the left, the selected item's detail on the right.
+        private Card BuildWorkItemCard()
+        {
+            var card = new Card("Work item / proposal", null);
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(ListColumnBase)));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             placementList.Dock = DockStyle.Fill;
             placementList.IntegralHeight = false;
+            placementList.BorderStyle = BorderStyle.FixedSingle;
+            placementList.BackColor = ReviewUi.InputBack;
+            placementList.ForeColor = ReviewUi.InputText;
+            placementList.Font = ReviewUi.BodyFont;
+            placementList.AccessibleName = "WorkItemList";
             placementList.SelectedIndexChanged += (s, e) => { if (!loading) SelectWorkItem(placementList.SelectedIndex); };
-            var leftHost = new Panel { Dock = DockStyle.Fill };
-            leftHost.Controls.Add(placementList);
-            leftHost.Controls.Add(new Label { Dock = DockStyle.Top, Height = 20, Text = "Unresolved equipment", TextAlign = ContentAlignment.MiddleLeft });
-            split.Controls.Add(leftHost, 0, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair("Unresolved equipment / proposals", placementList, null, false), 0, 0);
 
-            var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
-            right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+            selectionInfo.Dock = DockStyle.Fill;
+            selectionInfo.ReadOnly = true;
+            selectionInfo.AccessibleName = "SelectedItemDetail";
+            ReviewStyle.StyleTextBox(selectionInfo, ReviewUi.MonoFont, true);
+            // long proposal ids and 64-char SHA-256 values must stay readable without wrapping
+            selectionInfo.WordWrap = false;
+            selectionInfo.ScrollBars = ScrollBars.Both;
+            grid.Controls.Add(ReviewStyle.FieldPair("Selected item detail", selectionInfo, null, false), 1, 0);
 
-            selectionInfo.Dock = DockStyle.Fill; selectionInfo.Multiline = true; selectionInfo.ReadOnly = true; selectionInfo.ScrollBars = ScrollBars.Vertical; selectionInfo.BackColor = SystemColors.Window;
-            right.Controls.Add(selectionInfo, 0, 0);
+            card.Body.Controls.Add(grid);
+            card.Fit(Scale(WorkItemBodyBase));
+            return card;
+        }
 
-            pickInfo.Dock = DockStyle.Fill; pickInfo.Multiline = true; pickInfo.ReadOnly = true; pickInfo.ScrollBars = ScrollBars.Vertical; pickInfo.BackColor = SystemColors.Window;
-            var pickButtons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 32, WrapContents = false };
+        // C. Placement pick: the captured pick evidence plus the explicit pick actions.
+        private Card BuildPickCard()
+        {
+            var card = new Card("Placement pick", null);
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(PickButtonRowBase)));
+
+            pickInfo.Dock = DockStyle.Fill;
+            pickInfo.ReadOnly = true;
+            pickInfo.AccessibleName = "CapturedPickEvidence";
+            ReviewStyle.StyleTextBox(pickInfo, ReviewUi.MonoFont, true);
+            pickInfo.WordWrap = false;
+            pickInfo.ScrollBars = ScrollBars.Both;
+            grid.Controls.Add(ReviewStyle.FieldPair("Captured pick evidence", pickInfo, null, false), 0, 0);
+
+            var pickButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = ReviewUi.Surface, Margin = new Padding(0), Padding = new Padding(0) };
             pickEntity.Text = "Pick Entity"; pickFreeSpace.Text = "Pick Free Space"; clearPick.Text = "Clear Pick";
-            pickEntity.Width = 100; pickFreeSpace.Width = 120; clearPick.Width = 90;
+            pickEntity.AccessibleName = "PickEntity"; pickFreeSpace.AccessibleName = "PickFreeSpace"; clearPick.AccessibleName = "ClearPick";
+            pickEntity.Width = Scale(112); pickFreeSpace.Width = Scale(140); clearPick.Width = Scale(100);
+            pickEntity.Height = Scale(ButtonHeightBase); pickFreeSpace.Height = Scale(ButtonHeightBase); clearPick.Height = Scale(ButtonHeightBase);
+            pickEntity.Margin = new Padding(0, 0, 8, 0); pickFreeSpace.Margin = new Padding(0, 0, 8, 0); clearPick.Margin = new Padding(0, 0, 0, 0);
+            ReviewStyle.StyleButton(pickEntity, false);
+            ReviewStyle.StyleButton(pickFreeSpace, false);
+            ReviewStyle.StyleButton(clearPick, false);
             pickEntity.Click += (s, e) => DoPick(true);
             pickFreeSpace.Click += (s, e) => DoPick(false);
             clearPick.Click += (s, e) => { pick = null; UpdatePickInfo(); UpdateSaveState(); };
             pickButtons.Controls.Add(pickEntity); pickButtons.Controls.Add(pickFreeSpace); pickButtons.Controls.Add(clearPick);
-            var pickHost = new Panel { Dock = DockStyle.Fill };
-            pickHost.Controls.Add(pickInfo);
-            pickHost.Controls.Add(pickButtons);
-            right.Controls.Add(pickHost, 0, 1);
+            grid.Controls.Add(pickButtons, 0, 1);
 
-            var questions = BuildQuestions();
-            right.Controls.Add(questions, 0, 2);
+            card.Body.Controls.Add(grid);
+            card.Fit(Scale(PickBodyBase));
+            return card;
+        }
 
-            var review = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-            review.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110)); review.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            review.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); review.RowStyles.Add(new RowStyle(SizeType.Absolute, 28)); review.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-            review.Controls.Add(new Label { Text = "Reviewer", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            reviewerName.Dock = DockStyle.Fill; reviewerName.AccessibleName = "ReviewerDisplayName"; reviewerName.TextChanged += (s, e) => UpdateSaveState();
-            review.Controls.Add(reviewerName, 1, 0);
-            review.Controls.Add(new Label { Text = "Role / title", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 1);
-            reviewerRole.Dock = DockStyle.Fill; reviewerRole.AccessibleName = "ReviewerRole"; reviewerRole.TextChanged += (s, e) => UpdateSaveState();
-            review.Controls.Add(reviewerRole, 1, 1);
-            var commentHost = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            commentHost.RowStyles.Add(new RowStyle(SizeType.Absolute, 18)); commentHost.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            commentHost.Controls.Add(new Label { Text = "Engineer comment", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            comment.Dock = DockStyle.Fill; comment.Multiline = true; comment.ScrollBars = ScrollBars.Vertical; comment.AccessibleName = "EngineerComment";
-            commentHost.Controls.Add(comment, 0, 1);
-            review.Controls.Add(commentHost, 1, 2);
-            right.Controls.Add(review, 0, 3);
+        // D. Engineer review questions.
+        private Card BuildQuestionsCard()
+        {
+            var card = new Card("Engineer review questions", null);
+            var requiredNote = new Label
+            {
+                Text = "Fields marked * are required before a resolution can be saved.",
+                Dock = DockStyle.Top, Height = 18, TextAlign = ContentAlignment.MiddleLeft,
+                Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true
+            };
+            card.Body.Controls.Add(BuildQuestions());
+            card.Body.Controls.Add(requiredNote);
+            card.Fit(18 + (EquipmentPlacementResolutionQuestions.All.Count * Scale(QuestionRowHeightBase)));
+            return card;
+        }
 
-            split.Controls.Add(right, 1, 0);
-            root.Controls.Add(split, 0, 1);
+        // E. Decision: Classification and Disposition are each given an explicit visible caption.
+        private Card BuildDecisionCard()
+        {
+            var card = new Card("Decision", null);
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-            footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 58)); footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            classification.Dock = DockStyle.Fill; classification.DropDownStyle = ComboBoxStyle.DropDownList; classification.AccessibleName = "Classification";
-            classification.Items.Add(string.Empty); classification.Items.AddRange(ProjectEngineerReviewClassifications.All.Cast<object>().ToArray()); classification.SelectedIndex = 0;
+            classification.AccessibleName = "Classification";
+            classification.Items.Add(string.Empty);
+            classification.Items.AddRange(ProjectEngineerReviewClassifications.All.Cast<object>().ToArray());
+            classification.SelectedIndex = 0;
             classification.SelectedIndexChanged += (s, e) => UpdateSaveState();
-            proposalDisposition.Dock = DockStyle.Fill; proposalDisposition.DropDownStyle = ComboBoxStyle.DropDownList; proposalDisposition.AccessibleName = "PlacementProposalDisposition";
+            ReviewStyle.StyleCombo(classification, ReviewUi.BodyFont);
+            grid.Controls.Add(ReviewStyle.FieldPair("Classification", classification, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 0, 0);
+
+            proposalDisposition.AccessibleName = "PlacementProposalDisposition";
             proposalDisposition.Items.Add(string.Empty);
             proposalDisposition.Items.AddRange(new object[] { PlacementProposalDispositions.Approved, PlacementProposalDispositions.Rejected, PlacementProposalDispositions.Modified, PlacementProposalDispositions.Cancelled });
-            proposalDisposition.SelectedIndex = 0; proposalDisposition.Visible = false; proposalDisposition.SelectedIndexChanged += (s, e) => UpdateSaveState();
-            var decisionPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            decisionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50)); decisionPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            decisionPanel.Controls.Add(classification, 0, 0); decisionPanel.Controls.Add(proposalDisposition, 0, 1);
-            footer.Controls.Add(decisionPanel, 0, 0);
-            save.Text = "Save Resolution"; save.Dock = DockStyle.Fill; save.Click += (s, e) => SaveResolution();
-            footer.Controls.Add(save, 2, 0);
-            message.Dock = DockStyle.Fill; message.TextAlign = ContentAlignment.MiddleLeft; message.AutoEllipsis = true;
-            footer.Controls.Add(message, 0, 1); footer.SetColumnSpan(message, 3);
-            root.Controls.Add(footer, 0, 2);
+            proposalDisposition.SelectedIndex = 0;
+            proposalDisposition.SelectedIndexChanged += (s, e) => UpdateSaveState();
+            ReviewStyle.StyleCombo(proposalDisposition, ReviewUi.BodyFont);
+            dispositionField = ReviewStyle.FieldPair("Disposition", proposalDisposition, ReviewStyle.Chip("PROPOSAL ONLY", ReviewUi.Optional), false);
+            dispositionField.Visible = false;
+            grid.Controls.Add(dispositionField, 1, 0);
 
-            Controls.Add(root);
+            card.Body.Controls.Add(grid);
+            card.Fit(Scale(DecisionBodyBase));
+            return card;
+        }
+
+        // F. Reviewer: who is recording the resolution, and their comment.
+        private Card BuildReviewerCard()
+        {
+            var card = new Card("Reviewer", null);
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            reviewerName.Dock = DockStyle.Fill;
+            reviewerName.MaxLength = 120;
+            reviewerName.AccessibleName = "ReviewerDisplayName";
+            reviewerName.TextChanged += (s, e) => UpdateSaveState();
+            ReviewStyle.StyleTextBox(reviewerName, ReviewUi.BodyFont, false);
+            grid.Controls.Add(ReviewStyle.FieldPair("Reviewer name", reviewerName, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 0, 0);
+
+            reviewerRole.Dock = DockStyle.Fill;
+            reviewerRole.MaxLength = 120;
+            reviewerRole.AccessibleName = "ReviewerRole";
+            reviewerRole.TextChanged += (s, e) => UpdateSaveState();
+            ReviewStyle.StyleTextBox(reviewerRole, ReviewUi.BodyFont, false);
+            grid.Controls.Add(ReviewStyle.FieldPair("Role / title", reviewerRole, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 1, 0);
+
+            comment.Dock = DockStyle.Fill;
+            comment.AccessibleName = "EngineerComment";
+            ReviewStyle.StyleTextBox(comment, ReviewUi.BodyFont, true);
+            comment.ScrollBars = ScrollBars.Vertical;
+            var commentField = ReviewStyle.FieldPair("Engineer comment", comment, null, false);
+            grid.Controls.Add(commentField, 0, 1);
+            grid.SetColumnSpan(commentField, 2);
+
+            card.Body.Controls.Add(grid);
+            card.Fit(Scale(ReviewerBodyBase));
+            return card;
         }
 
         private Control BuildQuestions()
         {
             questionsGrid.Dock = DockStyle.Fill;
+            questionsGrid.BackColor = ReviewUi.Surface;
+            questionsGrid.Margin = new Padding(0);
             questionsGrid.ColumnCount = 2;
             questionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            questionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            questionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(AnswerColumnBase)));
             questionsGrid.RowCount = EquipmentPlacementResolutionQuestions.All.Count;
             for (int i = 0; i < EquipmentPlacementResolutionQuestions.All.Count; i++)
             {
                 ProjectEngineerReviewQuestionDefinition question = EquipmentPlacementResolutionQuestions.All[i];
-                questionsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-                questionsGrid.Controls.Add(new Label { Text = (question.Required ? "* " : "  ") + question.Text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, i);
+                questionsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(QuestionRowHeightBase)));
+                questionsGrid.Controls.Add(new Label
+                {
+                    Text = (question.Required ? "* " : "  ") + question.Text,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = ReviewUi.BodyFont,
+                    ForeColor = question.Required ? ReviewUi.Text : ReviewUi.Muted,
+                    BackColor = ReviewUi.Surface,
+                    AutoEllipsis = true
+                }, 0, i);
                 Control answer;
                 if (question.AnswerKind == ProjectEngineerAnswerKinds.FreeText)
                 {
                     var box = new TextBox { Dock = DockStyle.Fill, MaxLength = 500, Tag = question.QuestionId, AccessibleName = question.QuestionId };
+                    ReviewStyle.StyleTextBox(box, ReviewUi.BodyFont, false);
                     box.TextChanged += (s, e) => UpdateSaveState();
                     answer = box;
                 }
                 else
                 {
-                    var combo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, Tag = question.QuestionId, AccessibleName = question.QuestionId };
+                    var combo = new ComboBox { Dock = DockStyle.Fill, Tag = question.QuestionId, AccessibleName = question.QuestionId };
+                    ReviewStyle.StyleCombo(combo, ReviewUi.BodyFont);
                     combo.Items.Add(string.Empty);
                     foreach (string value in ProjectEngineerAnswerKinds.AllowedAnswers(question.AnswerKind)) combo.Items.Add(value);
                     combo.SelectedIndex = 0;
@@ -232,6 +441,54 @@ namespace EngiSentry.AutoCAD2021
             return questionsGrid;
         }
 
+        // G. Actions / status.
+        private void BuildFooter(TableLayoutPanel root)
+        {
+            var host = new BorderedPanel
+            {
+                Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, TopLine = true,
+                Padding = new Padding(12, 8, 12, 8)
+            };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var hint = new Label
+            {
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true,
+                Text = "Save is enabled only when the pick, the reviewer and the required answers are complete."
+            };
+            grid.Controls.Add(hint, 0, 0);
+
+            save.Text = "Save Resolution";
+            save.Dock = DockStyle.Fill;
+            save.Margin = new Padding(1);
+            save.Padding = new Padding(0);
+            save.AccessibleName = "SaveResolution";
+            save.Click += (s, e) => SaveResolution();
+            ReviewStyle.StyleButton(save, true);
+            grid.Controls.Add(save, 1, 0);
+
+            message.Dock = DockStyle.Fill;
+            message.AutoEllipsis = true;
+            message.TextAlign = ContentAlignment.MiddleLeft;
+            message.Font = ReviewUi.BodyFont;
+            message.ForeColor = ReviewUi.Value;
+            message.BackColor = ReviewUi.Surface;
+            message.Text = string.Empty;
+            message.Severity = SeverityMessage.None;
+            grid.Controls.Add(message, 0, 1);
+            grid.SetColumnSpan(message, 2);
+
+            host.Controls.Add(grid);
+            root.Controls.Add(host, 0, 2);
+        }
+
+        // ---- state ----------------------------------------------------------------------------
+
         private void RefreshPlacements()
         {
             loading = true;
@@ -243,7 +500,16 @@ namespace EngiSentry.AutoCAD2021
                 placementList.Items.Add("PROPOSAL | " + proposal.NormalizedTag + " | " + state + " | " + proposal.ProposalId);
             }
             loading = false;
+            UpdateCountBadge();
             if (placementList.Items.Count > 0) placementList.SelectedIndex = 0; else SelectWorkItem(-1);
+        }
+
+        private void UpdateCountBadge()
+        {
+            int open = placementList.Items.Count;
+            countBadge.Text = open == 1 ? "1 OPEN ITEM" : open + " OPEN ITEMS";
+            countBadge.ForeColor = open == 0 ? ReviewUi.Completed : ReviewUi.Pending;
+            countBadge.Tint = open == 0 ? ReviewUi.CompletedTint : ReviewUi.PendingTint;
         }
 
         private static string Label(EquipmentPlacement placement) =>
@@ -259,6 +525,7 @@ namespace EngiSentry.AutoCAD2021
             else selectionInfo.Text = "No unresolved equipment placement or generated proposal is selected.";
             proposalDisposition.SelectedIndex = 0;
             proposalDisposition.Visible = currentProposal != null;
+            if (dispositionField != null) dispositionField.Visible = currentProposal != null;
             save.Text = currentProposal == null ? "Save Resolution" : "Record Disposition";
             UpdatePickInfo();
             UpdateSaveState();
@@ -570,7 +837,9 @@ namespace EngiSentry.AutoCAD2021
         private void ShowMessage(string text, bool warning)
         {
             message.Text = text;
-            message.ForeColor = warning ? Color.FromArgb(176, 64, 48) : Color.FromArgb(32, 110, 68);
+            // normal workflow feedback is an inline status line, never a modal dialog; the severity
+            // only selects the readable glyph/color, the message text stays machine-readable
+            message.Severity = warning ? SeverityMessage.Warning : SeverityMessage.Success;
         }
 
         private static string Short(string value) => string.IsNullOrEmpty(value) || value.Length <= 16 ? value : value.Substring(0, 16) + "...";

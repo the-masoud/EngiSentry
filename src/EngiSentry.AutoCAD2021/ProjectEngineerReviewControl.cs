@@ -26,9 +26,6 @@ namespace EngiSentry.AutoCAD2021
     {
         private const int HeaderHeight = 86;
         private const int FooterHeight = 78;
-        private const int CardHeaderHeight = 32;
-        private const int CardPadTop = 6;
-        private const int CardPadBottom = 12;
         private const int AnswerColumnWidth = 216;
         private const int EvidenceKeyWidth = 172;
         private const int QuestionRowHeight = 30;
@@ -328,7 +325,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildIdentity()
         {
-            var card = new Card(ReviewStrings.Get("SectionIdentity"), MakeChip(ReviewStrings.Get("ChipRequiredBeforeSaving"), ReviewUi.Required));
+            var card = new Card(ReviewStrings.Get("SectionIdentity"), ReviewStyle.Chip(ReviewStrings.Get("ChipRequiredBeforeSaving"), ReviewUi.Required));
 
             reviewerName.Dock = DockStyle.Fill;
             reviewerName.MaxLength = 120;
@@ -361,8 +358,8 @@ namespace EngiSentry.AutoCAD2021
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldReviewerName"), reviewerName), 0, 0);
-            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldReviewerRole"), reviewerRole), 1, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("FieldReviewerName"), reviewerName), 0, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("FieldReviewerRole"), reviewerRole), 1, 0);
             grid.Controls.Add(note, 0, 1);
             grid.SetColumnSpan(note, 2);
 
@@ -386,7 +383,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildEvidence()
         {
-            ConfigureChip(evidenceCountChip, 112);
+            ReviewStyle.ConfigureChip(evidenceCountChip, 112);
             var card = new Card(ReviewStrings.Get("SectionEvidence"), evidenceCountChip);
             evidenceBody.Dock = DockStyle.Fill;
             evidenceBody.AutoScroll = true;
@@ -399,7 +396,7 @@ namespace EngiSentry.AutoCAD2021
 
         private Card BuildQuestions()
         {
-            ConfigureChip(remainingChip, 192);
+            ReviewStyle.ConfigureChip(remainingChip, 192);
             var card = new Card(ReviewStrings.Get("SectionQuestions"), remainingChip);
             var requiredNote = new Label
             {
@@ -448,7 +445,7 @@ namespace EngiSentry.AutoCAD2021
             classification.DrawMode = DrawMode.OwnerDrawFixed;
             classification.DrawItem += DrawClassificationItem;
             toolTip.SetToolTip(classification, ReviewStrings.Get("ClassificationToolTip"));
-            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldClassification"), classification, MakeChip(ReviewStrings.Get("ChipRequired"), ReviewUi.Required)), 0, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("FieldClassification"), classification, ReviewStyle.Chip(ReviewStrings.Get("ChipRequired"), ReviewUi.Required)), 0, 0);
 
             comment.Dock = DockStyle.Fill;
             comment.Multiline = true;
@@ -463,7 +460,7 @@ namespace EngiSentry.AutoCAD2021
             commentCount.Font = ReviewUi.ChipFont;
             commentCount.AutoEllipsis = true;
             commentCount.TextAlign = ContentAlignment.MiddleRight;
-            grid.Controls.Add(FieldPair(ReviewStrings.Get("FieldComment"), comment, commentCount), 1, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("FieldComment"), comment, commentCount), 1, 0);
 
             card.Body.Controls.Add(grid);
             card.Fit(59);
@@ -510,8 +507,8 @@ namespace EngiSentry.AutoCAD2021
                 button.Margin = new Padding(1);
                 button.Padding = new Padding(0);
             }
-            foreach (Button button in new[] { previous, next, nextPending }) StyleButton(button, false);
-            StyleButton(save, true);
+            foreach (Button button in new[] { previous, next, nextPending }) ReviewStyle.StyleButton(button, false);
+            ReviewStyle.StyleButton(save, true);
             toolTip.SetToolTip(previous, ReviewStrings.Get("PreviousToolTip"));
             toolTip.SetToolTip(next, ReviewStrings.Get("NextToolTip"));
             toolTip.SetToolTip(nextPending, ReviewStrings.Get("NextPendingToolTip"));
@@ -535,56 +532,6 @@ namespace EngiSentry.AutoCAD2021
             root.Controls.Add(host, 0, 2);
         }
 
-        // A labelled field: small caption above a full-width input, with an optional right-aligned
-        // chip (required marker, character count) on the caption row.
-        private static Panel FieldPair(string caption, Control input, Control chip)
-        {
-            var pair = new Panel { Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, Margin = new Padding(0, 0, 16, 0) };
-            var captionHost = new Panel { Dock = DockStyle.Top, Height = 16, BackColor = ReviewUi.Surface };
-            var label = new Label
-            {
-                Text = caption.ToUpperInvariant(), Dock = DockStyle.Fill,
-                ForeColor = ReviewUi.Caption, Font = ReviewUi.CaptionFont,
-                TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true
-            };
-            captionHost.Controls.Add(label);
-            if (chip != null)
-            {
-                chip.Dock = DockStyle.Right;
-                captionHost.Controls.Add(chip);
-            }
-            var fieldHost = new Panel { Dock = DockStyle.Fill, BackColor = ReviewUi.Surface };
-            fieldHost.Controls.Add(input);
-            pair.Controls.Add(fieldHost);
-            pair.Controls.Add(captionHost);
-            return pair;
-        }
-
-        private static Panel FieldPair(string caption, Control input) => FieldPair(caption, input, null);
-
-        private static Label MakeChip(string text, Color color)
-        {
-            return new Label
-            {
-                Text = text, Width = 140, AutoEllipsis = true,
-                Font = ReviewUi.ChipFont, ForeColor = color,
-                TextAlign = ContentAlignment.MiddleRight, BackColor = ReviewUi.Surface,
-                Margin = new Padding(0, 0, 8, 0)
-            };
-        }
-
-        // Seats a live counter chip on a card header band, sized for its longest text so the
-        // header caption keeps its full width and the counter never clips mid-update.
-        private static Label ConfigureChip(Label chip, int width)
-        {
-            chip.Width = width;
-            chip.Font = ReviewUi.ChipFont;
-            chip.TextAlign = ContentAlignment.MiddleRight;
-            chip.AutoEllipsis = true;
-            chip.Margin = new Padding(0, 0, 8, 0);
-            return chip;
-        }
-
         // Owner-draw for the answer/classification combos: the item objects stay canonical so the
         // selection, CaptureAnswers, and persistence are byte-identical; only the painted text runs
         // through the display layer so Persian shows Persian choice text and English shows the
@@ -594,7 +541,7 @@ namespace EngiSentry.AutoCAD2021
             ComboBox combo = (ComboBox)sender;
             if (e.Index < 0 || e.Index >= combo.Items.Count) return;
             string canonical = (string)combo.Items[e.Index];
-            PaintComboItem(combo, e, ReviewDisplayText.Answer(canonical));
+            ReviewStyle.PaintComboItem(combo, e, ReviewDisplayText.Answer(canonical));
         }
 
         private static void DrawClassificationItem(object sender, DrawItemEventArgs e)
@@ -602,47 +549,7 @@ namespace EngiSentry.AutoCAD2021
             ComboBox combo = (ComboBox)sender;
             if (e.Index < 0 || e.Index >= combo.Items.Count) return;
             string canonical = (string)combo.Items[e.Index];
-            PaintComboItem(combo, e, ReviewDisplayText.Classification(canonical));
-        }
-
-        private static void PaintComboItem(ComboBox combo, DrawItemEventArgs e, string display)
-        {
-            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-            using (var back = new SolidBrush(selected ? ReviewUi.SurfaceAlt : combo.BackColor))
-                e.Graphics.FillRectangle(back, e.Bounds);
-            Color fore = selected ? ReviewUi.Value : combo.ForeColor;
-            if (string.IsNullOrEmpty(display)) { e.DrawFocusRectangle(); return; }
-            TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
-            flags |= combo.RightToLeft == RightToLeft.Yes
-                ? TextFormatFlags.Right | TextFormatFlags.RightToLeft
-                : TextFormatFlags.Left;
-            TextRenderer.DrawText(e.Graphics, display, combo.Font, e.Bounds, fore, flags);
-            e.DrawFocusRectangle();
-        }
-
-        private static void StyleButton(Button button, bool primary)
-        {
-            button.FlatStyle = FlatStyle.Flat;
-            button.Font = primary ? ReviewUi.PrimaryButtonFont : ReviewUi.ButtonFont;
-            button.TextAlign = ContentAlignment.MiddleCenter;
-            button.FlatAppearance.BorderColor = primary ? ReviewUi.PrimaryEdge : ReviewUi.Border;
-            button.FlatAppearance.BorderSize = 1;
-            ApplyButtonState(button, primary);
-            button.EnabledChanged += (sender, args) => ApplyButtonState(button, primary);
-        }
-
-        private static void ApplyButtonState(Button button, bool primary)
-        {
-            if (button.Enabled)
-            {
-                button.BackColor = primary ? ReviewUi.Primary : ReviewUi.Card;
-                button.ForeColor = Color.White;
-            }
-            else
-            {
-                button.BackColor = ReviewUi.Card;
-                button.ForeColor = ReviewUi.DisabledText;
-            }
+            ReviewStyle.PaintComboItem(combo, e, ReviewDisplayText.Classification(canonical));
         }
 
         private void ShowCase(int index)
@@ -1166,112 +1073,6 @@ namespace EngiSentry.AutoCAD2021
             highlighted = null;
         }
 
-        // Bordered card with an accent bar, an uppercase caption, and an optional right chip.
-        private sealed class Card : Panel
-        {
-            private readonly Panel accent = new Panel { Width = 3, BackColor = ReviewUi.Accent };
-            private readonly Label caption = new Label();
-            public Panel Body { get; }
-
-            public string Caption => caption.Text;
-
-            public Card(string title, Control chip)
-            {
-                BackColor = ReviewUi.Surface;
-                Padding = new Padding(1);
-                Margin = new Padding(12, 0, 12, 12);
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-
-                var head = new BorderedPanel { Dock = DockStyle.Top, Height = CardHeaderHeight, BackColor = ReviewUi.CardHead, BottomLine = true };
-                accent.Dock = DockStyle.Left;
-                accent.Margin = new Padding(0, 8, 10, 8);
-                caption.Text = title.ToUpperInvariant();
-                caption.Dock = DockStyle.Fill;
-                caption.Font = ReviewUi.SectionFont;
-                caption.ForeColor = ReviewUi.Section;
-                caption.BackColor = ReviewUi.CardHead;
-                caption.TextAlign = ContentAlignment.MiddleLeft;
-                caption.AutoEllipsis = true;
-                if (chip != null)
-                {
-                    chip.Dock = DockStyle.Right;
-                    // a chip on the header band shares the band color so only its text reads as a marker
-                    chip.BackColor = ReviewUi.CardHead;
-                }
-                // add order sets dock order (reverse of add): the caption fills whatever remains
-                // after the accent claims the left edge and the chip claims the right edge
-                head.Controls.Add(caption);
-                if (chip != null) head.Controls.Add(chip);
-                head.Controls.Add(accent);
-
-                Body = new Panel { Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, Padding = new Padding(14, CardPadTop, 14, CardPadBottom) };
-                Controls.Add(Body);
-                Controls.Add(head);
-            }
-
-            // total height from the height of the card's content
-            public void Fit(int contentHeight)
-            {
-                Height = 2 + CardHeaderHeight + CardPadTop + contentHeight + CardPadBottom;
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                using (var pen = new Pen(ReviewUi.Border, 1))
-                {
-                    e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
-                }
-            }
-        }
-
-        // Panel with a single hairline rule on its top and/or bottom edge, used to separate the
-        // pinned header and footer from the scrolling card column.
-        private sealed class BorderedPanel : Panel
-        {
-            public bool TopLine { get; set; }
-            public bool BottomLine { get; set; }
-
-            public BorderedPanel()
-            {
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                using (var pen = new Pen(ReviewUi.Border, 1))
-                {
-                    if (TopLine) e.Graphics.DrawLine(pen, 0, 0, Width - 1, 0);
-                    if (BottomLine) e.Graphics.DrawLine(pen, 0, Height - 1, Width - 1, Height - 1);
-                }
-            }
-        }
-
-        // Rounded status pill: tinted background with matching foreground, drawn so the badge
-        // reads as a colored tag rather than a bordered label.
-        private sealed class BadgeLabel : Label
-        {
-            public Color Tint { get; set; } = ReviewUi.SurfaceAlt;
-
-            public BadgeLabel()
-            {
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle r = new Rectangle(0, 0, Math.Max(0, Width - 1), Math.Max(0, Height - 1));
-                using (var path = RoundedPath(r, 8))
-                using (var brush = new SolidBrush(Tint)) g.FillPath(brush, path);
-                TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix;
-                if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft;
-                TextRenderer.DrawText(g, Text, Font, r, ForeColor, flags);
-            }
-        }
-
         // Thin centered progress rail for queue progress (presentation only).
         private sealed class ThinProgress : Control
         {
@@ -1295,7 +1096,7 @@ namespace EngiSentry.AutoCAD2021
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 int y = (Height - RailHeight) / 2;
                 Rectangle track = new Rectangle(0, y, Width, RailHeight);
-                using (var path = RoundedPath(track, RailHeight / 2))
+                using (var path = ReviewStyle.RoundedPath(track, RailHeight / 2))
                 using (var trackBrush = new SolidBrush(ReviewUi.SurfaceAlt)) g.FillPath(trackBrush, path);
                 if (percent > 0)
                 {
@@ -1305,144 +1106,14 @@ namespace EngiSentry.AutoCAD2021
                     Rectangle bar = RightToLeft == RightToLeft.Yes
                         ? new Rectangle(Width - barWidth, y, barWidth, RailHeight)
                         : new Rectangle(0, y, barWidth, RailHeight);
-                    using (var barPath = RoundedPath(bar, RailHeight / 2))
+                    using (var barPath = ReviewStyle.RoundedPath(bar, RailHeight / 2))
                     using (var barBrush = new SolidBrush(ReviewUi.Completed)) g.FillPath(barBrush, barPath);
                 }
             }
         }
 
-        // Message line that prefixes a colored severity glyph while keeping its Text pure, so the
-        // inline validation reason stays machine-readable and copy-safe.
-        private sealed class SeverityMessage : Label
-        {
-            public const int None = 0;
-            public const int Info = 1;
-            public const int Success = 2;
-            public const int Warning = 3;
-            public const int Error = 4;
-
-            private const int GlyphBox = 20;
-            private static Font GlyphFont => ReviewUi.GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Bold);
-
-            private int severity = None;
-
-            public int Severity
-            {
-                get => severity;
-                set { severity = value; Invalidate(); }
-            }
-
-            public SeverityMessage()
-            {
-                AutoSize = false;
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var back = new SolidBrush(BackColor)) g.FillRectangle(back, e.ClipRectangle);
-                bool rtl = RightToLeft == RightToLeft.Yes;
-                Rectangle text = new Rectangle(rtl ? 0 : 2, 0, Math.Max(0, Width - 4), Height);
-                if (severity == None)
-                {
-                    TextFormatFlags noneFlags = (rtl ? TextFormatFlags.Right : TextFormatFlags.Left) | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-                    if (rtl) noneFlags |= TextFormatFlags.RightToLeft;
-                    TextRenderer.DrawText(g, Text, Font, text, ForeColor, noneFlags);
-                    return;
-                }
-                Color color = severity == Success ? ReviewUi.Completed : severity == Warning ? ReviewUi.Required : severity == Error ? ReviewUi.Invalid : ReviewUi.Accent;
-                string glyph = severity == Success ? "✓" : severity == Warning ? "!" : severity == Error ? "✕" : "●";
-                // the severity dot sits at the leading edge so the message text follows it in the
-                // current reading direction
-                Rectangle dot = rtl
-                    ? new Rectangle(Width - 17, (Height - 15) / 2, 15, 15)
-                    : new Rectangle(2, (Height - 15) / 2, 15, 15);
-                using (var brush = new SolidBrush(color)) g.FillEllipse(brush, dot);
-                TextRenderer.DrawText(g, glyph, GlyphFont, dot, Color.FromArgb(28, 30, 34),
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-                text = rtl
-                    ? new Rectangle(0, 0, Math.Max(0, Width - GlyphBox - 2), Height)
-                    : new Rectangle(GlyphBox, 0, Math.Max(0, Width - GlyphBox - 2), Height);
-                TextFormatFlags msgFlags = (rtl ? TextFormatFlags.Right : TextFormatFlags.Left) | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-                if (rtl) msgFlags |= TextFormatFlags.RightToLeft;
-                TextRenderer.DrawText(g, Text, Font, text, ForeColor, msgFlags);
-            }
-        }
-
-        private static GraphicsPath RoundedPath(Rectangle bounds, int radius)
-        {
-            var path = new GraphicsPath();
-            int d = radius * 2;
-            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
-
-        private static class ReviewUi
-        {
-            // shared EngiSentry dark palette, kept consistent with the accepted Results UI
-            internal static readonly Color Background = Color.FromArgb(30, 31, 34);
-            internal static readonly Color Surface = Color.FromArgb(38, 40, 44);
-            internal static readonly Color SurfaceAlt = Color.FromArgb(46, 49, 55);
-            internal static readonly Color EvidenceAlt = Color.FromArgb(45, 48, 54);
-            internal static readonly Color Card = Color.FromArgb(43, 45, 50);
-            internal static readonly Color CardHead = Color.FromArgb(44, 47, 52);
-            internal static readonly Color Text = Color.FromArgb(235, 237, 240);
-            internal static readonly Color Value = Color.FromArgb(225, 228, 232);
-            internal static readonly Color Muted = Color.FromArgb(160, 166, 175);
-            internal static readonly Color Caption = Color.FromArgb(120, 127, 138);
-            internal static readonly Color Section = Color.FromArgb(170, 176, 186);
-            internal static readonly Color Border = Color.FromArgb(74, 78, 86);
-            internal static readonly Color Accent = Color.FromArgb(0, 120, 200);
-            internal static readonly Color Primary = Color.FromArgb(0, 118, 214);
-            internal static readonly Color PrimaryEdge = Color.FromArgb(0, 140, 250);
-            internal static readonly Color Pending = Color.FromArgb(255, 190, 92);
-            internal static readonly Color PendingTint = Color.FromArgb(58, 48, 26);
-            internal static readonly Color Completed = Color.FromArgb(108, 220, 155);
-            internal static readonly Color CompletedTint = Color.FromArgb(24, 46, 34);
-            internal static readonly Color Invalid = Color.FromArgb(255, 112, 112);
-            internal static readonly Color InvalidTint = Color.FromArgb(58, 30, 32);
-            internal static readonly Color Required = Color.FromArgb(255, 176, 59);
-            internal static readonly Color Optional = Color.FromArgb(96, 103, 113);
-            internal static readonly Color InputBack = Color.FromArgb(24, 26, 29);
-            internal static readonly Color InputText = Color.FromArgb(235, 237, 240);
-            internal static readonly Color ErrorBack = Color.FromArgb(58, 30, 32);
-            internal static readonly Color DisabledText = Color.FromArgb(120, 125, 132);
-
-            // Fonts are resolved per UI language so Persian renders in a Persian-capable system
-            // font (Tahoma) while the Latin surface keeps Segoe UI. Instances are cached per
-            // culture; hash/ID values always render in the LTR monospace face.
-            private static readonly Dictionary<string, Font> fontCache = new Dictionary<string, Font>(StringComparer.Ordinal);
-
-            internal static Font GetFont(string family, float size, FontStyle style)
-            {
-                string key = (ReviewLocalization.IsPersian ? "fa|" : "en|") + family + "|" + size.ToString(CultureInfo.InvariantCulture) + "|" + (int)style;
-                if (!fontCache.TryGetValue(key, out Font font))
-                {
-                    font = new Font(family, size, style, GraphicsUnit.Point);
-                    fontCache[key] = font;
-                }
-                return font;
-            }
-
-            internal static Font TitleFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 14.5F, FontStyle.Bold);
-            internal static Font SubtitleFont => GetFont(ReviewLocalization.UiFontFamily, 8.5F, FontStyle.Regular);
-            internal static Font BadgeFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
-            internal static Font CounterFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
-            internal static Font SectionFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 8.5F, FontStyle.Bold);
-            internal static Font CaptionFont => GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Regular);
-            internal static Font ChipFont => GetFont(ReviewLocalization.UiFontFamily, 8F, FontStyle.Regular);
-            internal static Font BodyFont => GetFont(ReviewLocalization.UiFontFamily, 9F, FontStyle.Regular);
-            internal static Font ButtonFont => GetFont(ReviewLocalization.UiFontFamily, 9F, FontStyle.Regular);
-            internal static Font PrimaryButtonFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Bold);
-            internal static Font ValueFont => GetFont(ReviewLocalization.UiFontFamilySemibold, 9.5F, FontStyle.Regular);
-            internal static Font MarkerFont => GetFont(ReviewLocalization.UiFontFamily, 10F, FontStyle.Regular);
-            internal static Font MonoFont => GetFont(ReviewLocalization.MonoFontFamily, 9F, FontStyle.Regular);
-        }
+        // The shared EngiSentry dark palette, fonts and presentation primitives live in ReviewUi.cs
+        // and ReviewUiControls.cs so every engineer-facing surface (Results, project-engineer review,
+        // placement resolution) renders from one definition.
     }
 }

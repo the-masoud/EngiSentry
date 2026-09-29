@@ -65,6 +65,8 @@
     <Compile Include="PlacementProposalGovernedRuleProjection.cs" />
     <Compile Include="VisualResultsPalette.cs" />
     <Compile Include="JevEngineerLabelingControl.cs" />
+    <Compile Include="ReviewUi.cs" />
+    <Compile Include="ReviewUiControls.cs" />
     <Compile Include="ProjectEngineerReviewControl.cs" />
     <Compile Include="EquipmentPlacementPickProvider.cs" />
     <Compile Include="EquipmentPlacementPickRules.cs" />
