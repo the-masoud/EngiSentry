@@ -11,10 +11,13 @@ namespace EngiSentry.AutoCAD2021
     // byte-identical wherever they are stored, matched, or persisted. This class NEVER replaces a
     // canonical value: it only converts one into the text shown in the current UI language.
     //
-    // When English is active every mapping is the identity of the canonical value, so the accepted
-    // English surface is unchanged. When Persian is active the same canonical token is rendered
-    // through the Persian resources. The control keeps holding canonical tokens in its combo items
-    // and selections, and persists exactly those.
+    // When English is active every governed vocabulary mapping (questions, answers, statuses,
+    // classifications, reasons) is the identity of the canonical value, so the accepted English
+    // surface is unchanged. When Persian is active the same canonical token is rendered through the
+    // Persian resources. The one deliberate exception is the placement-proposal disposition, whose
+    // display text is friendly in both languages (stored "MODIFIED" is shown as "Modified" /
+    // "اصلاح‌شده"). The control keeps holding canonical tokens in its combo items and selections,
+    // and persists exactly those.
     internal static class ReviewDisplayText
     {
         // canonical question text -> resource key (the table is keyed on the canonical text because
@@ -34,7 +37,12 @@ namespace EngiSentry.AutoCAD2021
             { "Ambiguous/missing drawing evidence correctly reported", "Question_interpretation_ambiguous_reported" },
             { "Blocking usability issue", "Question_usability_blocking_issue" },
             { "Issue description", "Question_usability_issue_description" },
-            { "Engineer comment", "Question_usability_engineer_comment" }
+            { "Engineer comment", "Question_usability_engineer_comment" },
+            // the equipment placement confirmation template (P11.0/P11.1) reuses the same answer
+            // vocabularies; its question texts are shown through the same display layer
+            { "Picked point is the equipment location", "Question_placement_point_matches_equipment" },
+            { "Easting/Northing axes are correct", "Question_placement_axes_correct" },
+            { "Drawing units confirmed for this coordinate", "Question_placement_units_confirmed" }
         };
 
         // the accepted bounded answer choices
@@ -60,6 +68,21 @@ namespace EngiSentry.AutoCAD2021
             { ProjectEngineerReviewClassifications.SuspectedProductDefect, "Classification_SUSPECTED_PRODUCT_DEFECT" },
             { ProjectEngineerReviewClassifications.DrawingEvidenceLimitation, "Classification_DRAWING_EVIDENCE_LIMITATION" },
             { ProjectEngineerReviewClassifications.EngineeringReviewRequired, "Classification_ENGINEERING_REVIEW_REQUIRED" }
+        };
+
+        // The governed placement-proposal disposition tokens. Unlike the identity-mapped review
+        // vocabulary above, a disposition is always shown as friendly display text (stored
+        // "MODIFIED" is displayed as "Modified" / "اصلاح‌شده"), so this table is applied in BOTH
+        // languages; the neutral resources hold the English display text. Unknown tokens fall
+        // through unchanged and are never masked.
+        private static readonly Dictionary<string, string> DispositionKeys = new Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            { PlacementProposalDispositions.PendingReview, "Disposition_PENDING_REVIEW" },
+            { PlacementProposalDispositions.Approved, "Disposition_APPROVED" },
+            { PlacementProposalDispositions.Rejected, "Disposition_REJECTED" },
+            { PlacementProposalDispositions.Modified, "Disposition_MODIFIED" },
+            { PlacementProposalDispositions.Superseded, "Disposition_SUPERSEDED" },
+            { PlacementProposalDispositions.Cancelled, "Disposition_CANCELLED" }
         };
 
         // the canonical reason literals the completeness gate produces, duplicated here on purpose:
@@ -100,6 +123,18 @@ namespace EngiSentry.AutoCAD2021
         {
             if (string.IsNullOrEmpty(canonical) || !ReviewLocalization.IsPersian) return canonical ?? string.Empty;
             return ClassificationKeys.TryGetValue(canonical, out string key) ? Resolve(key, canonical) : canonical;
+        }
+
+        // Disposition display text is friendly in both languages (stored "MODIFIED" -> "Modified" /
+        // "اصلاح‌شده"), so the neutral resources carry the English display text rather than the
+        // canonical token. The canonical token itself is never replaced anywhere it is stored,
+        // matched or persisted; only the shown text passes through here.
+        internal static string Disposition(string canonical)
+        {
+            if (string.IsNullOrEmpty(canonical)) return string.Empty;
+            if (!DispositionKeys.TryGetValue(canonical, out string key)) return canonical;
+            string value = ReviewStrings.Get(key);
+            return string.IsNullOrEmpty(value) || value == key ? canonical : value;
         }
 
         // The backend validation reason is canonical and is what the completeness gate returns; the

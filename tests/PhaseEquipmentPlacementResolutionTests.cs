@@ -381,20 +381,20 @@ namespace EngiSentry.Tests
             // A cancelled pick writes nothing.
             var cancelled = new EquipmentPlacementResolutionControl(plan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(null));
             Assert(cancelled.UnresolvedCount == 1, "The surface must present the unresolved placement.");
-            Assert(!Button(cancelled, "Save Resolution").Enabled, "Save must be disabled before a pick is captured.");
-            Button(cancelled, "Pick Entity").PerformClick();
+            Assert(!Button(cancelled, "Record Decision").Enabled, "Save must be disabled before a pick is captured.");
+            Button(cancelled, "Pick Equipment").PerformClick();
             Assert(cancelled.CurrentPick == null, "A cancelled pick must not capture anything.");
-            Assert(!Button(cancelled, "Save Resolution").Enabled, "Save must stay disabled after a cancelled pick.");
+            Assert(!Button(cancelled, "Record Decision").Enabled, "Save must stay disabled after a cancelled pick.");
             Assert(ResponseFiles(reviewRoot) == reviewsBefore && RecordFiles(resolutionService) == recordsBefore, "A cancelled pick must not write a review or a resolution.");
             cancelled.Dispose();
 
             // A captured pick still writes nothing until the engineer explicitly saves a complete review.
             var pick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.EntityPick, PointX = 4321, PointY = 8765, PointZ = 0, Handle = "H97", Layer = "EQ-TAG" };
             var control = new EquipmentPlacementResolutionControl(plan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(pick));
-            Button(control, "Pick Entity").PerformClick();
+            Button(control, "Pick Equipment").PerformClick();
             Assert(control.CurrentPick != null && control.CurrentPick.Handle == "H97", "An entity pick must capture the proven handle and WCS point.");
-            Assert(!Button(control, "Save Resolution").Enabled, "Save must stay disabled until the review is complete.");
-            Button(control, "Save Resolution").PerformClick();
+            Assert(!Button(control, "Record Decision").Enabled, "Save must stay disabled until the review is complete.");
+            Button(control, "Record Decision").PerformClick();
             Assert(ResponseFiles(reviewRoot) == reviewsBefore && RecordFiles(resolutionService) == recordsBefore, "An incomplete review must not write anything.");
 
             Box(control, "ReviewerDisplayName").Text = "TEST-ONLY Reviewer";
@@ -406,8 +406,8 @@ namespace EngiSentry.Tests
             }
             ComboBox classification = Combo(control, "Classification");
             classification.SelectedIndex = 1;
-            Assert(Button(control, "Save Resolution").Enabled, "Save must be enabled once a pick and a complete review are present.");
-            Button(control, "Save Resolution").PerformClick();
+            Assert(Button(control, "Record Decision").Enabled, "Save must be enabled once a pick and a complete review are present.");
+            Button(control, "Record Decision").PerformClick();
             Assert(ResponseFiles(reviewRoot) == reviewsBefore + 1 && RecordFiles(resolutionService) == recordsBefore + 1, "An explicit complete save must write exactly one review and one resolution.");
             Assert(control.UnresolvedCount == 0, "A saved resolution must leave the placement list.");
 
@@ -422,7 +422,7 @@ namespace EngiSentry.Tests
             var freePlan = BuildUnresolvedPlan("P-98A", Units);
             var freePick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.FreeSpace, PointX = 10, PointY = 20, PointZ = 0, Handle = null, Layer = null };
             var freeControl = new EquipmentPlacementResolutionControl(freePlan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(freePick));
-            Button(freeControl, "Pick Free Space").PerformClick();
+            Button(freeControl, "Pick Free-Space Point").PerformClick();
             Assert(freeControl.CurrentPick != null && freeControl.CurrentPick.Handle == null, "A free-space pick must carry no source handle.");
             freeControl.Dispose();
 
@@ -435,7 +435,7 @@ namespace EngiSentry.Tests
             var duplicatePick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.EntityPick, PointX = 5000, PointY = 6000, PointZ = 0, Handle = "H97B", Layer = "EQ-TAG" };
             var duplicateControl = new EquipmentPlacementResolutionControl(duplicatePlan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(duplicatePick));
             Assert(duplicateControl.UnresolvedCount == 2, "Two identities (one carrying two occurrences) must present as two cases. Actual: " + duplicateControl.UnresolvedCount);
-            Button(duplicateControl, "Pick Entity").PerformClick();
+            Button(duplicateControl, "Pick Equipment").PerformClick();
             Box(duplicateControl, "ReviewerDisplayName").Text = "TEST-ONLY Reviewer";
             Box(duplicateControl, "ReviewerRole").Text = "TEST-ONLY";
             foreach (ProjectEngineerReviewQuestionDefinition question in EquipmentPlacementResolutionQuestions.All)
@@ -444,7 +444,7 @@ namespace EngiSentry.Tests
                 if (answer is ComboBox combo) combo.SelectedIndex = 1; else answer.Text = "test-only";
             }
             Combo(duplicateControl, "Classification").SelectedIndex = 1;
-            Button(duplicateControl, "Save Resolution").PerformClick();
+            Button(duplicateControl, "Record Decision").PerformClick();
             Assert(duplicateControl.UnresolvedCount == 1, "Saving a resolution must remove the whole equipment identity from the queue. Actual: " + duplicateControl.UnresolvedCount);
             duplicateControl.Dispose();
         }

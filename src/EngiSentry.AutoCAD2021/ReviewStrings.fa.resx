@@ -379,4 +379,308 @@
   <data name="ReasonUnsupportedClassification" xml:space="preserve">
     <value>رده‌بندی پشتیبانی نمی‌شود: </value>
   </data>
+  <!--
+    Persian (فارسی) strings for the ES_PLACEMENTRESOLVE equipment placement resolution surface.
+    Presentation only: the governed question texts, answer vocabularies, classifications,
+    dispositions and backend reasons stay exactly as upstream; these are the labels and messages the
+    surface shows around them. Technical values (hashes, IDs, coordinates) are never translated and
+    stay LTR.
+  -->
+  <data name="Placement_AppTitle" xml:space="preserve">
+    <value>حل موقعیت تجهیز</value>
+  </data>
+  <data name="Placement_AppSubtitle" xml:space="preserve">
+    <value>تنها تأیید موقعیت توسط مهندس انسانی</value>
+  </data>
+  <data name="Placement_LanguageToolTip" xml:space="preserve">
+    <value>تغییر زبان رابط کاربری (English / فارسی).</value>
+  </data>
+  <data name="Placement_HeaderDrawing" xml:space="preserve">
+    <value>نقشه</value>
+  </data>
+  <data name="Placement_HeaderUnits" xml:space="preserve">
+    <value>واحد</value>
+  </data>
+  <data name="Placement_HeaderOpenItemOne" xml:space="preserve">
+    <value>1 مورد باز</value>
+  </data>
+  <data name="Placement_HeaderOpenItemMany" xml:space="preserve">
+    <value>{0} مورد باز</value>
+  </data>
+  <data name="Placement_SectionEquipment" xml:space="preserve">
+    <value>تجهیز / پیشنهاد</value>
+  </data>
+  <data name="Placement_SectionSelection" xml:space="preserve">
+    <value>انتخاب موقعیت</value>
+  </data>
+  <data name="Placement_SectionReview" xml:space="preserve">
+    <value>بازبینی مهندس</value>
+  </data>
+  <data name="Placement_SectionDecision" xml:space="preserve">
+    <value>تصمیم</value>
+  </data>
+  <data name="Placement_SectionReviewer" xml:space="preserve">
+    <value>بازبین</value>
+  </data>
+  <data name="Placement_SectionTechnical" xml:space="preserve">
+    <value>جزئیات فنی</value>
+  </data>
+  <data name="Placement_FieldQueue" xml:space="preserve">
+    <value>تجهیزات / پیشنهادهای حل‌نشده</value>
+  </data>
+  <data name="Placement_FieldTag" xml:space="preserve">
+    <value>تجهیز</value>
+  </data>
+  <data name="Placement_FieldReviewStatus" xml:space="preserve">
+    <value>وضعیت بررسی</value>
+  </data>
+  <data name="Placement_FieldOriginal" xml:space="preserve">
+    <value>موقعیت اولیه</value>
+  </data>
+  <data name="Placement_FieldProposed" xml:space="preserve">
+    <value>موقعیت پیشنهادی</value>
+  </data>
+  <data name="Placement_FieldReviewRequired" xml:space="preserve">
+    <value>نیاز به بررسی</value>
+  </data>
+  <data name="Placement_ValueNotSelected" xml:space="preserve">
+    <value>&lt;انتخاب نشده&gt;</value>
+  </data>
+  <data name="Placement_ValueNone" xml:space="preserve">
+    <value>&lt;هیچ&gt;</value>
+  </data>
+  <data name="Placement_ValueUnresolved" xml:space="preserve">
+    <value>&lt;نامشخص&gt;</value>
+  </data>
+  <data name="Placement_ValueFreeSpace" xml:space="preserve">
+    <value>&lt;هیچ (فضای آزاد)&gt;</value>
+  </data>
+  <data name="Placement_ValueYes" xml:space="preserve">
+    <value>بله</value>
+  </data>
+  <data name="Placement_ValueNo" xml:space="preserve">
+    <value>خیر</value>
+  </data>
+  <data name="Placement_ListProposal" xml:space="preserve">
+    <value>پیشنهاد</value>
+  </data>
+  <data name="Placement_NoSelection" xml:space="preserve">
+    <value>هیچ تجهیز حل‌نشده یا پیشنهاد تولیدشده‌ای انتخاب نشده است.</value>
+  </data>
+  <data name="Placement_FieldPickEvidence" xml:space="preserve">
+    <value>شواهد انتخاب ثبت‌شده</value>
+  </data>
+  <data name="Placement_PickNone" xml:space="preserve">
+    <value>هنوز نقطه‌ای انتخاب نشده است. یک تجهیز یا نقطه آزاد را انتخاب کنید.</value>
+  </data>
+  <data name="Placement_ButtonPickEquipment" xml:space="preserve">
+    <value>انتخاب تجهیز از نقشه</value>
+  </data>
+  <data name="Placement_ButtonPickFreeSpace" xml:space="preserve">
+    <value>انتخاب نقطه آزاد</value>
+  </data>
+  <data name="Placement_ButtonClear" xml:space="preserve">
+    <value>پاک کردن انتخاب</value>
+  </data>
+  <data name="Placement_TechPickSource" xml:space="preserve">
+    <value>منبع انتخاب</value>
+  </data>
+  <data name="Placement_TechPickPoint" xml:space="preserve">
+    <value>نقطه WCS انتخاب‌شده</value>
+  </data>
+  <data name="Placement_TechHandle" xml:space="preserve">
+    <value>هندل اثبات‌شده</value>
+  </data>
+  <data name="Placement_TechLayer" xml:space="preserve">
+    <value>لایه اثبات‌شده</value>
+  </data>
+  <data name="Placement_TechStoredEasting" xml:space="preserve">
+    <value>Easting ذخیره‌شده</value>
+  </data>
+  <data name="Placement_TechStoredNorthing" xml:space="preserve">
+    <value>Northing ذخیره‌شده</value>
+  </data>
+  <data name="Placement_RequiredNote" xml:space="preserve">
+    <value>فیلدهای نشان‌دار با * پیش از ثبت تصمیم الزامی هستند.</value>
+  </data>
+  <data name="Placement_FieldClassification" xml:space="preserve">
+    <value>طبقه‌بندی</value>
+  </data>
+  <data name="Placement_FieldDisposition" xml:space="preserve">
+    <value>تصمیم درباره پیشنهاد</value>
+  </data>
+  <data name="Placement_ChipRequired" xml:space="preserve">
+    <value>الزامی</value>
+  </data>
+  <data name="Placement_ChipProposalOnly" xml:space="preserve">
+    <value>فقط پیشنهاد</value>
+  </data>
+  <data name="Placement_FieldReviewerName" xml:space="preserve">
+    <value>نام بازبین</value>
+  </data>
+  <data name="Placement_FieldReviewerRole" xml:space="preserve">
+    <value>سمت / عنوان</value>
+  </data>
+  <data name="Placement_FieldComment" xml:space="preserve">
+    <value>توضیحات</value>
+  </data>
+  <data name="Placement_ButtonRecord" xml:space="preserve">
+    <value>ثبت تصمیم</value>
+  </data>
+  <data name="Placement_Hint" xml:space="preserve">
+    <value>دکمه «ثبت تصمیم» تنها زمانی فعال است که انتخاب، بازبین و پاسخ‌های الزامی کامل باشند.</value>
+  </data>
+  <data name="Placement_WhyReady" xml:space="preserve">
+    <value>آماده ثبت.</value>
+  </data>
+  <data name="Placement_WhySelect" xml:space="preserve">
+    <value>یک تجهیز حل‌نشده یا پیشنهاد تولیدشده را انتخاب کنید.</value>
+  </data>
+  <data name="Placement_WhyPick" xml:space="preserve">
+    <value>یک موقعیت را از نقشه انتخاب کنید.</value>
+  </data>
+  <data name="Placement_WhyAnswers" xml:space="preserve">
+    <value>به همه سؤال‌های الزامی پاسخ دهید.</value>
+  </data>
+  <data name="Placement_WhyReviewerName" xml:space="preserve">
+    <value>نام بازبین را وارد کنید.</value>
+  </data>
+  <data name="Placement_WhyReviewerRole" xml:space="preserve">
+    <value>سمت / عنوان بازبین را وارد کنید.</value>
+  </data>
+  <data name="Placement_WhyClassification" xml:space="preserve">
+    <value>یک طبقه‌بندی انتخاب کنید.</value>
+  </data>
+  <data name="Placement_WhyDisposition" xml:space="preserve">
+    <value>یک تصمیم برای پیشنهاد انتخاب کنید.</value>
+  </data>
+  <data name="Placement_WhyComment" xml:space="preserve">
+    <value>برای این تصمیم یک توضیح وارد کنید.</value>
+  </data>
+  <data name="Placement_WhyProposalRange" xml:space="preserve">
+    <value>نقطه پیشنهادی خارج از محدوده مختصات پشتیبانی‌شده است.</value>
+  </data>
+  <data name="Placement_ButtonTechnicalShow" xml:space="preserve">
+    <value>نمایش جزئیات فنی</value>
+  </data>
+  <data name="Placement_ButtonTechnicalHide" xml:space="preserve">
+    <value>پنهان کردن جزئیات فنی</value>
+  </data>
+  <data name="Placement_TechDrawingSha" xml:space="preserve">
+    <value>SHA-256 نقشه</value>
+  </data>
+  <data name="Placement_TechDrawing" xml:space="preserve">
+    <value>نقشه</value>
+  </data>
+  <data name="Placement_TechUnits" xml:space="preserve">
+    <value>واحد درج</value>
+  </data>
+  <data name="Placement_TechPlacementId" xml:space="preserve">
+    <value>شناسه موقعیت تجهیز</value>
+  </data>
+  <data name="Placement_TechEntityId" xml:space="preserve">
+    <value>شناسه تجهیز</value>
+  </data>
+  <data name="Placement_TechProposalId" xml:space="preserve">
+    <value>شناسه پیشنهاد</value>
+  </data>
+  <data name="Placement_TechFingerprint" xml:space="preserve">
+    <value>اثر انگشت پیشنهاد</value>
+  </data>
+  <data name="Placement_TechGenerator" xml:space="preserve">
+    <value>تولیدکننده</value>
+  </data>
+  <data name="Placement_TechOriginalPoint" xml:space="preserve">
+    <value>نقطه اولیه</value>
+  </data>
+  <data name="Placement_TechProposedPoint" xml:space="preserve">
+    <value>نقطه پیشنهادی</value>
+  </data>
+  <data name="Placement_TechResolutionId" xml:space="preserve">
+    <value>شناسه موقعیت</value>
+  </data>
+  <data name="Placement_TechDispositionId" xml:space="preserve">
+    <value>شناسه ثبت تصمیم</value>
+  </data>
+  <data name="Placement_TechEastingStatus" xml:space="preserve">
+    <value>وضعیت Easting</value>
+  </data>
+  <data name="Placement_TechNorthingStatus" xml:space="preserve">
+    <value>وضعیت Northing</value>
+  </data>
+  <data name="Placement_TechCenterline" xml:space="preserve">
+    <value>شواهد خط مرکزی</value>
+  </data>
+  <data name="Placement_TechPlacementStatus" xml:space="preserve">
+    <value>وضعیت موقعیت</value>
+  </data>
+  <data name="Placement_StatusPickCaptured" xml:space="preserve">
+    <value>موقعیت ثبت شد. بازبینی را کامل کنید و تصمیم را ثبت کنید.</value>
+  </data>
+  <data name="Placement_StatusPickCleared" xml:space="preserve">
+    <value>انتخاب پاک شد.</value>
+  </data>
+  <data name="Placement_StatusDecisionRecorded" xml:space="preserve">
+    <value>تصمیم ثبت شد: {0}.</value>
+  </data>
+  <data name="Placement_StatusResolutionSaved" xml:space="preserve">
+    <value>موقعیت برای {0} ثبت شد. اجرای مجدد تحلیل نقشه آن را تکمیل‌شده علامت می‌زند.</value>
+  </data>
+  <data name="Placement_ErrorSelectFirst" xml:space="preserve">
+    <value>ابتدا یک تجهیز حل‌نشده را انتخاب کنید یا برای پیشنهاد گزینه MODIFIED را برگزینید.</value>
+  </data>
+  <data name="Placement_ErrorPickCancelled" xml:space="preserve">
+    <value>انتخاب لغو یا نامعتبر شد. چیزی ثبت نشد.</value>
+  </data>
+  <data name="Placement_ErrorPickRange" xml:space="preserve">
+    <value>نقطه انتخاب‌شده خارج از محدوده مختصات پشتیبانی‌شده است. چیزی ثبت نشد.</value>
+  </data>
+  <data name="Placement_ErrorPickFailed" xml:space="preserve">
+    <value>انتخاب ناموفق: {0}</value>
+  </data>
+  <data name="Placement_ErrorNoPick" xml:space="preserve">
+    <value>پیش از ثبت، یک انتخاب صریح توسط مهندس انجام دهید.</value>
+  </data>
+  <data name="Placement_ErrorNoHash" xml:space="preserve">
+    <value>هش نقشه در دسترس نیست؛ نقشه را ذخیره کنید و فرمان را دوباره اجرا کنید.</value>
+  </data>
+  <data name="Placement_ErrorNoUnits" xml:space="preserve">
+    <value>واحد درج نقشه نامشخص است؛ تصمیم ثبت نمی‌شود.</value>
+  </data>
+  <data name="Placement_ErrorNoSelection" xml:space="preserve">
+    <value>ابتدا یک تجهیز حل‌نشده را انتخاب کنید.</value>
+  </data>
+  <data name="Placement_ErrorNotSaved" xml:space="preserve">
+    <value>ثبت نشد: {0}</value>
+  </data>
+  <data name="Placement_ErrorDispositionNotRecorded" xml:space="preserve">
+    <value>تصمیم ثبت نشد: {0}</value>
+  </data>
+  <data name="Disposition_PENDING_REVIEW" xml:space="preserve">
+    <value>در انتظار بررسی</value>
+  </data>
+  <data name="Disposition_APPROVED" xml:space="preserve">
+    <value>تأییدشده</value>
+  </data>
+  <data name="Disposition_REJECTED" xml:space="preserve">
+    <value>ردشده</value>
+  </data>
+  <data name="Disposition_MODIFIED" xml:space="preserve">
+    <value>اصلاح‌شده</value>
+  </data>
+  <data name="Disposition_SUPERSEDED" xml:space="preserve">
+    <value>جایگزین‌شده</value>
+  </data>
+  <data name="Disposition_CANCELLED" xml:space="preserve">
+    <value>لغوشده</value>
+  </data>
+  <data name="Question_placement_point_matches_equipment" xml:space="preserve">
+    <value>نقطه انتخاب‌شده، محل تجهیز است</value>
+  </data>
+  <data name="Question_placement_axes_correct" xml:space="preserve">
+    <value>محورهای Easting / Northing صحیح هستند</value>
+  </data>
+  <data name="Question_placement_units_confirmed" xml:space="preserve">
+    <value>واحد نقشه برای این مختصات تأیید شده است</value>
+  </data>
 </root>

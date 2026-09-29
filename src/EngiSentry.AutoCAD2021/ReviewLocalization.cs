@@ -4,15 +4,17 @@ using System.Resources;
 
 namespace EngiSentry.AutoCAD2021
 {
-    // Resource-backed localization for the ES_ENGINEERREVIEW review surface ONLY.
+    // Resource-backed localization for the engineer-facing review surfaces.
     //
     // English is the neutral/default language and Persian (fa) is the selectable alternative. All
     // UI prose is read from ReviewStrings.resx (neutral) / ReviewStrings.fa.resx; no UI text is
-    // duplicated in code. The selected culture is session-scoped: it is never persisted and never
+    // duplicated in code. The selected culture lives here for the lifetime of the session and never
     // touches review requests/responses, questions, answer vocabularies, classifications,
-    // governance, or authority behavior. Governed vocabulary tokens (status words, classifications,
-    // answer values, backend validation reasons) are deliberately NOT translated and keep their
-    // exact upstream values so hashes, IDs, and persisted semantics stay LTR and unchanged.
+    // governance, or authority behavior. The engineer's language *preference* is persisted
+    // separately, per Windows user, by ReviewUiPreferences — never in these governed records.
+    // Governed vocabulary tokens (status words, classifications, answer values, backend validation
+    // reasons) are deliberately NOT translated and keep their exact upstream values so hashes, IDs,
+    // and persisted semantics stay LTR and unchanged.
     internal static class ReviewStrings
     {
         private static readonly ResourceManager Manager =

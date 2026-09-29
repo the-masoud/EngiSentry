@@ -13,8 +13,8 @@ using EngiSentry.Standards;
 namespace EngiSentry.Tests
 {
     // Focused UI-contract tests for the ES_PLACEMENTRESOLVE engineer surface. They assert the
-    // structure and readability contract of the polished surface (sections, explicit labels, dark
-    // theme, actions, inline status, layout integrity, long-value access) and prove the polish did
+    // structure and readability contract of the bilingual surface (sections, explicit labels, dark
+    // theme, actions, inline status, layout integrity, long-value access) and prove the rework did
     // not change behaviour: a cancelled pick still writes nothing and a complete explicit save still
     // writes exactly one review plus one resolution.
     //
@@ -71,11 +71,13 @@ namespace EngiSentry.Tests
             List<string> captions = Descendants(control).OfType<Card>().OrderBy(c => c.Top).Select(c => c.Caption).ToList();
             CollectionAssert(captions, new List<string>
             {
-                "WORK ITEM / PROPOSAL", "PLACEMENT PICK", "ENGINEER REVIEW QUESTIONS", "DECISION", "REVIEWER"
+                "EQUIPMENT / PROPOSAL", "PLACEMENT SELECTION", "ENGINEER REVIEW", "DECISION", "REVIEWER", "TECHNICAL DETAILS"
             }, "The surface must present the required sections as labelled cards in workflow order.");
             Assert(Descendants(control).OfType<Label>().Any(l => l.Text == "Equipment Placement Resolution"), "The header title is missing.");
             Assert(Descendants(control).OfType<Label>().Any(l => l.Text.Contains(DrawingName) && l.Text.Contains(Units)), "The header must carry the drawing identity and units.");
-            Assert(Descendants(control).OfType<Button>().Any(b => b.Text == "Save Resolution"), "The pinned action bar must carry the save action.");
+            Assert(Descendants(control).OfType<Button>().Any(b => b.Text == "Record Decision"), "The pinned action bar must carry the primary record action.");
+            // the full SHA-256 must not dominate the header; it lives in the technical details
+            Assert(!Descendants(control).OfType<Label>().Any(l => l.Text.Contains(DrawingSha)), "The full SHA-256 must not be shown in the primary header.");
             control.Dispose();
         }
 
@@ -147,21 +149,21 @@ namespace EngiSentry.Tests
             var control = NewControl(reviewService, resolutionService, new StubPickProvider(null));
             List<Button> buttons = Descendants(control).OfType<Button>().ToList();
             CollectionAssert(buttons.Select(b => b.Text).OrderBy(x => x, StringComparer.Ordinal).ToList(),
-                new List<string> { "Clear Pick", "Pick Entity", "Pick Free Space", "Save Resolution" },
+                new List<string> { "Clear Selection", "Pick Equipment", "Pick Free-Space Point", "Record Decision", "Show Technical Details" },
                 "The action labels must stay exactly the accepted set.");
 
-            Button save = buttons.Single(b => b.Text == "Save Resolution");
-            Button pick = buttons.Single(b => b.Text == "Pick Entity");
-            Assert(save.Font.Bold && !pick.Font.Bold, "The primary save action must carry the primary emphasis font.");
+            Button save = buttons.Single(b => b.Text == "Record Decision");
+            Button pick = buttons.Single(b => b.Text == "Pick Equipment");
+            Assert(save.Font.Bold && !pick.Font.Bold, "The primary record action must carry the primary emphasis font.");
             Assert(buttons.All(b => b.FlatStyle == FlatStyle.Flat), "Every action must use the flat dark-theme button style.");
 
-            Assert(!save.Enabled, "Save must start disabled before a pick is captured.");
+            Assert(!save.Enabled, "Record Decision must start disabled before a pick is captured.");
             Assert(save.ForeColor.GetBrightness() > 0.15f, "A disabled action must stay legible instead of fading into the surface.");
             Assert(save.BackColor.GetBrightness() < 0.6f, "A disabled action must stay on the dark surface.");
 
             save.Enabled = true;
             Assert(save.BackColor == ReviewUi.Primary, "An enabled primary action must use the primary accent surface.");
-            Assert(save.BackColor != pick.BackColor, "The primary save action must be visually distinct from the secondary pick actions.");
+            Assert(save.BackColor != pick.BackColor, "The primary record action must be visually distinct from the secondary pick actions.");
             save.Enabled = false;
             Assert(save.BackColor != ReviewUi.Primary, "A disabled primary action must drop the primary accent surface.");
             control.Dispose();
@@ -179,7 +181,7 @@ namespace EngiSentry.Tests
             Assert(status.Parent is TableLayoutPanel, "The status line must sit in the pinned action bar, not float in the card column.");
 
             // a cancelled pick reports inline; the flow never needs a modal dialog
-            Button(control, "Pick Entity").PerformClick();
+            Button(control, "Pick Equipment").PerformClick();
             Assert(status.Text.Length > 0, "A cancelled pick must report an inline status message.");
             Assert(status.Severity == SeverityMessage.Warning, "A cancelled pick must be reported as a warning.");
             Assert(status.BackColor.GetBrightness() < 0.6f, "The status line must stay on the dark surface.");
@@ -194,8 +196,12 @@ namespace EngiSentry.Tests
             PerformLayout(control);
             string overlap = FirstOverlap(control);
             Assert(overlap == null, "No two controls may overlap in the placement surface. " + overlap);
-            Assert(Descendants(control).OfType<TextBox>().All(t => t.Width >= 40 && t.Height >= 16), "Every text field must stay usable at the accepted size.");
-            Assert(Descendants(control).OfType<ComboBox>().All(c => c.Width >= 40 && c.Height >= 16), "Every decision/answer field must stay usable at the accepted size.");
+            // only the fields the engineer can actually see take part in the size contract; the
+            // technical-details fields are collapsed by default and are asserted once expanded below
+            string smallField = Descendants(control).OfType<TextBox>().Where(t => t.Visible && (t.Width < 40 || t.Height < 16)).Select(Describe).FirstOrDefault();
+            Assert(smallField == null, "Every visible text field must stay usable at the accepted size. Offender: " + smallField);
+            string smallCombo = Descendants(control).OfType<ComboBox>().Where(c => c.Visible && (c.Width < 40 || c.Height < 16)).Select(Describe).FirstOrDefault();
+            Assert(smallCombo == null, "Every visible decision/answer field must stay usable at the accepted size. Offender: " + smallCombo);
             Assert(Descendants(control).OfType<Button>().All(b => b.Width >= 60 && b.Height >= 20), "Every action must stay usable at the accepted size.");
 
             // one row per question, each with its own answer control, and never overlapping
@@ -207,6 +213,12 @@ namespace EngiSentry.Tests
                 Control answer = AnswerControl(control, question.QuestionId);
                 Assert(answer.Height >= 16 && answer.Width >= 40, "A question answer control must stay usable: " + question.QuestionId);
             }
+
+            // expanding the collapsed technical details must lay out its value fields at a usable size
+            Button(control, "Show Technical Details").PerformClick();
+            PerformLayout(control);
+            Assert(Descendants(control).OfType<TextBox>().Where(t => t.AccessibleName == "TechnicalValue")
+                .All(t => t.Visible && t.Width >= 40 && t.Height >= 16), "Technical value fields must stay usable once the section is expanded.");
 
             // shrinking the palette must degrade into scrolling, never into overlap or clipping
             Panel scroller = Descendants(control).OfType<Panel>().FirstOrDefault(p => p.AutoScroll);
@@ -222,27 +234,29 @@ namespace EngiSentry.Tests
             control.Dispose();
         }
 
-        // 7. Long identities and hashes stay readable in full.
+        // 7. Long identities and hashes stay readable in full inside the collapsed technical details.
         private static void LongValueAccessTests(ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService)
         {
             PlacementProposal proposal = BuildProposal();
             var control = NewControl(reviewService, resolutionService, new StubPickProvider(null), new[] { proposal });
             Descendants(control).OfType<ListBox>().Single().SelectedIndex = 1;
 
-            TextBox detail = Descendants(control).OfType<TextBox>().Single(t => t.AccessibleName == "SelectedItemDetail");
-            Assert(detail.ReadOnly, "The item detail must stay a read-only evidence pane.");
-            Assert(!detail.WordWrap, "Long identities and hashes must not be wrapped into unreadable fragments.");
-            Assert(detail.ScrollBars == ScrollBars.Both, "Long identities and hashes must remain reachable by scrolling.");
-            Assert(detail.Font.Name == ReviewUi.MonoFont.Name, "Identities and hashes must render in the monospace face.");
-            Assert(detail.Text.Contains(proposal.ProposalId), "The selected proposal identity must be readable in full.");
-            Assert(detail.Text.Contains(proposal.ProposalFingerprint), "The full proposal fingerprint must be readable in the detail pane.");
+            Panel technicalBody = TechnicalBody(control);
+            Assert(!technicalBody.Visible, "Technical details must be collapsed by default.");
+            Button(control, "Show Technical Details").PerformClick();
+            Assert(technicalBody.Visible, "The technical details toggle must reveal the section.");
 
-            TextBox pickPane = Descendants(control).OfType<TextBox>().Single(t => t.AccessibleName == "CapturedPickEvidence");
-            Assert(pickPane.ReadOnly && !pickPane.WordWrap && pickPane.ScrollBars == ScrollBars.Both, "The captured pick pane must expose long coordinate evidence without wrapping.");
+            List<TextBox> values = Descendants(control).OfType<TextBox>().Where(t => t.AccessibleName == "TechnicalValue").ToList();
+            Assert(values.Count > 0, "Technical details must present labelled technical values.");
+            Assert(values.All(t => t.ReadOnly), "Technical values must stay read-only evidence.");
+            Assert(values.All(t => t.RightToLeft == RightToLeft.No), "Technical values must always stay left-to-right.");
+            Assert(values.Any(t => t.Text == proposal.ProposalId), "The full proposal identity must be readable in the technical details.");
+            Assert(values.Any(t => t.Text == proposal.ProposalFingerprint), "The full proposal fingerprint must be readable in the technical details.");
+            Assert(values.Any(t => t.Text == DrawingSha), "The drawing SHA-256 must be readable in the technical details.");
             control.Dispose();
         }
 
-        // 8. Behaviour preservation: the polish changed presentation only.
+        // 8. Behaviour preservation: the rework changed presentation only.
         private static void BehaviorPreservationTests(ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, string reviewRoot)
         {
             int reviewsBefore = ResponseFiles(reviewRoot);
@@ -250,17 +264,17 @@ namespace EngiSentry.Tests
 
             var cancelled = NewControl(reviewService, resolutionService, new StubPickProvider(null));
             Assert(cancelled.UnresolvedCount == 1, "The surface must present the unresolved placement.");
-            Assert(!Button(cancelled, "Save Resolution").Enabled, "Save must be disabled before a pick is captured.");
-            Button(cancelled, "Pick Entity").PerformClick();
+            Assert(!Button(cancelled, "Record Decision").Enabled, "Record Decision must be disabled before a pick is captured.");
+            Button(cancelled, "Pick Equipment").PerformClick();
             Assert(cancelled.CurrentPick == null, "A cancelled pick must not capture anything.");
             Assert(ResponseFiles(reviewRoot) == reviewsBefore && RecordFiles(resolutionService) == recordsBefore, "A cancelled pick must not write a review or a resolution.");
             cancelled.Dispose();
 
             var pick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.EntityPick, PointX = 4321, PointY = 8765, PointZ = 0, Handle = "H97", Layer = "EQ-TAG" };
             var control = NewControl(reviewService, resolutionService, new StubPickProvider(pick));
-            Button(control, "Pick Entity").PerformClick();
+            Button(control, "Pick Equipment").PerformClick();
             Assert(control.CurrentPick != null && control.CurrentPick.Handle == "H97", "An entity pick must capture the proven handle and WCS point.");
-            Button(control, "Save Resolution").PerformClick();
+            Button(control, "Record Decision").PerformClick();
             Assert(ResponseFiles(reviewRoot) == reviewsBefore && RecordFiles(resolutionService) == recordsBefore, "An incomplete review must not write anything.");
 
             Box(control, "ReviewerDisplayName").Text = "TEST-ONLY Reviewer";
@@ -271,8 +285,8 @@ namespace EngiSentry.Tests
                 if (answer is ComboBox combo) combo.SelectedIndex = 1; else answer.Text = "test-only";
             }
             Combo(control, "Classification").SelectedIndex = 1;
-            Assert(Button(control, "Save Resolution").Enabled, "Save must be enabled once a pick and a complete review are present.");
-            Button(control, "Save Resolution").PerformClick();
+            Assert(Button(control, "Record Decision").Enabled, "Record Decision must be enabled once a pick and a complete review are present.");
+            Button(control, "Record Decision").PerformClick();
             Assert(ResponseFiles(reviewRoot) == reviewsBefore + 1 && RecordFiles(resolutionService) == recordsBefore + 1, "An explicit complete save must write exactly one review and one resolution.");
             Assert(control.UnresolvedCount == 0, "A saved resolution must leave the placement list.");
             control.Dispose();
@@ -319,6 +333,13 @@ namespace EngiSentry.Tests
             };
             proposal.ProposalFingerprint = PlacementProposalFingerprint.Compute(proposal);
             return proposal;
+        }
+
+        private static Panel TechnicalBody(Control root)
+        {
+            TableLayoutPanel grid = Descendants(root).OfType<TableLayoutPanel>()
+                .First(t => t.Controls.OfType<Control>().Any(c => c.AccessibleName == "TechnicalValue"));
+            return grid.Parent as Panel;
         }
 
         private static string FieldCaption(Control input)

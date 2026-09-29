@@ -728,6 +728,8 @@ namespace EngiSentry.AutoCAD2021
         internal static void ShowProjectEngineerReview()
         {
             EnsureWindow();
+            // apply the engineer's persisted UI language once, when the surface opens
+            ReviewLocalization.Apply(ReviewUiPreferences.Load());
             if (reviewControl == null || reviewControl.IsDisposed) reviewControl = new ProjectEngineerReviewControl { Dock = DockStyle.Fill };
             else reviewControl.LoadQueue();
             ShowControl(reviewControl, "EngiSentry - Project Engineer Review", new Size(1000, 960));
@@ -739,6 +741,8 @@ namespace EngiSentry.AutoCAD2021
         internal static void ShowEquipmentPlacementResolution(PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits, ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService, IEquipmentPlacementPickProvider pickProvider, IReadOnlyList<PlacementProposal> proposals = null, string drawingPath = null)
         {
             EnsureWindow();
+            // apply the engineer's persisted UI language once, when the surface opens
+            ReviewLocalization.Apply(ReviewUiPreferences.Load());
             placementResolutionControl = new EquipmentPlacementResolutionControl(plotPlan, drawingName, drawingSha256, insertionUnits, reviewService, resolutionService, pickProvider, proposals, drawingPath) { Dock = DockStyle.Fill };
             ShowControl(placementResolutionControl, "EngiSentry - Equipment Placement Resolution", new Size(1180, 820));
         }

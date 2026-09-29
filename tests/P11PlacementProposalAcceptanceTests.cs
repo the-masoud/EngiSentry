@@ -361,9 +361,9 @@ namespace EngiSentry.Tests
                 if (answer is ComboBox combo) combo.SelectedIndex = 1; else answer.Text = "TEST-ONLY acceptance answer";
             }
             Combo(control, "PlacementProposalDisposition").SelectedItem = disposition;
-            if (performFreeSpacePick) Button(control, "Pick Free Space").PerformClick();
-            Assert(Button(control, "Record Disposition").Enabled, "The surface did not enable the record button for disposition " + disposition + ".");
-            Button(control, "Record Disposition").PerformClick();
+            if (performFreeSpacePick) Button(control, "Pick Free-Space Point").PerformClick();
+            Assert(Button(control, "Record Decision").Enabled, "The surface did not enable the record button for disposition " + disposition + ".");
+            Button(control, "Record Decision").PerformClick();
         }
 
         private static void AssertDispositionRecorded(EquipmentPlacementResolutionControl control, string disposition)

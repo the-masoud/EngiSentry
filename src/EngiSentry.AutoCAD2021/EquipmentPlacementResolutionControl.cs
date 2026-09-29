@@ -25,8 +25,16 @@ namespace EngiSentry.AutoCAD2021
     /// The layout follows the shared EngiSentry dark visual language (ReviewUi + ReviewUiControls,
     /// the same primitives the accepted project-engineer review surface uses): a pinned header, a
     /// single scrolling column of bordered cards in workflow order, and a pinned action bar. The
-    /// cards are Work item / proposal, Placement pick, Engineer review questions, Decision and
-    /// Reviewer, so every field the engineer must fill is explicitly labelled.
+    /// cards are Equipment / Proposal, Placement Selection, Engineer Review, Decision, Reviewer and
+    /// a collapsed-by-default Technical Details section, so every field the engineer must fill is
+    /// explicitly labelled and the long identifiers stay out of the primary flow.
+    ///
+    /// The surface is bilingual: every engineer-facing string is read from the shared
+    /// ReviewStrings resources (English neutral / Persian fa), the language can be switched live
+    /// from the header, and the choice is persisted per Windows user by ReviewUiPreferences. The
+    /// governed values (question texts, answer vocabularies, classifications, dispositions) keep
+    /// their exact upstream tokens for storage, matching and persistence; only the shown text runs
+    /// through ReviewDisplayText. Technical values (hashes, IDs, coordinates) always stay LTR.
     /// </summary>
     internal sealed class EquipmentPlacementResolutionControl : UserControl
     {
@@ -34,16 +42,18 @@ namespace EngiSentry.AutoCAD2021
         // its proportions when AutoCAD hosts the palette on a 125% / 150% display. Fonts are set in
         // points, so without this the rows would stay pixel-fixed while the text grew.
         private const int HeaderHeightBase = 86;
-        private const int FooterHeightBase = 78;
+        private const int FooterHeightBase = 104;
         private const int QuestionRowHeightBase = 30;
-        private const int WorkItemBodyBase = 210;
-        private const int PickBodyBase = 168;
+        private const int InfoRowBase = 22;
+        private const int InfoCaptionWidthBase = 156;
         private const int DecisionBodyBase = 96;
         private const int ReviewerBodyBase = 132;
         private const int ListColumnBase = 300;
         private const int AnswerColumnBase = 150;
         private const int ButtonHeightBase = 28;
         private const int PickButtonRowBase = 34;
+        private const int TechnicalToggleRowBase = 30;
+        private const int TechnicalBodyBase = 236;
 
         private readonly string drawingName;
         private readonly string drawingPath;
@@ -55,22 +65,32 @@ namespace EngiSentry.AutoCAD2021
         private readonly IEquipmentPlacementPickProvider pickProvider;
         private readonly List<PlacementProposal> proposals;
 
-        private readonly ListBox placementList = new ListBox();
-        private readonly TextBox selectionInfo = new TextBox();
-        private readonly TextBox pickInfo = new TextBox();
-        private readonly Button pickEntity = new Button();
-        private readonly Button pickFreeSpace = new Button();
-        private readonly Button clearPick = new Button();
-        private readonly TextBox reviewerName = new TextBox();
-        private readonly TextBox reviewerRole = new TextBox();
-        private readonly ComboBox classification = new ComboBox();
-        private readonly ComboBox proposalDisposition = new ComboBox();
-        private readonly TextBox comment = new TextBox();
-        private readonly Button save = new Button();
-        private readonly SeverityMessage message = new SeverityMessage();
-        private readonly Label header = new Label();
-        private readonly BadgeLabel countBadge = new BadgeLabel();
-        private readonly TableLayoutPanel questionsGrid = new TableLayoutPanel();
+        private ListBox placementList;
+        private Label tagLabel;
+        private TableLayoutPanel summaryGrid;
+        private TableLayoutPanel pickGrid;
+        private Button pickEntity;
+        private Button pickFreeSpace;
+        private Button clearPick;
+        private TextBox reviewerName;
+        private TextBox reviewerRole;
+        private ComboBox classification;
+        private ComboBox proposalDisposition;
+        private TextBox comment;
+        private Button save;
+        private Button technicalToggle;
+        private Panel technicalBody;
+        private TableLayoutPanel technicalGrid;
+        private SeverityMessage message;
+        private Label whyLabel;
+        private Label header;
+        private Label subHeader;
+        private BadgeLabel countBadge;
+        private LinkLabel languageLink;
+        private TableLayoutPanel questionsGrid;
+        private Card workItemCard;
+        private Card pickCard;
+        private Card technicalCard;
         private readonly Dictionary<string, Control> answerControls = new Dictionary<string, Control>(StringComparer.Ordinal);
 
         // the Disposition field is only meaningful for a generated proposal, so the whole labelled
@@ -82,6 +102,9 @@ namespace EngiSentry.AutoCAD2021
         private PlacementProposal currentProposal;
         private EquipmentPlacementPick pick;
         private bool loading;
+        private bool technicalExpanded;
+        private string lastResolutionId;
+        private string lastDispositionId;
 
         internal EquipmentPlacementResolutionControl(
             PlotPlanModel plotPlan, string drawingName, string drawingSha256, string insertionUnits,
@@ -120,6 +143,7 @@ namespace EngiSentry.AutoCAD2021
             // occurrences are never presented as separate cases.
             unresolved = EquipmentPlacementResolutionQueue.Build(plotPlan.EquipmentPlacements);
             Dock = DockStyle.Fill;
+            CreateControls();
             BuildLayout();
             RefreshPlacements();
         }
@@ -127,7 +151,38 @@ namespace EngiSentry.AutoCAD2021
         internal int UnresolvedCount => unresolved.Count;
         internal EquipmentPlacementPick CurrentPick => pick;
 
-        // ---- layout ---------------------------------------------------------------------------
+        // ---- control construction -------------------------------------------------------------
+
+        // (Re)creates every control so a UI-language switch can rebuild the whole surface with the
+        // current culture's resources, fonts and layout direction. Engineering state is preserved
+        // across a rebuild by Rebuild().
+        private void CreateControls()
+        {
+            placementList = new ListBox();
+            tagLabel = new Label();
+            summaryGrid = new TableLayoutPanel();
+            pickGrid = new TableLayoutPanel();
+            pickEntity = new Button();
+            pickFreeSpace = new Button();
+            clearPick = new Button();
+            reviewerName = new TextBox();
+            reviewerRole = new TextBox();
+            classification = new ComboBox();
+            proposalDisposition = new ComboBox();
+            comment = new TextBox();
+            save = new Button();
+            technicalToggle = new Button();
+            technicalBody = new Panel();
+            technicalGrid = new TableLayoutPanel();
+            message = new SeverityMessage();
+            whyLabel = new Label();
+            header = new Label();
+            subHeader = new Label();
+            countBadge = new BadgeLabel();
+            languageLink = new LinkLabel();
+            questionsGrid = new TableLayoutPanel();
+            dispositionField = null;
+        }
 
         private int Scale(int value)
         {
@@ -144,8 +199,13 @@ namespace EngiSentry.AutoCAD2021
             DoubleBuffered = true;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
 
+            // Standard WinForms right-to-left support: the whole surface is mirrored for Persian so
+            // docking, column order and text alignment flip automatically. Latin identifiers, hashes
+            // and coordinates stay LTR inside the mirrored surface.
+            RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
+
             // one pinned header row, one scrolling column of cards, one pinned action bar: the
-            // status line and the Save action can never be scrolled out of view, and the card
+            // status line and the primary action can never be scrolled out of view, and the card
             // column scrolls instead of clipping when the palette is short.
             var root = new TableLayoutPanel
             {
@@ -162,6 +222,84 @@ namespace EngiSentry.AutoCAD2021
             Controls.Add(root);
         }
 
+        // Rebuilds the surface after a UI-language change: the current selection, the captured pick,
+        // any unsaved entries and the technical-details state are captured first, the control tree is
+        // recreated with the new culture's resources, fonts and direction, then everything is
+        // restored. Nothing is persisted by the rebuild — a resolution still stores only on an
+        // explicit Record Decision.
+        internal void Rebuild()
+        {
+            int restoreIndex = placementList.SelectedIndex;
+            EquipmentPlacementPick draftPick = pick;
+            string draftName = reviewerName.Text;
+            string draftRole = reviewerRole.Text;
+            string draftComment = comment.Text;
+            string draftClassification = classification.SelectedItem as string ?? string.Empty;
+            string draftDisposition = proposalDisposition.SelectedItem as string ?? string.Empty;
+            Dictionary<string, string> draftAnswers = CaptureAnswers();
+            bool draftTechnical = technicalExpanded;
+
+            SuspendLayout();
+            try
+            {
+                ClearControls(this);
+                CreateControls();
+                BuildLayout();
+            }
+            finally { ResumeLayout(); }
+
+            loading = true;
+            try
+            {
+                RefreshPlacements();
+                if (restoreIndex >= 0 && restoreIndex < placementList.Items.Count) placementList.SelectedIndex = restoreIndex;
+            }
+            finally { loading = false; }
+
+            // restore the engineer's unsaved screen entries onto the fresh controls
+            loading = true;
+            try
+            {
+                pick = draftPick;
+                reviewerName.Text = draftName;
+                reviewerRole.Text = draftRole;
+                comment.Text = draftComment;
+                classification.SelectedItem = draftClassification;
+                if (classification.SelectedIndex < 0) classification.SelectedIndex = 0;
+                proposalDisposition.SelectedItem = draftDisposition;
+                if (proposalDisposition.SelectedIndex < 0) proposalDisposition.SelectedIndex = 0;
+                foreach (KeyValuePair<string, string> pair in draftAnswers)
+                {
+                    if (!answerControls.TryGetValue(pair.Key, out Control control)) continue;
+                    if (control is ComboBox combo) combo.SelectedItem = pair.Value;
+                    else control.Text = pair.Value;
+                    if (control is ComboBox c && c.SelectedIndex < 0) c.SelectedIndex = 0;
+                }
+            }
+            finally { loading = false; }
+
+            SetTechnicalExpanded(draftTechnical);
+            UpdatePickInfo();
+            UpdateSummary();
+            UpdateTechnicalDetails();
+            UpdateSaveState();
+        }
+
+        private void SwitchLanguage()
+        {
+            // defer the rebuild until the link's click message has completed, so the control that
+            // raised the event is never disposed from inside its own handler
+            if (IsHandleCreated) BeginInvoke((Action)SwitchLanguageDeferred);
+            else SwitchLanguageDeferred();
+        }
+
+        private void SwitchLanguageDeferred()
+        {
+            ReviewLocalization.Toggle();
+            ReviewUiPreferences.Save(ReviewLocalization.Current);
+            Rebuild();
+        }
+
         private void BuildHeader(TableLayoutPanel root)
         {
             var host = new BorderedPanel
@@ -169,9 +307,10 @@ namespace EngiSentry.AutoCAD2021
                 Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, BottomLine = true,
                 Padding = new Padding(18, 10, 14, 10)
             };
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(150)));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(170)));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
 
@@ -181,16 +320,39 @@ namespace EngiSentry.AutoCAD2021
             header.ForeColor = Color.White;
             header.BackColor = ReviewUi.Surface;
             header.AutoEllipsis = true;
-            header.Text = "Equipment Placement Resolution";
+            header.Text = ReviewStrings.Get("Placement_AppTitle");
             grid.Controls.Add(header, 0, 0);
 
-            var subHeader = new Label
-            {
-                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
-                Font = ReviewUi.SubtitleFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true,
-                Text = "Drawing: " + drawingName + "   |   Units: " + (string.IsNullOrEmpty(insertionUnits) ? "<unresolved>" : insertionUnits) + "   |   SHA256: " + Short(drawingSha256)
-            };
+            // drawing name and unit symbols are never localized; the full SHA-256 lives in the
+            // collapsed Technical Details section instead of dominating the header
+            subHeader.Dock = DockStyle.Fill;
+            subHeader.TextAlign = ContentAlignment.MiddleLeft;
+            subHeader.Font = ReviewUi.SubtitleFont;
+            subHeader.ForeColor = ReviewUi.Muted;
+            subHeader.BackColor = ReviewUi.Surface;
+            subHeader.AutoEllipsis = true;
+            subHeader.Text = ReviewStrings.Get("Placement_HeaderDrawing") + ": " + drawingName
+                + "   |   " + ReviewStrings.Get("Placement_HeaderUnits") + ": "
+                + (string.IsNullOrEmpty(insertionUnits) ? ReviewStrings.Get("Placement_ValueUnresolved") : insertionUnits);
             grid.Controls.Add(subHeader, 0, 1);
+
+            // the language selector names the language the engineer can switch to, so it always reads
+            // as an available action and never needs Windows or AutoCAD to be reconfigured
+            languageLink.Text = ReviewLocalization.SwitchLabel;
+            languageLink.Dock = DockStyle.Fill;
+            languageLink.TextAlign = ContentAlignment.MiddleCenter;
+            languageLink.Font = ReviewUi.CaptionFont;
+            languageLink.ForeColor = ReviewUi.Value;
+            languageLink.LinkColor = ReviewUi.Value;
+            languageLink.ActiveLinkColor = ReviewUi.Value;
+            languageLink.VisitedLinkColor = ReviewUi.Value;
+            languageLink.LinkBehavior = LinkBehavior.HoverUnderline;
+            languageLink.AccessibleName = "UiLanguage";
+            languageLink.LinkClicked += (s, e) => SwitchLanguage();
+            var tooltip = new ToolTip { AutoPopDelay = 8000 };
+            tooltip.SetToolTip(languageLink, ReviewStrings.Get("Placement_LanguageToolTip"));
+            grid.Controls.Add(languageLink, 1, 0);
+            grid.SetRowSpan(languageLink, 2);
 
             countBadge.Dock = DockStyle.Fill;
             countBadge.Font = ReviewUi.BadgeFont;
@@ -199,7 +361,7 @@ namespace EngiSentry.AutoCAD2021
             countBadge.ForeColor = ReviewUi.Pending;
             countBadge.Tint = ReviewUi.PendingTint;
             countBadge.Text = string.Empty;
-            grid.Controls.Add(countBadge, 1, 0);
+            grid.Controls.Add(countBadge, 2, 0);
             grid.SetRowSpan(countBadge, 2);
 
             var accent = new Panel { Dock = DockStyle.Left, Width = 3, BackColor = ReviewUi.Accent, Margin = new Padding(0, 24, 14, 24) };
@@ -216,34 +378,37 @@ namespace EngiSentry.AutoCAD2021
                 Padding = new Padding(0, 12, 0, 14)
             };
 
-            Card workItem = BuildWorkItemCard();
-            Card pickCard = BuildPickCard();
+            workItemCard = BuildWorkItemCard();
+            pickCard = BuildPickCard();
             Card questions = BuildQuestionsCard();
             Card decision = BuildDecisionCard();
             Card reviewer = BuildReviewerCard();
+            technicalCard = BuildTechnicalCard();
 
             // Docking claims edges in reverse add order, so the cards are added bottom-first to stack
             // top-down in workflow order: choose the case, capture the pick, answer the questions,
-            // record the decision, identify the reviewer.
+            // record the decision, identify the reviewer, then the collapsed technical reference.
+            technicalCard.Dock = DockStyle.Top;
             reviewer.Dock = DockStyle.Top;
             decision.Dock = DockStyle.Top;
             questions.Dock = DockStyle.Top;
             pickCard.Dock = DockStyle.Top;
-            workItem.Dock = DockStyle.Top;
+            workItemCard.Dock = DockStyle.Top;
+            scroll.Controls.Add(technicalCard);
             scroll.Controls.Add(reviewer);
             scroll.Controls.Add(decision);
             scroll.Controls.Add(questions);
             scroll.Controls.Add(pickCard);
-            scroll.Controls.Add(workItem);
+            scroll.Controls.Add(workItemCard);
             root.Controls.Add(scroll, 0, 1);
         }
 
         // ---- cards ----------------------------------------------------------------------------
 
-        // B. Work item / proposal: the queue on the left, the selected item's detail on the right.
+        // B. Equipment / Proposal: the queue on the left, the selected item's summary on the right.
         private Card BuildWorkItemCard()
         {
-            var card = new Card("Work item / proposal", null);
+            var card = new Card(ReviewStrings.Get("Placement_SectionEquipment"), null);
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(ListColumnBase)));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -256,43 +421,54 @@ namespace EngiSentry.AutoCAD2021
             placementList.ForeColor = ReviewUi.InputText;
             placementList.Font = ReviewUi.BodyFont;
             placementList.AccessibleName = "WorkItemList";
+            // the queue holds tags and identities: technical values that always read left-to-right
+            placementList.RightToLeft = RightToLeft.No;
             placementList.SelectedIndexChanged += (s, e) => { if (!loading) SelectWorkItem(placementList.SelectedIndex); };
-            grid.Controls.Add(ReviewStyle.FieldPair("Unresolved equipment / proposals", placementList, null, false), 0, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldQueue"), placementList, null, false), 0, 0);
 
-            selectionInfo.Dock = DockStyle.Fill;
-            selectionInfo.ReadOnly = true;
-            selectionInfo.AccessibleName = "SelectedItemDetail";
-            ReviewStyle.StyleTextBox(selectionInfo, ReviewUi.MonoFont, true);
-            // long proposal ids and 64-char SHA-256 values must stay readable without wrapping
-            selectionInfo.WordWrap = false;
-            selectionInfo.ScrollBars = ScrollBars.Both;
-            grid.Controls.Add(ReviewStyle.FieldPair("Selected item detail", selectionInfo, null, false), 1, 0);
+            tagLabel.Dock = DockStyle.Top;
+            tagLabel.Height = Scale(26);
+            tagLabel.TextAlign = ContentAlignment.MiddleLeft;
+            tagLabel.Font = ReviewUi.ValueFont;
+            tagLabel.ForeColor = ReviewUi.Text;
+            tagLabel.BackColor = ReviewUi.Surface;
+            tagLabel.AutoEllipsis = true;
+
+            summaryGrid.Dock = DockStyle.Fill;
+            summaryGrid.BackColor = ReviewUi.Surface;
+            summaryGrid.Margin = new Padding(0);
+
+            var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(26)));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            right.Controls.Add(tagLabel, 0, 0);
+            right.Controls.Add(summaryGrid, 0, 1);
+            grid.Controls.Add(right, 1, 0);
 
             card.Body.Controls.Add(grid);
-            card.Fit(Scale(WorkItemBodyBase));
+            card.Fit(Scale(158));
             return card;
         }
 
-        // C. Placement pick: the captured pick evidence plus the explicit pick actions.
+        // C. Placement Selection: the captured pick evidence plus the explicit pick actions.
         private Card BuildPickCard()
         {
-            var card = new Card("Placement pick", null);
+            var card = new Card(ReviewStrings.Get("Placement_SectionSelection"), null);
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(PickButtonRowBase)));
 
-            pickInfo.Dock = DockStyle.Fill;
-            pickInfo.ReadOnly = true;
-            pickInfo.AccessibleName = "CapturedPickEvidence";
-            ReviewStyle.StyleTextBox(pickInfo, ReviewUi.MonoFont, true);
-            pickInfo.WordWrap = false;
-            pickInfo.ScrollBars = ScrollBars.Both;
-            grid.Controls.Add(ReviewStyle.FieldPair("Captured pick evidence", pickInfo, null, false), 0, 0);
+            pickGrid.Dock = DockStyle.Fill;
+            pickGrid.BackColor = ReviewUi.Surface;
+            pickGrid.Margin = new Padding(0);
+            grid.Controls.Add(pickGrid, 0, 0);
 
             var pickButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, BackColor = ReviewUi.Surface, Margin = new Padding(0), Padding = new Padding(0) };
-            pickEntity.Text = "Pick Entity"; pickFreeSpace.Text = "Pick Free Space"; clearPick.Text = "Clear Pick";
+            pickEntity.Text = ReviewStrings.Get("Placement_ButtonPickEquipment");
+            pickFreeSpace.Text = ReviewStrings.Get("Placement_ButtonPickFreeSpace");
+            clearPick.Text = ReviewStrings.Get("Placement_ButtonClear");
             pickEntity.AccessibleName = "PickEntity"; pickFreeSpace.AccessibleName = "PickFreeSpace"; clearPick.AccessibleName = "ClearPick";
-            pickEntity.Width = Scale(112); pickFreeSpace.Width = Scale(140); clearPick.Width = Scale(100);
+            pickEntity.Width = Scale(180); pickFreeSpace.Width = Scale(180); clearPick.Width = Scale(150);
             pickEntity.Height = Scale(ButtonHeightBase); pickFreeSpace.Height = Scale(ButtonHeightBase); clearPick.Height = Scale(ButtonHeightBase);
             pickEntity.Margin = new Padding(0, 0, 8, 0); pickFreeSpace.Margin = new Padding(0, 0, 8, 0); clearPick.Margin = new Padding(0, 0, 0, 0);
             ReviewStyle.StyleButton(pickEntity, false);
@@ -300,22 +476,22 @@ namespace EngiSentry.AutoCAD2021
             ReviewStyle.StyleButton(clearPick, false);
             pickEntity.Click += (s, e) => DoPick(true);
             pickFreeSpace.Click += (s, e) => DoPick(false);
-            clearPick.Click += (s, e) => { pick = null; UpdatePickInfo(); UpdateSaveState(); };
+            clearPick.Click += (s, e) => { pick = null; UpdatePickInfo(); UpdateSummary(); UpdateTechnicalDetails(); UpdateSaveState(); ShowMessage(ReviewStrings.Get("Placement_StatusPickCleared"), false); };
             pickButtons.Controls.Add(pickEntity); pickButtons.Controls.Add(pickFreeSpace); pickButtons.Controls.Add(clearPick);
             grid.Controls.Add(pickButtons, 0, 1);
 
             card.Body.Controls.Add(grid);
-            card.Fit(Scale(PickBodyBase));
+            card.Fit(Scale(172));
             return card;
         }
 
         // D. Engineer review questions.
         private Card BuildQuestionsCard()
         {
-            var card = new Card("Engineer review questions", null);
+            var card = new Card(ReviewStrings.Get("Placement_SectionReview"), null);
             var requiredNote = new Label
             {
-                Text = "Fields marked * are required before a resolution can be saved.",
+                Text = ReviewStrings.Get("Placement_RequiredNote"),
                 Dock = DockStyle.Top, Height = 18, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true
             };
@@ -328,7 +504,7 @@ namespace EngiSentry.AutoCAD2021
         // E. Decision: Classification and Disposition are each given an explicit visible caption.
         private Card BuildDecisionCard()
         {
-            var card = new Card("Decision", null);
+            var card = new Card(ReviewStrings.Get("Placement_SectionDecision"), null);
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -339,16 +515,16 @@ namespace EngiSentry.AutoCAD2021
             classification.Items.AddRange(ProjectEngineerReviewClassifications.All.Cast<object>().ToArray());
             classification.SelectedIndex = 0;
             classification.SelectedIndexChanged += (s, e) => UpdateSaveState();
-            ReviewStyle.StyleCombo(classification, ReviewUi.BodyFont);
-            grid.Controls.Add(ReviewStyle.FieldPair("Classification", classification, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 0, 0);
+            StyleLocalizedCombo(classification, ReviewDisplayText.Classification);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldClassification"), classification, ReviewStyle.Chip(ReviewStrings.Get("Placement_ChipRequired"), ReviewUi.Required), false), 0, 0);
 
             proposalDisposition.AccessibleName = "PlacementProposalDisposition";
             proposalDisposition.Items.Add(string.Empty);
             proposalDisposition.Items.AddRange(new object[] { PlacementProposalDispositions.Approved, PlacementProposalDispositions.Rejected, PlacementProposalDispositions.Modified, PlacementProposalDispositions.Cancelled });
             proposalDisposition.SelectedIndex = 0;
             proposalDisposition.SelectedIndexChanged += (s, e) => UpdateSaveState();
-            ReviewStyle.StyleCombo(proposalDisposition, ReviewUi.BodyFont);
-            dispositionField = ReviewStyle.FieldPair("Disposition", proposalDisposition, ReviewStyle.Chip("PROPOSAL ONLY", ReviewUi.Optional), false);
+            StyleLocalizedCombo(proposalDisposition, ReviewDisplayText.Disposition);
+            dispositionField = ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldDisposition"), proposalDisposition, ReviewStyle.Chip(ReviewStrings.Get("Placement_ChipProposalOnly"), ReviewUi.Optional), false);
             dispositionField.Visible = false;
             grid.Controls.Add(dispositionField, 1, 0);
 
@@ -357,10 +533,10 @@ namespace EngiSentry.AutoCAD2021
             return card;
         }
 
-        // F. Reviewer: who is recording the resolution, and their comment.
+        // F. Reviewer: who is recording the decision, and their comment.
         private Card BuildReviewerCard()
         {
-            var card = new Card("Reviewer", null);
+            var card = new Card(ReviewStrings.Get("Placement_SectionReviewer"), null);
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -372,26 +548,72 @@ namespace EngiSentry.AutoCAD2021
             reviewerName.AccessibleName = "ReviewerDisplayName";
             reviewerName.TextChanged += (s, e) => UpdateSaveState();
             ReviewStyle.StyleTextBox(reviewerName, ReviewUi.BodyFont, false);
-            grid.Controls.Add(ReviewStyle.FieldPair("Reviewer name", reviewerName, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 0, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldReviewerName"), reviewerName, ReviewStyle.Chip(ReviewStrings.Get("Placement_ChipRequired"), ReviewUi.Required), false), 0, 0);
 
             reviewerRole.Dock = DockStyle.Fill;
             reviewerRole.MaxLength = 120;
             reviewerRole.AccessibleName = "ReviewerRole";
             reviewerRole.TextChanged += (s, e) => UpdateSaveState();
             ReviewStyle.StyleTextBox(reviewerRole, ReviewUi.BodyFont, false);
-            grid.Controls.Add(ReviewStyle.FieldPair("Role / title", reviewerRole, ReviewStyle.Chip("REQUIRED", ReviewUi.Required), false), 1, 0);
+            grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldReviewerRole"), reviewerRole, ReviewStyle.Chip(ReviewStrings.Get("Placement_ChipRequired"), ReviewUi.Required), false), 1, 0);
 
             comment.Dock = DockStyle.Fill;
             comment.AccessibleName = "EngineerComment";
             ReviewStyle.StyleTextBox(comment, ReviewUi.BodyFont, true);
             comment.ScrollBars = ScrollBars.Vertical;
-            var commentField = ReviewStyle.FieldPair("Engineer comment", comment, null, false);
+            var commentField = ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldComment"), comment, null, false);
             grid.Controls.Add(commentField, 0, 1);
             grid.SetColumnSpan(commentField, 2);
 
             card.Body.Controls.Add(grid);
             card.Fit(Scale(ReviewerBodyBase));
             return card;
+        }
+
+        // Technical Details: collapsed by default so the long identities, hashes and fingerprints
+        // never dominate the engineer flow. Fully accessible, selectable and always LTR.
+        private Card BuildTechnicalCard()
+        {
+            var card = new Card(ReviewStrings.Get("Placement_SectionTechnical"), null);
+            var stack = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            stack.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(TechnicalToggleRowBase)));
+            stack.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            technicalToggle.Dock = DockStyle.Left;
+            technicalToggle.Width = Scale(220);
+            technicalToggle.Height = Scale(ButtonHeightBase);
+            technicalToggle.AccessibleName = "TechnicalToggle";
+            technicalToggle.Text = ReviewStrings.Get("Placement_ButtonTechnicalShow");
+            ReviewStyle.StyleButton(technicalToggle, false);
+            technicalToggle.Click += (s, e) => SetTechnicalExpanded(!technicalExpanded);
+            stack.Controls.Add(technicalToggle, 0, 0);
+
+            technicalBody.Dock = DockStyle.Fill;
+            technicalBody.BackColor = ReviewUi.Surface;
+            technicalBody.AutoScroll = true;
+            technicalGrid.Dock = DockStyle.Top;
+            technicalGrid.BackColor = ReviewUi.Surface;
+            technicalGrid.Margin = new Padding(0);
+            technicalBody.Controls.Add(technicalGrid);
+            stack.Controls.Add(technicalBody, 0, 1);
+
+            card.Body.Controls.Add(stack);
+            technicalExpanded = false;
+            technicalBody.Visible = false;
+            card.Fit(Scale(TechnicalToggleRowBase));
+            return card;
+        }
+
+        private void SetTechnicalExpanded(bool expanded)
+        {
+            technicalExpanded = expanded;
+            if (technicalBody == null) return;
+            technicalBody.Visible = expanded;
+            if (technicalToggle != null)
+                technicalToggle.Text = ReviewStrings.Get(expanded ? "Placement_ButtonTechnicalHide" : "Placement_ButtonTechnicalShow");
+            if (technicalCard != null)
+                technicalCard.Fit(Scale(TechnicalToggleRowBase) + (expanded ? Scale(TechnicalBodyBase) : 0));
+            if (expanded) UpdateTechnicalDetails();
         }
 
         private Control BuildQuestions()
@@ -409,7 +631,7 @@ namespace EngiSentry.AutoCAD2021
                 questionsGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(QuestionRowHeightBase)));
                 questionsGrid.Controls.Add(new Label
                 {
-                    Text = (question.Required ? "* " : "  ") + question.Text,
+                    Text = (question.Required ? "* " : "  ") + ReviewDisplayText.Question(question),
                     Dock = DockStyle.Fill,
                     TextAlign = ContentAlignment.MiddleLeft,
                     Font = ReviewUi.BodyFont,
@@ -428,11 +650,13 @@ namespace EngiSentry.AutoCAD2021
                 else
                 {
                     var combo = new ComboBox { Dock = DockStyle.Fill, Tag = question.QuestionId, AccessibleName = question.QuestionId };
-                    ReviewStyle.StyleCombo(combo, ReviewUi.BodyFont);
                     combo.Items.Add(string.Empty);
                     foreach (string value in ProjectEngineerAnswerKinds.AllowedAnswers(question.AnswerKind)) combo.Items.Add(value);
                     combo.SelectedIndex = 0;
                     combo.SelectedIndexChanged += (s, e) => UpdateSaveState();
+                    // the combo holds the canonical answer tokens and persists exactly those; only the
+                    // painted entry is localized
+                    StyleLocalizedCombo(combo, ReviewDisplayText.Answer);
                     answer = combo;
                 }
                 questionsGrid.Controls.Add(answer, 1, i);
@@ -449,21 +673,22 @@ namespace EngiSentry.AutoCAD2021
                 Dock = DockStyle.Fill, BackColor = ReviewUi.Surface, TopLine = true,
                 Padding = new Padding(12, 8, 12, 8)
             };
-            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
-            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(34)));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(20)));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             var hint = new Label
             {
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
                 Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true,
-                Text = "Save is enabled only when the pick, the reviewer and the required answers are complete."
+                Text = ReviewStrings.Get("Placement_Hint")
             };
             grid.Controls.Add(hint, 0, 0);
 
-            save.Text = "Save Resolution";
+            save.Text = ReviewStrings.Get("Placement_ButtonRecord");
             save.Dock = DockStyle.Fill;
             save.Margin = new Padding(1);
             save.Padding = new Padding(0);
@@ -471,6 +696,19 @@ namespace EngiSentry.AutoCAD2021
             save.Click += (s, e) => SaveResolution();
             ReviewStyle.StyleButton(save, true);
             grid.Controls.Add(save, 1, 0);
+
+            // one concise helper that always reflects the actual missing requirement, derived from the
+            // same validation state the primary action uses — no second validation engine
+            whyLabel.Dock = DockStyle.Fill;
+            whyLabel.AutoEllipsis = true;
+            whyLabel.TextAlign = ContentAlignment.MiddleLeft;
+            whyLabel.Font = ReviewUi.CaptionFont;
+            whyLabel.ForeColor = ReviewUi.Muted;
+            whyLabel.BackColor = ReviewUi.Surface;
+            whyLabel.AccessibleName = "MissingRequirement";
+            whyLabel.Text = string.Empty;
+            grid.Controls.Add(whyLabel, 0, 1);
+            grid.SetColumnSpan(whyLabel, 2);
 
             message.Dock = DockStyle.Fill;
             message.AutoEllipsis = true;
@@ -480,11 +718,92 @@ namespace EngiSentry.AutoCAD2021
             message.BackColor = ReviewUi.Surface;
             message.Text = string.Empty;
             message.Severity = SeverityMessage.None;
-            grid.Controls.Add(message, 0, 1);
+            grid.Controls.Add(message, 0, 2);
             grid.SetColumnSpan(message, 2);
 
             host.Controls.Add(grid);
             root.Controls.Add(host, 0, 2);
+        }
+
+        // ---- localized combo styling ----------------------------------------------------------
+
+        // Drop-down styling with owner-drawn items: the item objects stay canonical (so selection,
+        // capture and persistence are byte-identical); only the painted entry runs through the
+        // display layer. This keeps the closed combo and its drop-down readable on the dark surface.
+        private static void StyleLocalizedCombo(ComboBox combo, Func<string, string> display)
+        {
+            ReviewStyle.StyleCombo(combo, ReviewUi.BodyFont);
+            // StyleCombo already hooks the raw painter; replace its effect with the localized one by
+            // painting after it (the localized text is drawn on top of the same background)
+            combo.DrawItem += (sender, e) =>
+            {
+                if (e.Index < 0 || e.Index >= combo.Items.Count) return;
+                ReviewStyle.PaintComboItem(combo, e, display(combo.Items[e.Index] as string));
+            };
+        }
+
+        // ---- grid helpers ---------------------------------------------------------------------
+
+        private void InitGrid(TableLayoutPanel grid)
+        {
+            grid.SuspendLayout();
+            var children = grid.Controls.Cast<Control>().ToList();
+            grid.Controls.Clear();
+            foreach (Control child in children) child.Dispose();
+            grid.ColumnStyles.Clear();
+            grid.RowStyles.Clear();
+            grid.RowCount = 0;
+            grid.ColumnCount = 2;
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(InfoCaptionWidthBase)));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            grid.ResumeLayout();
+        }
+
+        // A labelled read-only value: a localized caption beside a technical value that always reads
+        // left-to-right and stays selectable/copyable.
+        private void AddInfoRow(TableLayoutPanel grid, string caption, string value)
+        {
+            int row = grid.RowCount;
+            grid.RowCount = row + 1;
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(InfoRowBase)));
+            var captionLabel = new Label
+            {
+                Text = caption ?? string.Empty, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Caption, BackColor = grid.BackColor,
+                AutoEllipsis = true, Margin = new Padding(0, 0, 8, 0)
+            };
+            grid.Controls.Add(captionLabel, 0, row);
+            grid.Controls.Add(ValueControl(value), 1, row);
+        }
+
+        private static TextBox ValueControl(string value)
+        {
+            return new TextBox
+            {
+                Text = value ?? string.Empty,
+                ReadOnly = true,
+                BorderStyle = BorderStyle.None,
+                Multiline = false,
+                Dock = DockStyle.Fill,
+                Font = ReviewUi.MonoFont,
+                BackColor = ReviewUi.Surface,
+                ForeColor = ReviewUi.Value,
+                // technical values never mirror, even inside the RTL Persian surface
+                RightToLeft = RightToLeft.No,
+                AccessibleName = "TechnicalValue",
+                TabStop = false,
+                // a single-line TextBox derives its height from the font; the mono face is short, so
+                // a minimum keeps every value field at a usable, readable height
+                MinimumSize = new Size(40, 18),
+                Margin = new Padding(0, 2, 0, 2)
+            };
+        }
+
+        private static void ClearControls(Control container)
+        {
+            List<Control> children = container.Controls.Cast<Control>().ToList();
+            container.Controls.Clear();
+            foreach (Control child in children) child.Dispose();
         }
 
         // ---- state ----------------------------------------------------------------------------
@@ -493,11 +812,14 @@ namespace EngiSentry.AutoCAD2021
         {
             loading = true;
             placementList.Items.Clear();
-            foreach (EquipmentPlacement placement in unresolved) placementList.Items.Add(Label(placement));
+            foreach (EquipmentPlacement placement in unresolved) placementList.Items.Add(QueueLabel(placement));
             foreach (PlacementProposal proposal in proposals)
             {
+                // the queue line is a governed reference line: the disposition keeps its exact
+                // canonical token so the accepted P11.1 surface (and its acceptance evidence) is
+                // unchanged; only the leading marker is presented in the selected UI language
                 string state = dispositionService.GetStatus(proposal).Disposition;
-                placementList.Items.Add("PROPOSAL | " + proposal.NormalizedTag + " | " + state + " | " + proposal.ProposalId);
+                placementList.Items.Add(ReviewStrings.Get("Placement_ListProposal") + " | " + proposal.NormalizedTag + " | " + state + " | " + proposal.ProposalId);
             }
             loading = false;
             UpdateCountBadge();
@@ -507,12 +829,14 @@ namespace EngiSentry.AutoCAD2021
         private void UpdateCountBadge()
         {
             int open = placementList.Items.Count;
-            countBadge.Text = open == 1 ? "1 OPEN ITEM" : open + " OPEN ITEMS";
+            countBadge.Text = open == 1
+                ? ReviewStrings.Get("Placement_HeaderOpenItemOne")
+                : ReviewStrings.Format("Placement_HeaderOpenItemMany", open.ToString(CultureInfo.InvariantCulture));
             countBadge.ForeColor = open == 0 ? ReviewUi.Completed : ReviewUi.Pending;
             countBadge.Tint = open == 0 ? ReviewUi.CompletedTint : ReviewUi.PendingTint;
         }
 
-        private static string Label(EquipmentPlacement placement) =>
+        private static string QueueLabel(EquipmentPlacement placement) =>
             placement.NormalizedTag + "  |  " + placement.EquipmentEntityId + "  |  " + placement.PlacementStatus;
 
         private void SelectWorkItem(int index)
@@ -520,81 +844,146 @@ namespace EngiSentry.AutoCAD2021
             current = index >= 0 && index < unresolved.Count ? unresolved[index] : null;
             currentProposal = index >= unresolved.Count && index < unresolved.Count + proposals.Count ? proposals[index - unresolved.Count] : null;
             pick = null;
-            if (current != null) selectionInfo.Text = Describe(current);
-            else if (currentProposal != null) selectionInfo.Text = DescribeProposal(currentProposal, dispositionService.GetStatus(currentProposal));
-            else selectionInfo.Text = "No unresolved equipment placement or generated proposal is selected.";
             proposalDisposition.SelectedIndex = 0;
             proposalDisposition.Visible = currentProposal != null;
             if (dispositionField != null) dispositionField.Visible = currentProposal != null;
-            save.Text = currentProposal == null ? "Save Resolution" : "Record Disposition";
             UpdatePickInfo();
+            UpdateSummary();
+            UpdateTechnicalDetails();
             UpdateSaveState();
         }
 
-        private static string DescribeProposal(PlacementProposal proposal, PlacementProposalDispositionStatus status)
+        private void UpdateSummary()
         {
-            var text = new StringBuilder();
-            text.AppendLine("Generated proposal: " + proposal.ProposalId);
-            text.AppendLine("Disposition: " + status.Disposition);
-            text.AppendLine("Equipment: " + proposal.NormalizedTag + " | " + proposal.EquipmentEntityId);
-            text.AppendLine("Original point: " + proposal.OriginalEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.OriginalNorthing.ToString("R", CultureInfo.InvariantCulture));
-            text.AppendLine("Proposed point: " + proposal.ProposedEasting.ToString("R", CultureInfo.InvariantCulture) + ", " + proposal.ProposedNorthing.ToString("R", CultureInfo.InvariantCulture));
-            text.AppendLine("Generator: " + proposal.GeneratorIdentity + " | Units: " + proposal.InsertionUnits);
-            text.AppendLine("Proposal fingerprint: " + proposal.ProposalFingerprint);
-            text.AppendLine("Review required: " + (proposal.EngineeringReviewRequired ? "YES" : "NO"));
-            return text.ToString();
+            if (summaryGrid == null) return;
+            InitGrid(summaryGrid);
+            if (current != null)
+            {
+                tagLabel.Text = current.NormalizedTag;
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewStatus"), current.PlacementStatus);
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldOriginal"), PlacementLocation(current));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldProposed"), pick == null ? ReviewStrings.Get("Placement_ValueNone") : PickPoint(pick));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewRequired"), ReviewStrings.Get("Placement_ValueYes"));
+            }
+            else if (currentProposal != null)
+            {
+                PlacementProposalDispositionStatus status = dispositionService.GetStatus(currentProposal);
+                tagLabel.Text = currentProposal.NormalizedTag;
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewStatus"), ReviewDisplayText.Disposition(status.Disposition));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldOriginal"), Point(currentProposal.OriginalEasting, currentProposal.OriginalNorthing));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldProposed"), Point(currentProposal.ProposedEasting, currentProposal.ProposedNorthing));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewRequired"),
+                    ReviewStrings.Get(currentProposal.EngineeringReviewRequired ? "Placement_ValueYes" : "Placement_ValueNo"));
+            }
+            else
+            {
+                tagLabel.Text = ReviewStrings.Get("Placement_ValueNotSelected");
+            }
+            if (workItemCard != null) workItemCard.Fit(Scale(30) + Scale(summaryGrid.RowCount * InfoRowBase));
         }
 
-        private static string Describe(EquipmentPlacement placement)
+        private void UpdatePickInfo()
         {
-            var text = new StringBuilder();
-            text.AppendLine("Tag: " + placement.NormalizedTag);
-            text.AppendLine("Equipment identity: " + placement.EquipmentEntityId);
-            text.AppendLine("Placement: " + placement.PlacementId);
-            text.AppendLine("Status: " + placement.PlacementStatus);
-            text.AppendLine("Easting: " + placement.Easting.Status + "  |  Northing: " + placement.Northing.Status);
-            text.AppendLine("Centerline evidence: " + (placement.CenterlineEvidence?.Status ?? "<none>"));
-            text.AppendLine("Proximity candidates retained: E=" + (placement.Easting.Candidates?.Count ?? 0) + " N=" + (placement.Northing.Candidates?.Count ?? 0));
-            return text.ToString();
+            if (pickGrid == null) return;
+            InitGrid(pickGrid);
+            if (pick == null)
+            {
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_FieldPickEvidence"), ReviewStrings.Get("Placement_PickNone"));
+            }
+            else
+            {
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechPickSource"), pick.Source);
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechPickPoint"), PickPoint(pick));
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechHandle"), string.IsNullOrEmpty(pick.Handle) ? ReviewStrings.Get("Placement_ValueFreeSpace") : pick.Handle);
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechLayer"), string.IsNullOrEmpty(pick.Layer) ? ReviewStrings.Get("Placement_ValueFreeSpace") : pick.Layer);
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechStoredEasting"), Stored(EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX)));
+                AddInfoRow(pickGrid, ReviewStrings.Get("Placement_TechStoredNorthing"), Stored(EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointY)));
+            }
+            if (pickCard != null) pickCard.Fit(Scale(pickGrid.RowCount * InfoRowBase) + Scale(PickButtonRowBase) + Scale(8));
         }
+
+        private void UpdateTechnicalDetails()
+        {
+            if (technicalGrid == null) return;
+            InitGrid(technicalGrid);
+            AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechDrawingSha"), drawingSha256);
+            AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechDrawing"), drawingName);
+            AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechUnits"), string.IsNullOrEmpty(insertionUnits) ? ReviewStrings.Get("Placement_ValueUnresolved") : insertionUnits);
+            if (current != null)
+            {
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechPlacementId"), current.PlacementId);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechEntityId"), current.EquipmentEntityId);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechPlacementStatus"), current.PlacementStatus);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechEastingStatus"), current.Easting?.Status);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechNorthingStatus"), current.Northing?.Status);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechCenterline"), current.CenterlineEvidence?.Status ?? ReviewStrings.Get("Placement_ValueNone"));
+            }
+            if (currentProposal != null)
+            {
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechProposalId"), currentProposal.ProposalId);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechFingerprint"), currentProposal.ProposalFingerprint);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechEntityId"), currentProposal.EquipmentEntityId);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechGenerator"), currentProposal.GeneratorIdentity);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechOriginalPoint"), Point(currentProposal.OriginalEasting, currentProposal.OriginalNorthing));
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechProposedPoint"), Point(currentProposal.ProposedEasting, currentProposal.ProposedNorthing));
+            }
+            if (pick != null)
+            {
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechPickSource"), pick.Source);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechPickPoint"), PickPoint(pick));
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechHandle"), string.IsNullOrEmpty(pick.Handle) ? ReviewStrings.Get("Placement_ValueFreeSpace") : pick.Handle);
+                AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechLayer"), string.IsNullOrEmpty(pick.Layer) ? ReviewStrings.Get("Placement_ValueFreeSpace") : pick.Layer);
+            }
+            AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechResolutionId"), string.IsNullOrEmpty(lastResolutionId) ? ReviewStrings.Get("Placement_ValueNone") : lastResolutionId);
+            AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechDispositionId"), string.IsNullOrEmpty(lastDispositionId) ? ReviewStrings.Get("Placement_ValueNone") : lastDispositionId);
+            technicalGrid.Height = Scale(technicalGrid.RowCount * InfoRowBase);
+        }
+
+        private static string PlacementLocation(EquipmentPlacement placement) =>
+            "E/N: " + (placement.Easting?.Status ?? "?") + " / " + (placement.Northing?.Status ?? "?");
+
+        private static string Point(double easting, double northing) =>
+            easting.ToString("R", CultureInfo.InvariantCulture) + ", " + northing.ToString("R", CultureInfo.InvariantCulture);
+
+        private static string PickPoint(EquipmentPlacementPick captured) =>
+            EquipmentPlacementPickFormatting.Format(captured.PointX) + ", " + EquipmentPlacementPickFormatting.Format(captured.PointY);
+
+        private static string Stored(decimal? value) => value.HasValue ? EquipmentPlacementResolutionIdentity.CanonicalDecimal(value.Value) : ReviewStrings.Get("Placement_ValueUnresolved");
 
         private void DoPick(bool entity)
         {
-            if (current == null && (currentProposal == null || proposalDisposition.SelectedItem as string != PlacementProposalDispositions.Modified)) { ShowMessage("Select an unresolved placement or choose MODIFIED for a proposal first.", true); return; }
+            if (current == null && (currentProposal == null || proposalDisposition.SelectedItem as string != PlacementProposalDispositions.Modified))
+            {
+                ShowMessage(ReviewStrings.Get("Placement_ErrorSelectFirst"), true);
+                return;
+            }
             EquipmentPlacementPick result;
             try { result = entity ? pickProvider.PickEntity() : pickProvider.PickFreeSpace(); }
-            catch (Exception exception) { ShowMessage("Pick failed: " + exception.Message, true); return; }
-            if (result == null) { ShowMessage("Pick cancelled or invalid. Nothing was written.", true); return; }
+            catch (Exception exception) { ShowMessage(ReviewStrings.Format("Placement_ErrorPickFailed", exception.Message), true); return; }
+            if (result == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorPickCancelled"), true); return; }
             if (EquipmentPlacementPickFormatting.ToStoredDecimal(result.PointX) == null || EquipmentPlacementPickFormatting.ToStoredDecimal(result.PointY) == null)
             {
-                ShowMessage("Picked point is outside the supported coordinate range. Nothing was written.", true);
+                ShowMessage(ReviewStrings.Get("Placement_ErrorPickRange"), true);
                 pick = null;
                 UpdatePickInfo();
+                UpdateSummary();
+                UpdateTechnicalDetails();
                 UpdateSaveState();
                 return;
             }
             pick = result;
             UpdatePickInfo();
+            UpdateSummary();
+            UpdateTechnicalDetails();
             UpdateSaveState();
-            ShowMessage("Pick captured. Complete the review and save.", false);
+            ShowMessage(ReviewStrings.Get("Placement_StatusPickCaptured"), false);
         }
-
-        private void UpdatePickInfo()
-        {
-            if (pick == null) { pickInfo.Text = "No pick captured yet. Pick an entity or a free-space point."; return; }
-            var text = new StringBuilder();
-            text.AppendLine("Source: " + pick.Source);
-            text.AppendLine("WCS point: " + EquipmentPlacementPickFormatting.Format(pick.PointX) + ", " + EquipmentPlacementPickFormatting.Format(pick.PointY) + ", " + EquipmentPlacementPickFormatting.Format(pick.PointZ));
-            text.AppendLine("Proven handle: " + (string.IsNullOrEmpty(pick.Handle) ? "<none (free space)>" : pick.Handle));
-            text.AppendLine("Proven layer: " + (string.IsNullOrEmpty(pick.Layer) ? "<none (free space)>" : pick.Layer));
-            text.Append("Stored easting/northing: " + Stored(EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX)) + " / " + Stored(EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointY)));
-            pickInfo.Text = text.ToString();
-        }
-
-        private static string Stored(decimal? value) => value.HasValue ? EquipmentPlacementResolutionIdentity.CanonicalDecimal(value.Value) : "<out of range>";
 
         private void UpdateSaveState()
         {
+            // the readiness rule is unchanged from the accepted behaviour: it is only surfaced more
+            // clearly (the primary action stays readable in both states, and the reason it is
+            // disabled is stated inline)
             bool ready = (current != null ? pick != null : currentProposal != null && !string.IsNullOrWhiteSpace(proposalDisposition.SelectedItem as string))
                 && !string.IsNullOrWhiteSpace(reviewerName.Text)
                 && !string.IsNullOrWhiteSpace(reviewerRole.Text)
@@ -620,25 +1009,63 @@ namespace EngiSentry.AutoCAD2021
                 }
             }
             save.Enabled = ready;
+            if (whyLabel != null)
+            {
+                whyLabel.Text = ready ? ReviewStrings.Get("Placement_WhyReady") : MissingRequirement();
+                whyLabel.ForeColor = ready ? ReviewUi.Completed : ReviewUi.Muted;
+            }
+        }
+
+        // The first requirement that is still missing, derived from the same state the readiness rule
+        // above reads. It is a helper message only — it never gates anything on its own.
+        private string MissingRequirement()
+        {
+            if (current == null && currentProposal == null) return ReviewStrings.Get("Placement_WhySelect");
+            if (string.IsNullOrWhiteSpace(reviewerName.Text)) return ReviewStrings.Get("Placement_WhyReviewerName");
+            if (string.IsNullOrWhiteSpace(reviewerRole.Text)) return ReviewStrings.Get("Placement_WhyReviewerRole");
+            if (string.IsNullOrWhiteSpace(classification.SelectedItem as string)) return ReviewStrings.Get("Placement_WhyClassification");
+            if (current != null)
+            {
+                if (pick == null) return ReviewStrings.Get("Placement_WhyPick");
+            }
+            else
+            {
+                string action = proposalDisposition.SelectedItem as string;
+                if (string.IsNullOrWhiteSpace(action)) return ReviewStrings.Get("Placement_WhyDisposition");
+                bool needsPick = action == PlacementProposalDispositions.Modified;
+                if (needsPick != (pick != null)) return ReviewStrings.Get("Placement_WhyPick");
+                if (string.IsNullOrWhiteSpace(comment.Text)) return ReviewStrings.Get("Placement_WhyComment");
+                if (action == PlacementProposalDispositions.Approved
+                    && (!EquipmentPlacementPickFormatting.ToStoredDecimal(currentProposal.ProposedEasting).HasValue || !EquipmentPlacementPickFormatting.ToStoredDecimal(currentProposal.ProposedNorthing).HasValue))
+                    return ReviewStrings.Get("Placement_WhyProposalRange");
+            }
+            foreach (ProjectEngineerReviewQuestionDefinition question in EquipmentPlacementResolutionQuestions.All)
+            {
+                if (!question.Required) continue;
+                if (!answerControls.TryGetValue(question.QuestionId, out Control control)) return ReviewStrings.Get("Placement_WhyAnswers");
+                string value = control is ComboBox combo ? (combo.SelectedIndex > 0 ? (string)combo.SelectedItem : string.Empty) : control.Text;
+                if (string.IsNullOrWhiteSpace(value)) return ReviewStrings.Get("Placement_WhyAnswers");
+            }
+            return ReviewStrings.Get("Placement_WhyReady");
         }
 
         private void SaveResolution()
         {
             if (currentProposal != null) { SaveProposalDisposition(); return; }
-            if (current == null) { ShowMessage("Select an unresolved equipment placement first.", true); return; }
-            if (pick == null) { ShowMessage("Capture an explicit engineer pick before saving.", true); return; }
+            if (current == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoSelection"), true); return; }
+            if (pick == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoPick"), true); return; }
             decimal? easting = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX);
             decimal? northing = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointY);
-            if (!easting.HasValue || !northing.HasValue) { ShowMessage("The picked point is outside the supported coordinate range. Nothing was written.", true); return; }
-            if (string.IsNullOrWhiteSpace(drawingSha256)) { ShowMessage("The drawing hash is unavailable; save the drawing and re-run the command.", true); return; }
-            if (string.IsNullOrWhiteSpace(insertionUnits)) { ShowMessage("The drawing insertion units are unresolved; a resolution cannot be recorded.", true); return; }
+            if (!easting.HasValue || !northing.HasValue) { ShowMessage(ReviewStrings.Get("Placement_ErrorPickRange"), true); return; }
+            if (string.IsNullOrWhiteSpace(drawingSha256)) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoHash"), true); return; }
+            if (string.IsNullOrWhiteSpace(insertionUnits)) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoUnits"), true); return; }
 
             EquipmentPlacement target = current;
             DateTime responseTimestamp = DateTime.UtcNow;
             ProjectEngineerReviewRequest request = BuildRequest(target, pick, easting.Value, northing.Value, responseTimestamp);
             Dictionary<string, string> answers = CaptureAnswers();
             string incomplete = ProjectEngineerReviewService.FindIncompleteReason(request, reviewerName.Text, reviewerRole.Text, answers, classification.SelectedItem as string);
-            if (incomplete != null) { ShowMessage("Not saved: " + incomplete, true); return; }
+            if (incomplete != null) { ShowMessage(ReviewStrings.Format("Placement_ErrorNotSaved", ReviewDisplayText.Reason(incomplete)), true); return; }
 
             var response = new ProjectEngineerReviewResponse
             {
@@ -663,10 +1090,11 @@ namespace EngiSentry.AutoCAD2021
                     pick.Source, pick.Handle, pick.Layer, pick.PointX, pick.PointY, pick.PointZ,
                     request, response, DateTime.UtcNow);
                 resolutionService.Save(record);
+                lastResolutionId = record.ResolutionId;
             }
             catch (Exception exception)
             {
-                ShowMessage("Not saved: " + exception.Message, true);
+                ShowMessage(ReviewStrings.Format("Placement_ErrorNotSaved", exception.Message), true);
                 return;
             }
 
@@ -674,7 +1102,8 @@ namespace EngiSentry.AutoCAD2021
             // that identity leaves the queue — not just the one that was displayed.
             EquipmentPlacementResolutionQueue.RemoveForEntity(unresolved, target.EquipmentEntityId);
             RefreshPlacements();
-            ShowMessage("Resolution saved for " + target.NormalizedTag + ". A fresh plot-plan QA will mark it Complete.", false);
+            UpdateTechnicalDetails();
+            ShowMessage(ReviewStrings.Format("Placement_StatusResolutionSaved", target.NormalizedTag), false);
         }
 
         private void SaveProposalDisposition()
@@ -734,6 +1163,7 @@ namespace EngiSentry.AutoCAD2021
                     proposal, proposal.ProposalFingerprint, latest.ProposalFingerprint, action, selected,
                     comment.Text.Trim(), reviewerName.Text.Trim(), reviewerRole.Text.Trim(), currentStatus.CurrentRecordId,
                     request, response, DateTime.UtcNow);
+                lastDispositionId = disposition.RecordId;
                 if (action == PlacementProposalDispositions.Approved || action == PlacementProposalDispositions.Modified)
                 {
                     EquipmentPlacementResolutionRecord resolution = EquipmentPlacementResolutionBuilder.Build(
@@ -745,12 +1175,14 @@ namespace EngiSentry.AutoCAD2021
                         proposal.ProposalId, proposal.ProposalFingerprint, disposition.RecordId, selected.PlacementFingerprint);
                     PlacementProposalDispositionService.BindResolutionToDisposition(resolution, disposition);
                     resolutionService.Save(resolution);
+                    lastResolutionId = resolution.ResolutionId;
                 }
-                selectionInfo.Text = DescribeProposal(proposal, dispositionService.GetStatus(proposal));
+                UpdateSummary();
+                UpdateTechnicalDetails();
                 UpdateSaveState();
-                ShowMessage("Engineer disposition recorded: " + action + ".", false);
+                ShowMessage(ReviewStrings.Format("Placement_StatusDecisionRecorded", action), false);
             }
-            catch (Exception exception) { ShowMessage("Disposition not recorded: " + exception.Message, true); }
+            catch (Exception exception) { ShowMessage(ReviewStrings.Format("Placement_ErrorDispositionNotRecorded", exception.Message), true); }
         }
 
         private ProjectEngineerReviewRequest BuildProposalRequest(PlacementProposal proposal, string action, DateTime timestampUtc)
@@ -841,7 +1273,5 @@ namespace EngiSentry.AutoCAD2021
             // only selects the readable glyph/color, the message text stays machine-readable
             message.Severity = warning ? SeverityMessage.Warning : SeverityMessage.Success;
         }
-
-        private static string Short(string value) => string.IsNullOrEmpty(value) || value.Length <= 16 ? value : value.Substring(0, 16) + "...";
     }
 }

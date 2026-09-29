@@ -17,6 +17,12 @@ namespace EngiSentry.AutoCAD2021
     // typography, presented as a pinned app-style header, a single scrollable column of
     // bordered cards, and a pinned action bar with the primary Save Review action.
     //
+    // The surface is bilingual: every engineer-facing string comes from the shared ReviewStrings
+    // resources (English neutral / Persian fa), the header carries a language selector that
+    // switches live without restarting AutoCAD, and the choice is persisted per Windows user by
+    // ReviewUiPreferences. Technical values (hashes, IDs) always stay LTR inside the mirrored
+    // Persian layout.
+    //
     // Presentation only: this layer never changes the review questions, answer vocabularies,
     // classifications, persistence, governance, authority behavior, or review semantics. The
     // queue stays exactly the four governed P10.3 pilot cases, a review is still only stored on
@@ -203,6 +209,8 @@ namespace EngiSentry.AutoCAD2021
         private void SwitchLanguageDeferred()
         {
             ReviewLocalization.Toggle();
+            // the engineer's choice is remembered per Windows user so reopening the surface uses it
+            ReviewUiPreferences.Save(ReviewLocalization.Current);
             Rebuild();
         }
 

@@ -378,4 +378,312 @@
   <data name="ReasonUnsupportedClassification" xml:space="preserve">
     <value>Unsupported classification: </value>
   </data>
+  <!--
+    Engineer-facing strings for the ES_PLACEMENTRESOLVE equipment placement resolution surface.
+    Presentation only: the governed question texts, answer vocabularies, classifications,
+    dispositions and backend reasons stay exactly as upstream; these are the labels and messages the
+    surface shows around them.
+  -->
+  <data name="Placement_AppTitle" xml:space="preserve">
+    <value>Equipment Placement Resolution</value>
+  </data>
+  <data name="Placement_AppSubtitle" xml:space="preserve">
+    <value>Human engineer placement confirmation only</value>
+  </data>
+  <data name="Placement_LanguageToolTip" xml:space="preserve">
+    <value>Switch the interface language (English / فارسی).</value>
+  </data>
+  <data name="Placement_HeaderDrawing" xml:space="preserve">
+    <value>Drawing</value>
+  </data>
+  <data name="Placement_HeaderUnits" xml:space="preserve">
+    <value>Units</value>
+  </data>
+  <data name="Placement_HeaderOpenItemOne" xml:space="preserve">
+    <value>1 Open Item</value>
+  </data>
+  <data name="Placement_HeaderOpenItemMany" xml:space="preserve">
+    <value>{0} Open Items</value>
+  </data>
+  <data name="Placement_SectionEquipment" xml:space="preserve">
+    <value>Equipment / Proposal</value>
+  </data>
+  <data name="Placement_SectionSelection" xml:space="preserve">
+    <value>Placement Selection</value>
+  </data>
+  <data name="Placement_SectionReview" xml:space="preserve">
+    <value>Engineer Review</value>
+  </data>
+  <data name="Placement_SectionDecision" xml:space="preserve">
+    <value>Decision</value>
+  </data>
+  <data name="Placement_SectionReviewer" xml:space="preserve">
+    <value>Reviewer</value>
+  </data>
+  <data name="Placement_SectionTechnical" xml:space="preserve">
+    <value>Technical Details</value>
+  </data>
+  <data name="Placement_FieldQueue" xml:space="preserve">
+    <value>Unresolved equipment / proposals</value>
+  </data>
+  <data name="Placement_FieldTag" xml:space="preserve">
+    <value>Equipment</value>
+  </data>
+  <data name="Placement_FieldReviewStatus" xml:space="preserve">
+    <value>Review status</value>
+  </data>
+  <data name="Placement_FieldOriginal" xml:space="preserve">
+    <value>Original location</value>
+  </data>
+  <data name="Placement_FieldProposed" xml:space="preserve">
+    <value>Proposed location</value>
+  </data>
+  <data name="Placement_FieldReviewRequired" xml:space="preserve">
+    <value>Review required</value>
+  </data>
+  <data name="Placement_ValueNotSelected" xml:space="preserve">
+    <value>&lt;not selected&gt;</value>
+  </data>
+  <data name="Placement_ValueNone" xml:space="preserve">
+    <value>&lt;none&gt;</value>
+  </data>
+  <data name="Placement_ValueUnresolved" xml:space="preserve">
+    <value>&lt;unresolved&gt;</value>
+  </data>
+  <data name="Placement_ValueFreeSpace" xml:space="preserve">
+    <value>&lt;none (free space)&gt;</value>
+  </data>
+  <data name="Placement_ValueYes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="Placement_ValueNo" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="Placement_ListProposal" xml:space="preserve">
+    <value>PROPOSAL</value>
+  </data>
+  <data name="Placement_NoSelection" xml:space="preserve">
+    <value>No unresolved equipment placement or generated proposal is selected.</value>
+  </data>
+  <data name="Placement_FieldPickEvidence" xml:space="preserve">
+    <value>Captured pick evidence</value>
+  </data>
+  <data name="Placement_PickNone" xml:space="preserve">
+    <value>No pick captured yet. Pick equipment or a free-space point.</value>
+  </data>
+  <data name="Placement_ButtonPickEquipment" xml:space="preserve">
+    <value>Pick Equipment</value>
+  </data>
+  <data name="Placement_ButtonPickFreeSpace" xml:space="preserve">
+    <value>Pick Free-Space Point</value>
+  </data>
+  <data name="Placement_ButtonClear" xml:space="preserve">
+    <value>Clear Selection</value>
+  </data>
+  <data name="Placement_TechPickSource" xml:space="preserve">
+    <value>Pick source</value>
+  </data>
+  <data name="Placement_TechPickPoint" xml:space="preserve">
+    <value>Picked WCS point</value>
+  </data>
+  <data name="Placement_TechHandle" xml:space="preserve">
+    <value>Proven handle</value>
+  </data>
+  <data name="Placement_TechLayer" xml:space="preserve">
+    <value>Proven layer</value>
+  </data>
+  <data name="Placement_TechStoredEasting" xml:space="preserve">
+    <value>Stored easting</value>
+  </data>
+  <data name="Placement_TechStoredNorthing" xml:space="preserve">
+    <value>Stored northing</value>
+  </data>
+  <data name="Placement_RequiredNote" xml:space="preserve">
+    <value>Fields marked * are required before a decision can be recorded.</value>
+  </data>
+  <data name="Placement_FieldClassification" xml:space="preserve">
+    <value>Classification</value>
+  </data>
+  <data name="Placement_FieldDisposition" xml:space="preserve">
+    <value>Disposition</value>
+  </data>
+  <data name="Placement_ChipRequired" xml:space="preserve">
+    <value>REQUIRED</value>
+  </data>
+  <data name="Placement_ChipProposalOnly" xml:space="preserve">
+    <value>PROPOSAL ONLY</value>
+  </data>
+  <data name="Placement_FieldReviewerName" xml:space="preserve">
+    <value>Reviewer name</value>
+  </data>
+  <data name="Placement_FieldReviewerRole" xml:space="preserve">
+    <value>Role / title</value>
+  </data>
+  <data name="Placement_FieldComment" xml:space="preserve">
+    <value>Engineer comment</value>
+  </data>
+  <data name="Placement_ButtonRecord" xml:space="preserve">
+    <value>Record Decision</value>
+  </data>
+  <data name="Placement_Hint" xml:space="preserve">
+    <value>Record Decision is enabled only when the selection, the reviewer and the required answers are complete.</value>
+  </data>
+  <data name="Placement_WhyReady" xml:space="preserve">
+    <value>Ready to record.</value>
+  </data>
+  <data name="Placement_WhySelect" xml:space="preserve">
+    <value>Select an unresolved placement or a generated proposal.</value>
+  </data>
+  <data name="Placement_WhyPick" xml:space="preserve">
+    <value>Capture a placement pick.</value>
+  </data>
+  <data name="Placement_WhyAnswers" xml:space="preserve">
+    <value>Answer every required question.</value>
+  </data>
+  <data name="Placement_WhyReviewerName" xml:space="preserve">
+    <value>Enter the reviewer name.</value>
+  </data>
+  <data name="Placement_WhyReviewerRole" xml:space="preserve">
+    <value>Enter the reviewer role / title.</value>
+  </data>
+  <data name="Placement_WhyClassification" xml:space="preserve">
+    <value>Choose a classification.</value>
+  </data>
+  <data name="Placement_WhyDisposition" xml:space="preserve">
+    <value>Choose a disposition for the proposal.</value>
+  </data>
+  <data name="Placement_WhyComment" xml:space="preserve">
+    <value>Enter a comment for this disposition.</value>
+  </data>
+  <data name="Placement_WhyProposalRange" xml:space="preserve">
+    <value>The proposed point is outside the supported coordinate range.</value>
+  </data>
+  <data name="Placement_ButtonTechnicalShow" xml:space="preserve">
+    <value>Show Technical Details</value>
+  </data>
+  <data name="Placement_ButtonTechnicalHide" xml:space="preserve">
+    <value>Hide Technical Details</value>
+  </data>
+  <data name="Placement_TechDrawingSha" xml:space="preserve">
+    <value>Drawing SHA-256</value>
+  </data>
+  <data name="Placement_TechDrawing" xml:space="preserve">
+    <value>Drawing</value>
+  </data>
+  <data name="Placement_TechUnits" xml:space="preserve">
+    <value>Insertion units</value>
+  </data>
+  <data name="Placement_TechPlacementId" xml:space="preserve">
+    <value>Placement ID</value>
+  </data>
+  <data name="Placement_TechEntityId" xml:space="preserve">
+    <value>Equipment identity</value>
+  </data>
+  <data name="Placement_TechProposalId" xml:space="preserve">
+    <value>Proposal ID</value>
+  </data>
+  <data name="Placement_TechFingerprint" xml:space="preserve">
+    <value>Proposal fingerprint</value>
+  </data>
+  <data name="Placement_TechGenerator" xml:space="preserve">
+    <value>Generator</value>
+  </data>
+  <data name="Placement_TechOriginalPoint" xml:space="preserve">
+    <value>Original point</value>
+  </data>
+  <data name="Placement_TechProposedPoint" xml:space="preserve">
+    <value>Proposed point</value>
+  </data>
+  <data name="Placement_TechResolutionId" xml:space="preserve">
+    <value>Resolution ID</value>
+  </data>
+  <data name="Placement_TechDispositionId" xml:space="preserve">
+    <value>Disposition record ID</value>
+  </data>
+  <data name="Placement_TechEastingStatus" xml:space="preserve">
+    <value>Easting status</value>
+  </data>
+  <data name="Placement_TechNorthingStatus" xml:space="preserve">
+    <value>Northing status</value>
+  </data>
+  <data name="Placement_TechCenterline" xml:space="preserve">
+    <value>Centerline evidence</value>
+  </data>
+  <data name="Placement_TechPlacementStatus" xml:space="preserve">
+    <value>Placement status</value>
+  </data>
+  <data name="Placement_StatusPickCaptured" xml:space="preserve">
+    <value>Pick captured. Complete the review and record the decision.</value>
+  </data>
+  <data name="Placement_StatusPickCleared" xml:space="preserve">
+    <value>Selection cleared.</value>
+  </data>
+  <data name="Placement_StatusDecisionRecorded" xml:space="preserve">
+    <value>Engineer disposition recorded: {0}.</value>
+  </data>
+  <data name="Placement_StatusResolutionSaved" xml:space="preserve">
+    <value>Resolution saved for {0}. A fresh plot-plan QA will mark it Complete.</value>
+  </data>
+  <data name="Placement_ErrorSelectFirst" xml:space="preserve">
+    <value>Select an unresolved placement or choose MODIFIED for a proposal first.</value>
+  </data>
+  <data name="Placement_ErrorPickCancelled" xml:space="preserve">
+    <value>Pick cancelled or invalid. Nothing was written.</value>
+  </data>
+  <data name="Placement_ErrorPickRange" xml:space="preserve">
+    <value>Picked point is outside the supported coordinate range. Nothing was written.</value>
+  </data>
+  <data name="Placement_ErrorPickFailed" xml:space="preserve">
+    <value>Pick failed: {0}</value>
+  </data>
+  <data name="Placement_ErrorNoPick" xml:space="preserve">
+    <value>Capture an explicit engineer pick before saving.</value>
+  </data>
+  <data name="Placement_ErrorNoHash" xml:space="preserve">
+    <value>The drawing hash is unavailable; save the drawing and re-run the command.</value>
+  </data>
+  <data name="Placement_ErrorNoUnits" xml:space="preserve">
+    <value>The drawing insertion units are unresolved; a decision cannot be recorded.</value>
+  </data>
+  <data name="Placement_ErrorNoSelection" xml:space="preserve">
+    <value>Select an unresolved equipment placement first.</value>
+  </data>
+  <data name="Placement_ErrorNotSaved" xml:space="preserve">
+    <value>Not saved: {0}</value>
+  </data>
+  <data name="Placement_ErrorDispositionNotRecorded" xml:space="preserve">
+    <value>Disposition not recorded: {0}</value>
+  </data>
+  <!--
+    Friendly display text for the governed placement-proposal dispositions. Applied in BOTH
+    languages (unlike the identity-mapped review vocabulary), so the neutral entries hold the
+    English display text while the canonical token is never replaced where it is stored or matched.
+  -->
+  <data name="Disposition_PENDING_REVIEW" xml:space="preserve">
+    <value>Pending review</value>
+  </data>
+  <data name="Disposition_APPROVED" xml:space="preserve">
+    <value>Approved</value>
+  </data>
+  <data name="Disposition_REJECTED" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="Disposition_MODIFIED" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="Disposition_SUPERSEDED" xml:space="preserve">
+    <value>Superseded</value>
+  </data>
+  <data name="Disposition_CANCELLED" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="Question_placement_point_matches_equipment" xml:space="preserve">
+    <value>Picked point is the equipment location</value>
+  </data>
+  <data name="Question_placement_axes_correct" xml:space="preserve">
+    <value>Easting/Northing axes are correct</value>
+  </data>
+  <data name="Question_placement_units_confirmed" xml:space="preserve">
+    <value>Drawing units confirmed for this coordinate</value>
+  </data>
 </root>
