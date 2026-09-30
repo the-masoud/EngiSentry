@@ -108,7 +108,9 @@ namespace EngiSentry.AutoCAD2021
             previous = new Button();
             next = new Button();
             nextPending = new Button();
-            save = new Button();
+            // the primary action can be disabled (e.g. a completed case), so it is an owner-drawn
+            // action button whose disabled caption stays clearly readable on the dark card
+            save = new ReviewActionButton();
             languageLink = new LinkLabel();
             message = new SeverityMessage();
         }

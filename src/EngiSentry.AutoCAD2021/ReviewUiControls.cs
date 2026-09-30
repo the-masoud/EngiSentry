@@ -185,9 +185,110 @@ namespace EngiSentry.AutoCAD2021
         }
     }
 
+    /// <summary>Action button whose disabled caption stays clearly readable. A plain WinForms
+    /// <see cref="Button"/> paints its disabled caption through <c>ControlPaint.DrawStringDisabled</c>,
+    /// which ignores <c>ForeColor</c> and blends the text toward the surface — on the dark card that
+    /// washes the caption out (the reported <c>ثبت تصمیم</c> case). This button draws its own disabled
+    /// face (card surface + hairline edge + the readable disabled caption colour) while leaving the
+    /// enabled face to the base button, so hover/press feedback and the accent surface are unchanged.
+    /// Presentation only: it carries no behaviour and reuses the shared ReviewUi palette.</summary>
+    internal sealed class ReviewActionButton : Button
+    {
+        // the exact colour the disabled caption is painted with; the enabled caption is the base
+        // button's own (white on the accent surface)
+        internal Color DisabledCaptionColor => ReviewUi.DisabledText;
+
+        public ReviewActionButton()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs pevent)
+        {
+            if (Enabled)
+            {
+                // enabled rendering (accent surface, border, hover/press, focus) is the base button's
+                base.OnPaint(pevent);
+                return;
+            }
+
+            // disabled: keep the button reading as a disabled action (no accent surface) but paint the
+            // caption with the readable disabled colour instead of the faded DrawStringDisabled blend
+            Graphics g = pevent.Graphics;
+            var bounds = new Rectangle(0, 0, Math.Max(0, Width - 1), Math.Max(0, Height - 1));
+            using (var back = new SolidBrush(ReviewUi.Card)) g.FillRectangle(back, bounds);
+            using (var edge = new Pen(ReviewUi.Border)) g.DrawRectangle(edge, bounds);
+            TextFormatFlags flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+                | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            if (RightToLeft == RightToLeft.Yes) flags |= TextFormatFlags.RightToLeft;
+            TextRenderer.DrawText(g, Text, Font, bounds, DisabledCaptionColor, flags);
+        }
+    }
+
+    /// <summary>Hosts a card's form content and gives it a reasonable responsive maximum width: on a
+    /// wide window the content stops growing after the shared maximum and the leftover space stays
+    /// empty, while on a narrow window the content shrinks with the card so no required field is ever
+    /// clipped. The content always hugs the leading edge (left in LTR, right in RTL) so the form stays
+    /// grouped with its captions. Presentation only: it only positions its single child.</summary>
+    internal sealed class FormContentHost : Panel
+    {
+        private readonly int maxWidth;
+        private bool laying;
+
+        internal FormContentHost(int maxWidth)
+        {
+            this.maxWidth = maxWidth;
+            Dock = DockStyle.Fill;
+            BackColor = ReviewUi.Surface;
+        }
+
+        // the responsive maximum content width (device pixels) this host enforces
+        internal int MaxWidth => maxWidth;
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            if (laying)
+            {
+                base.OnLayout(levent);
+                return;
+            }
+            laying = true;
+            try
+            {
+                base.OnLayout(levent);
+                if (Controls.Count == 0) return;
+                Control content = Controls[0];
+                int available = ClientSize.Width;
+                int width = maxWidth > 0 ? Math.Min(available, maxWidth) : available;
+                width = Math.Max(0, width);
+                int x = RightToLeft == RightToLeft.Yes ? Math.Max(0, available - width) : 0;
+                content.Bounds = new Rectangle(x, 0, width, ClientSize.Height);
+            }
+            finally { laying = false; }
+        }
+    }
+
     /// <summary>Stateless layout and control-styling helpers shared by the engineer-facing surfaces.</summary>
     internal static class ReviewStyle
     {
+        // A reasonable responsive maximum content width for a card's form: a wide window stops the
+        // fields from stretching across the whole card, while a narrower card still shrinks them. The
+        // value is a base (96 DPI) metric; callers pass it through the surface's Scale() so the form
+        // keeps its proportions on a high-DPI display.
+        internal const int FormContentMaxWidthBase = 600;
+
+        // Wraps a card's form grid in the shared bounded host so its fields stay grouped near their
+        // captions and stop growing past the shared maximum width. The host keeps the content at the
+        // leading edge and shrinks it with the card, so a narrow window never clips a required field.
+        internal static Control BoundedContent(Control content, int maxWidth)
+        {
+            if (content == null) return null;
+            content.Dock = DockStyle.None;
+            var host = new FormContentHost(maxWidth);
+            host.Controls.Add(content);
+            return host;
+        }
+
         // A labelled field: an always-visible caption above a full-width input, with an optional
         // right-aligned chip (required marker, character count) on the caption row. The caption is
         // what makes an otherwise ambiguous control self-describing, so it is never omitted.
@@ -237,6 +338,10 @@ namespace EngiSentry.AutoCAD2021
             return chip;
         }
 
+        // Applies the one shared button styling to any Button. A button that can be disabled should be
+        // created as a ReviewActionButton so its disabled caption is drawn with the readable disabled
+        // colour instead of the base button's faded DrawStringDisabled blend; an ordinary Button is
+        // still styled correctly for the enabled state.
         internal static void StyleButton(Button button, bool primary)
         {
             button.FlatStyle = FlatStyle.Flat;

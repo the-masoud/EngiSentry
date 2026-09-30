@@ -421,6 +421,9 @@ namespace EngiSentry.Tests
             AssertDecisionFieldAssociation(english);
             AssertProposalRowDisplay(english, proposal, "en");
             AssertPrimaryActionAtRightEnd(english);
+            AssertDisabledPrimaryActionReadable(english, "en");
+            AssertFieldWidthBounded(english, "en");
+            AssertFieldWidthRespondsToWindow(english);
             english.Dispose();
 
             ReviewLocalization.Apply(CultureInfo.GetCultureInfo("fa"));
@@ -430,10 +433,91 @@ namespace EngiSentry.Tests
             AssertDecisionFieldAssociation(persian);
             AssertProposalRowDisplay(persian, proposal, "fa");
             AssertPrimaryActionAtRightEnd(persian);
+            AssertDisabledPrimaryActionReadable(persian, "fa");
+            AssertFieldWidthBounded(persian, "fa");
+            AssertFieldWidthRespondsToWindow(persian);
             AssertCanonicalProposalIdInTechnicalDetails(persian, proposal);
             persian.Dispose();
 
             ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
+        }
+
+        // Issue A: the disabled primary action must stay clearly readable. A plain WinForms Button
+        // would paint its disabled caption with the faded DrawStringDisabled blend, so the readable
+        // path is proven structurally (the owner-drawn action button + its disabled caption colour),
+        // never by an exact pixel or RGB-literal comparison, and the enabled state must keep the
+        // accent surface so a disabled action never looks enabled.
+        private static void AssertDisabledPrimaryActionReadable(Control control, string language)
+        {
+            Button save = Descendants(control).OfType<Button>().Single(b => b.AccessibleName == "SaveResolution");
+            Assert(save is ReviewActionButton,
+                "The primary action must use the readable owner-drawn disabled path (" + language + "). Actual: " + save.GetType().Name);
+            var action = (ReviewActionButton)save;
+            Assert(action.DisabledCaptionColor.GetBrightness() >= 0.6f,
+                "The disabled primary-action caption colour must stay clearly readable (" + language + "). Brightness: " + action.DisabledCaptionColor.GetBrightness());
+            Assert(action.DisabledCaptionColor.GetBrightness() > ReviewUi.Background.GetBrightness() + 0.3f,
+                "The disabled caption must be a light colour against the dark surface (" + language + ").");
+
+            save.Enabled = false;
+            Assert(save.ForeColor.GetBrightness() >= 0.6f && save.BackColor.GetBrightness() < 0.6f,
+                "A disabled primary action must stay readable and on the dark surface (" + language + ").");
+            save.Enabled = true;
+            Assert(save.BackColor == ReviewUi.Primary && save.ForeColor.GetBrightness() >= 0.9f,
+                "An enabled primary action must keep its accent surface and readable caption (" + language + ").");
+            save.Enabled = false;
+            Assert(save.BackColor != ReviewUi.Primary,
+                "A disabled primary action must not look enabled (" + language + ").");
+        }
+
+        // Issue 2: the Decision and Reviewer fields are each bounded by the shared form-width rule, so
+        // they stop growing past a reasonable width instead of stretching across the whole card.
+        private static void AssertFieldWidthBounded(Control control, string language)
+        {
+            foreach (string field in new[] { "Classification", "ReviewerDisplayName" })
+            {
+                FormContentHost host = FormHostOf(control, field);
+                Assert(host != null,
+                    "The form for '" + field + "' must be bounded by the shared width rule (" + language + ").");
+                Assert(host.MaxWidth >= ReviewStyle.FormContentMaxWidthBase && host.MaxWidth <= ReviewStyle.FormContentMaxWidthBase * 3,
+                    "The bounded form width for '" + field + "' must be a finite, reasonable value (" + language + "). Actual: " + host.MaxWidth);
+                Assert(host.Controls.Count == 1 && host.Controls[0] is TableLayoutPanel,
+                    "The bounded host must wrap the form grid for '" + field + "' (" + language + ").");
+            }
+        }
+
+        // Issue 2: a wide window stops the fields from growing (bounded by the shared maximum, and
+        // narrower than the card), while a narrow window shrinks them with the card so no required
+        // field is clipped.
+        private static void AssertFieldWidthRespondsToWindow(Control control)
+        {
+            FormContentHost host = FormHostOf(control, "Classification");
+            TableLayoutPanel form = (TableLayoutPanel)host.Controls[0];
+
+            control.Size = new System.Drawing.Size(2000, 960);
+            PerformLayout(control);
+            int wide = form.Width;
+            Control cardBody = host.Parent;
+            Assert(wide > 0, "The decision form must lay out at a wide window.");
+            Assert(wide <= host.MaxWidth,
+                "The decision form must stop growing at the shared maximum width. width=" + wide + " max=" + host.MaxWidth);
+            Assert(cardBody != null && wide < cardBody.Width,
+                "The decision form must not stretch across the whole card. form=" + wide + " card=" + (cardBody == null ? -1 : cardBody.Width));
+
+            control.Size = new System.Drawing.Size(360, 960);
+            PerformLayout(control);
+            Assert(form.Width > 0, "The decision form must stay usable at a narrow window.");
+            Assert(form.Width <= host.ClientSize.Width, "The decision form must fit its host at a narrow window.");
+            ComboBox classification = Combo(control, "Classification");
+            Assert(classification.Width > 0, "A required decision field must not clip to zero width at a narrow window.");
+            Assert(classification.Width <= host.ClientSize.Width, "A decision field must not overflow its bounded host at a narrow window.");
+        }
+
+        private static FormContentHost FormHostOf(Control control, string accessibleName)
+        {
+            Control field = Descendants(control).First(c => c.AccessibleName == accessibleName);
+            for (Control parent = field.Parent; parent != null; parent = parent.Parent)
+                if (parent is FormContentHost host) return host;
+            return null;
         }
 
         // The summary value stays beside its caption instead of drifting to the opposite card edge:

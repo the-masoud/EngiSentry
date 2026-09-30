@@ -170,7 +170,9 @@ namespace EngiSentry.AutoCAD2021
             classification = new ComboBox();
             proposalDisposition = new ComboBox();
             comment = new TextBox();
-            save = new Button();
+            // the primary action starts (and stays) disabled until a decision is complete, so it is an
+            // owner-drawn action button whose disabled caption stays clearly readable on the dark card
+            save = new ReviewActionButton();
             technicalToggle = new Button();
             technicalBody = new Panel();
             technicalGrid = new TableLayoutPanel();
@@ -536,7 +538,9 @@ namespace EngiSentry.AutoCAD2021
             dispositionField.Visible = false;
             grid.Controls.Add(dispositionField, 1, 0);
 
-            card.Body.Controls.Add(grid);
+            // the decision fields stay grouped near their captions and stop growing past the shared
+            // maximum content width, so a wide window no longer stretches them across the whole card
+            card.Body.Controls.Add(ReviewStyle.BoundedContent(grid, Scale(ReviewStyle.FormContentMaxWidthBase)));
             card.Fit(Scale(DecisionBodyBase));
             return card;
         }
@@ -573,7 +577,9 @@ namespace EngiSentry.AutoCAD2021
             grid.Controls.Add(commentField, 0, 1);
             grid.SetColumnSpan(commentField, 2);
 
-            card.Body.Controls.Add(grid);
+            // the reviewer fields share the same bounded form width as the decision fields so the two
+            // cards read as one consistent engineering form instead of stretching on a wide window
+            card.Body.Controls.Add(ReviewStyle.BoundedContent(grid, Scale(ReviewStyle.FormContentMaxWidthBase)));
             card.Fit(Scale(ReviewerBodyBase));
             return card;
         }
