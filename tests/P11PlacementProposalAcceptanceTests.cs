@@ -160,9 +160,15 @@ namespace EngiSentry.Tests
                     try
                     {
                         Assert(control.UnresolvedCount == 0, "The fixture equipment is already Complete and must not appear as an unresolved case.");
-                        string item = PlacementListItems(control).FirstOrDefault(x => x.IndexOf(generated.ProposalId!, StringComparison.Ordinal) >= 0) ?? string.Empty;
-                        Assert(!string.IsNullOrEmpty(item), "The generated proposal did not appear in the real ES_PLACEMENTRESOLVE palette surface.");
-                        Assert(item.IndexOf(PlacementProposalDispositions.PendingReview, StringComparison.Ordinal) >= 0, "The proposal did not appear as PENDING_REVIEW: " + item);
+                        // The generated proposal is the only queued row. The engineer-facing row shows the
+                        // localized marker and the friendly disposition display text; the raw proposal
+                        // identity lives under Technical Details, not in the normal list row.
+                        List<string> items = PlacementListItems(control).ToList();
+                        Assert(items.Count == 1, "The generated proposal did not appear in the real ES_PLACEMENTRESOLVE palette surface. Actual rows: " + items.Count);
+                        string item = items[0];
+                        Assert(item.IndexOf(generated.ProposalId!, StringComparison.Ordinal) < 0, "The raw proposal identity must not appear in the normal list row: " + item);
+                        Assert(item.IndexOf(ReviewDisplayText.Disposition(PlacementProposalDispositions.PendingReview), StringComparison.Ordinal) >= 0,
+                            "The proposal did not appear with its friendly pending-review display text: " + item);
 
                         // 2. CANCEL: the engineer abandons the operation without recording a decision.
                         control.Dispose();

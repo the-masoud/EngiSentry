@@ -511,6 +511,10 @@ namespace EngiSentry.AutoCAD2021
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             classification.AccessibleName = "Classification";
+            // the combo fills its labelled field so it can never sit on the far side of the card
+            classification.Dock = DockStyle.Top;
+            classification.Height = Scale(30);
+            classification.Margin = new Padding(0, 2, 0, 0);
             classification.Items.Add(string.Empty);
             classification.Items.AddRange(ProjectEngineerReviewClassifications.All.Cast<object>().ToArray());
             classification.SelectedIndex = 0;
@@ -519,6 +523,10 @@ namespace EngiSentry.AutoCAD2021
             grid.Controls.Add(ReviewStyle.FieldPair(ReviewStrings.Get("Placement_FieldClassification"), classification, ReviewStyle.Chip(ReviewStrings.Get("Placement_ChipRequired"), ReviewUi.Required), false), 0, 0);
 
             proposalDisposition.AccessibleName = "PlacementProposalDisposition";
+            // the combo fills its labelled field so it can never sit on the far side of the card
+            proposalDisposition.Dock = DockStyle.Top;
+            proposalDisposition.Height = Scale(30);
+            proposalDisposition.Margin = new Padding(0, 2, 0, 0);
             proposalDisposition.Items.Add(string.Empty);
             proposalDisposition.Items.AddRange(new object[] { PlacementProposalDispositions.Approved, PlacementProposalDispositions.Rejected, PlacementProposalDispositions.Modified, PlacementProposalDispositions.Cancelled });
             proposalDisposition.SelectedIndex = 0;
@@ -633,7 +641,8 @@ namespace EngiSentry.AutoCAD2021
                 {
                     Text = (question.Required ? "* " : "  ") + ReviewDisplayText.Question(question),
                     Dock = DockStyle.Fill,
-                    TextAlign = ContentAlignment.MiddleLeft,
+                    // the question hugs its answer control so the two never drift to opposite edges
+                    TextAlign = ReviewStyle.ControlSideLabelAlignment,
                     Font = ReviewUi.BodyFont,
                     ForeColor = question.Required ? ReviewUi.Text : ReviewUi.Muted,
                     BackColor = ReviewUi.Surface,
@@ -674,8 +683,22 @@ namespace EngiSentry.AutoCAD2021
                 Padding = new Padding(12, 8, 12, 8)
             };
             var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = ReviewUi.Surface, Margin = new Padding(0) };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+            // The primary action is anchored to the physical right end of the action bar in both
+            // languages: the trailing end for English, the RTL-leading end for Persian. The grid
+            // mirrors its columns under RTL, so the fixed-width action column must follow the button.
+            bool rtl = ReviewLocalization.IsPersian;
+            if (rtl)
+            {
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            }
+            else
+            {
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+            }
+            int hintColumn = rtl ? 1 : 0;
+            int saveColumn = rtl ? 0 : 1;
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(34)));
             grid.RowStyles.Add(new RowStyle(SizeType.Absolute, Scale(20)));
             grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -686,7 +709,7 @@ namespace EngiSentry.AutoCAD2021
                 Font = ReviewUi.CaptionFont, ForeColor = ReviewUi.Muted, BackColor = ReviewUi.Surface, AutoEllipsis = true,
                 Text = ReviewStrings.Get("Placement_Hint")
             };
-            grid.Controls.Add(hint, 0, 0);
+            grid.Controls.Add(hint, hintColumn, 0);
 
             save.Text = ReviewStrings.Get("Placement_ButtonRecord");
             save.Dock = DockStyle.Fill;
@@ -695,7 +718,7 @@ namespace EngiSentry.AutoCAD2021
             save.AccessibleName = "SaveResolution";
             save.Click += (s, e) => SaveResolution();
             ReviewStyle.StyleButton(save, true);
-            grid.Controls.Add(save, 1, 0);
+            grid.Controls.Add(save, saveColumn, 0);
 
             // one concise helper that always reflects the actual missing requirement, derived from the
             // same validation state the primary action uses — no second validation engine
@@ -790,6 +813,9 @@ namespace EngiSentry.AutoCAD2021
                 ForeColor = ReviewUi.Value,
                 // technical values never mirror, even inside the RTL Persian surface
                 RightToLeft = RightToLeft.No,
+                // the value hugs its caption (leading edge in LTR, trailing edge in RTL) so the pair
+                // stays visually associated instead of the value drifting to the opposite card edge
+                TextAlign = ReviewStyle.LabelSideValueAlignment,
                 AccessibleName = "TechnicalValue",
                 TabStop = false,
                 // a single-line TextBox derives its height from the font; the mono face is short, so
@@ -815,11 +841,12 @@ namespace EngiSentry.AutoCAD2021
             foreach (EquipmentPlacement placement in unresolved) placementList.Items.Add(QueueLabel(placement));
             foreach (PlacementProposal proposal in proposals)
             {
-                // the queue line is a governed reference line: the disposition keeps its exact
-                // canonical token so the accepted P11.1 surface (and its acceptance evidence) is
-                // unchanged; only the leading marker is presented in the selected UI language
+                // The queue line is an engineer-facing reference line: it shows the localized marker
+                // and the friendly disposition display text. The raw proposal identity is deliberately
+                // kept out of the normal flow; it stays available under Technical Details. Only the
+                // shown text changes — the stored disposition token is untouched.
                 string state = dispositionService.GetStatus(proposal).Disposition;
-                placementList.Items.Add(ReviewStrings.Get("Placement_ListProposal") + " | " + proposal.NormalizedTag + " | " + state + " | " + proposal.ProposalId);
+                placementList.Items.Add(ReviewStrings.Get("Placement_ListProposal") + " | " + proposal.NormalizedTag + " | " + ReviewDisplayText.Disposition(state));
             }
             loading = false;
             UpdateCountBadge();

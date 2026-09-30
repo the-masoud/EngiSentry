@@ -46,7 +46,10 @@ namespace EngiSentry.AutoCAD2021
         internal static readonly Color InputBack = Color.FromArgb(24, 26, 29);
         internal static readonly Color InputText = Color.FromArgb(235, 237, 240);
         internal static readonly Color ErrorBack = Color.FromArgb(58, 30, 32);
-        internal static readonly Color DisabledText = Color.FromArgb(120, 125, 132);
+        // Disabled actions keep a clearly readable caption instead of fading into the card; the
+        // disabled state stays unmistakable because the accent surface is dropped. Tuned for both the
+        // Latin (Segoe UI) and the Persian (Tahoma) faces.
+        internal static readonly Color DisabledText = Color.FromArgb(196, 202, 210);
 
         // Fonts are resolved per UI language so Persian renders in a Persian-capable system
         // font (Tahoma) while the Latin surface keeps Segoe UI. Instances are cached per

@@ -262,6 +262,19 @@ namespace EngiSentry.AutoCAD2021
             }
         }
 
+        // Direction-aware field association for a labelled value. The caption occupies the leading
+        // cell of the row, so the value hugs the leading edge in LTR and the trailing edge in RTL and
+        // the pair never drifts to opposite card edges. The value itself stays LTR (RightToLeft.No);
+        // only the alignment mirrors, so a technical value is never reordered.
+        internal static HorizontalAlignment LabelSideValueAlignment =>
+            ReviewLocalization.IsPersian ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+
+        // A caption that describes a control placed after it hugs that control's edge. Captions mirror
+        // under RightToLeft, so a trailing-aligned caption sits at the right of its cell in LTR (the
+        // control is to its right) and at the left of its cell in RTL (the control is to its left):
+        // the caption and its control stay visually adjacent in both languages.
+        internal static ContentAlignment ControlSideLabelAlignment => ContentAlignment.MiddleRight;
+
         // Dark-theme input styling: read-only and editable fields share one readable palette so a
         // read-only evidence pane is never a white block inside the dark surface.
         internal static void StyleTextBox(TextBoxBase box, Font font, bool multiline)

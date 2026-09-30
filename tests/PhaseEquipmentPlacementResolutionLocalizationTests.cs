@@ -96,6 +96,7 @@ namespace EngiSentry.Tests
                 SectionStructureTests(reviewService, resolutionService);
                 SwitchPreservesStateTests(reviewService, resolutionService, reviewRoot);
                 WorkflowSemanticsTests();
+                LayoutProximityAndDisplayTests(reviewService, resolutionService);
 
                 Console.WriteLine("Phase Equipment Placement Resolution localization assertions passed: " + assertions);
             }
@@ -402,6 +403,138 @@ namespace EngiSentry.Tests
                 // command name is verified again during the AutoCAD runtime acceptance.
             }
             Assert(ProjectEngineerReviewService.ResolveRoot() == ProjectEngineerReviewService.DefaultRoot, "The review-root override must stay disabled outside an explicit test scope.");
+        }
+
+        // 19-27. The P11.2B correction: every label stays visually associated with its control in
+        // both languages, the normal proposal row is engineer-friendly (no raw identity), the raw
+        // identity stays under Technical Details, the disabled primary action stays readable, and the
+        // primary action is anchored to the RTL-leading (right) end of the action bar. All assertions
+        // are structural (columns, dock, alignment, colour brightness) — never pixel- or RGB-literal.
+        private static void LayoutProximityAndDisplayTests(ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService)
+        {
+            PlacementProposal proposal = BuildProposal();
+
+            ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
+            var english = NewControl(reviewService, resolutionService, new[] { proposal });
+            AssertSummaryValueAssociation(english, "en");
+            AssertQuestionAnswerAssociation(english);
+            AssertDecisionFieldAssociation(english);
+            AssertProposalRowDisplay(english, proposal, "en");
+            AssertPrimaryActionAtRightEnd(english);
+            english.Dispose();
+
+            ReviewLocalization.Apply(CultureInfo.GetCultureInfo("fa"));
+            var persian = NewControl(reviewService, resolutionService, new[] { proposal });
+            AssertSummaryValueAssociation(persian, "fa");
+            AssertQuestionAnswerAssociation(persian);
+            AssertDecisionFieldAssociation(persian);
+            AssertProposalRowDisplay(persian, proposal, "fa");
+            AssertPrimaryActionAtRightEnd(persian);
+            AssertCanonicalProposalIdInTechnicalDetails(persian, proposal);
+            persian.Dispose();
+
+            ReviewLocalization.Apply(CultureInfo.GetCultureInfo("en"));
+        }
+
+        // The summary value stays beside its caption instead of drifting to the opposite card edge:
+        // the value occupies the column immediately next to its caption and its text hugs the caption
+        // side, while the value itself stays LTR.
+        private static void AssertSummaryValueAssociation(Control control, string language)
+        {
+            TableLayoutPanel grid = Descendants(control).OfType<TableLayoutPanel>()
+                .First(t => t.Controls.OfType<Label>().Any(l => l.Text == ReviewStrings.Get("Placement_FieldOriginal")));
+            Label caption = grid.Controls.OfType<Label>().First(l => l.Text == ReviewStrings.Get("Placement_FieldOriginal"));
+            TableLayoutPanelCellPosition captionCell = grid.GetCellPosition(caption);
+            TextBox value = grid.Controls.OfType<TextBox>().First(t => grid.GetCellPosition(t).Row == captionCell.Row);
+            Assert(grid.GetCellPosition(value).Column == captionCell.Column + 1,
+                "The summary value must sit in the column immediately beside its caption (" + language + ").");
+            HorizontalAlignment expected = language == "fa" ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            Assert(value.TextAlign == expected,
+                "The summary value must hug its caption, not the opposite edge (" + language + "). Actual: " + value.TextAlign);
+            Assert(value.RightToLeft == RightToLeft.No, "The summary value must stay LTR (" + language + ").");
+        }
+
+        // Every answer control stays in the cell beside its question, and the question text hugs the
+        // answer control so the two never drift to opposite card edges.
+        private static void AssertQuestionAnswerAssociation(Control control)
+        {
+            TableLayoutPanel grid = Descendants(control).OfType<TableLayoutPanel>()
+                .Single(t => t.Controls.OfType<Control>().Count(c => c.Tag as string != null) == EquipmentPlacementResolutionQuestions.All.Count);
+            foreach (ProjectEngineerReviewQuestionDefinition question in EquipmentPlacementResolutionQuestions.All)
+            {
+                Control answer = AnswerControl(control, question.QuestionId);
+                TableLayoutPanelCellPosition answerCell = grid.GetCellPosition(answer);
+                Label label = grid.Controls.OfType<Label>().First(l => grid.GetCellPosition(l).Row == answerCell.Row);
+                Assert(grid.GetCellPosition(label).Column == answerCell.Column - 1,
+                    "A question must own the cell immediately beside its answer control: " + question.QuestionId);
+                Assert(label.TextAlign == ReviewStyle.ControlSideLabelAlignment,
+                    "A question must hug its answer control: " + question.QuestionId);
+            }
+        }
+
+        // Classification and Disposition each fill their labelled field, directly beneath their caption.
+        private static void AssertDecisionFieldAssociation(Control control)
+        {
+            foreach (string name in new[] { "Classification", "PlacementProposalDisposition" })
+            {
+                ComboBox combo = Combo(control, name);
+                Assert(combo.Dock == DockStyle.Top || combo.Dock == DockStyle.Fill,
+                    "A decision control must fill its labelled field instead of floating: " + name);
+                Control fieldHost = combo.Parent;
+                Assert(fieldHost != null && fieldHost.Dock == DockStyle.Fill, "The decision field host is wrong: " + name);
+                Panel captionHost = fieldHost.Parent.Controls.OfType<Panel>().FirstOrDefault(p => p.Dock == DockStyle.Top);
+                Assert(captionHost != null && captionHost.Controls.OfType<Label>().Any(l => !string.IsNullOrEmpty(l.Text)),
+                    "A decision control must keep its caption directly above it: " + name);
+            }
+        }
+
+        // The normal list row shows the localized marker and the friendly disposition display text and
+        // never the raw proposal identity.
+        private static void AssertProposalRowDisplay(Control control, PlacementProposal proposal, string language)
+        {
+            ListBox list = Descendants(control).OfType<ListBox>().Single();
+            string row = list.Items.Cast<object>().Select(x => x == null ? string.Empty : x.ToString() ?? string.Empty)
+                .FirstOrDefault(x => x.IndexOf(ReviewStrings.Get("Placement_ListProposal"), StringComparison.Ordinal) >= 0) ?? string.Empty;
+            Assert(!string.IsNullOrEmpty(row), "The generated proposal row is missing (" + language + ").");
+            Assert(row.IndexOf(proposal.ProposalId, StringComparison.Ordinal) < 0,
+                "The normal list row must not expose the raw proposal identity (" + language + "): " + row);
+            Assert(row.IndexOf(ReviewDisplayText.Disposition(PlacementProposalDispositions.PendingReview), StringComparison.Ordinal) >= 0,
+                "The normal list row must show the friendly disposition display text (" + language + "): " + row);
+        }
+
+        // The canonical proposal identity stays reachable under the collapsed Technical Details.
+        private static void AssertCanonicalProposalIdInTechnicalDetails(Control control, PlacementProposal proposal)
+        {
+            ListBox list = Descendants(control).OfType<ListBox>().Single();
+            int proposalIndex = -1;
+            for (int i = 0; i < list.Items.Count; i++)
+            {
+                string text = list.Items[i] as string ?? string.Empty;
+                if (text.IndexOf(ReviewStrings.Get("Placement_ListProposal"), StringComparison.Ordinal) >= 0) { proposalIndex = i; break; }
+            }
+            Assert(proposalIndex >= 0, "The generated proposal row is missing from the queue.");
+            list.SelectedIndex = proposalIndex;
+            Button(control, ReviewStrings.Get("Placement_ButtonTechnicalShow")).PerformClick();
+            Assert(Descendants(control).OfType<TextBox>().Where(t => t.AccessibleName == "TechnicalValue")
+                .Any(t => t.Text == proposal.ProposalId), "The canonical proposal identity must remain under Technical Details.");
+        }
+
+        // The primary action is anchored to the physical right end of the action bar in both languages
+        // (the RTL-leading side in Persian), and a disabled primary action stays clearly readable
+        // without looking enabled.
+        private static void AssertPrimaryActionAtRightEnd(Control control)
+        {
+            control.Size = new System.Drawing.Size(1000, 960);
+            PerformLayout(control);
+            Button save = Descendants(control).OfType<Button>().Single(b => b.AccessibleName == "SaveResolution");
+            Label hint = Descendants(control).OfType<Label>().First(l => l.Text == ReviewStrings.Get("Placement_Hint"));
+            Assert(save.Left > hint.Left,
+                "The primary action must sit at the right end of the action bar. save=" + save.Left + " hint=" + hint.Left);
+            Assert(!save.Enabled, "The primary action must start disabled before a pick is captured.");
+            Assert(save.ForeColor.GetBrightness() >= 0.6f,
+                "A disabled primary action must stay clearly readable. Brightness: " + save.ForeColor.GetBrightness());
+            Assert(save.BackColor.GetBrightness() < 0.6f, "A disabled primary action must stay on the dark surface.");
+            Assert(save.BackColor != ReviewUi.Primary, "A disabled primary action must not look enabled.");
         }
 
         // ---- helpers --------------------------------------------------------------------------
