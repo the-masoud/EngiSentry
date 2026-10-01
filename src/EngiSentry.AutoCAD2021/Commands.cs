@@ -169,7 +169,12 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("[ES_PLOTQA] Entity index built\n");
                 System.Collections.Generic.IReadOnlyList<EquipmentPlacementResolution> engineerResolutions = ResolveEngineerResolutions(document, snapshot.InsertionUnits);
                 WriteToActiveEditor("[ES_PLOTQA] Trusted engineer resolutions applied: {0}\n", engineerResolutions.Count);
-                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions);
+                System.Collections.Generic.IReadOnlyList<AuthoritativeEquipmentCoordinate> authoritativeCoordinates = ResolveAuthoritativeCoordinates(document);
+                WriteToActiveEditor("[ES_PLOTQA] Active authoritative coordinate package covers {0} occurrence(s)\n", authoritativeCoordinates.Count);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions, authoritativeCoordinates);
+                int authoritativeResolvedCount = plotPlan.EquipmentPlacements.Count(x => string.Equals(x.AuthoritativeCoordinate?.PlacementStatus, AuthoritativePlacementStatuses.Resolved, System.StringComparison.Ordinal));
+                int authoritativeConflictCount = plotPlan.EquipmentPlacements.Count(x => string.Equals(x.AuthoritativeCoordinate?.PlacementStatus, AuthoritativePlacementStatuses.Conflict, System.StringComparison.Ordinal));
+                WriteToActiveEditor("[ES_PLOTQA] Authoritative evidence: resolved {0}, conflict {1}\n", authoritativeResolvedCount, authoritativeConflictCount);
                 WriteToActiveEditor("[ES_PLOTQA] PlotPlan model built\n");
                 QaReport baseQa = QaEngine.Evaluate(index, BuiltInQaRules.All, plotPlan, BuiltInPlotPlanQaRules.All);
                 string approvalDirectory = System.IO.Path.Combine(SnapshotFileWriter.ResolveArtifactsRoot(), "qa", "plotplan");
@@ -612,6 +617,180 @@ namespace EngiSentry.AutoCAD2021
         }
 
         /// <summary>
+        /// Generates a blank authoritative equipment coordinate request package for the current drawing:
+        /// a manifest template plus a schedule with exactly one row per equipment occurrence and every
+        /// coordinate left blank. This asks the project authority for the coordinates; it never supplies
+        /// or infers any. The drawing is read only: it is scanned for the inventory and nothing is
+        /// written to it, and no modal dialog is shown.
+        /// </summary>
+        [CommandMethod("ES_COORDREQUEST")]
+        public void CoordinateRequest()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nES_COORDREQUEST requires an active drawing.\n"); return; }
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null)
+                {
+                    WriteToActiveEditor("\nES_COORDREQUEST requires a drawing saved on disk so the request can be bound to its SHA-256.\n");
+                    return;
+                }
+                DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during coordinate request processing.");
+
+                System.Collections.Generic.List<AuthoritativeEquipmentCoordinateInventoryEntry> inventory = BuildCoordinateInventory(plotPlan);
+                AuthoritativeEquipmentCoordinateRequestResult request = new AuthoritativeEquipmentCoordinateRequestBuilder()
+                    .Create(snapshot.FileName, drawingSha256, inventory, System.DateTime.UtcNow);
+
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during coordinate request artifact creation.");
+
+                document.Editor.WriteMessage("\nEngiSentry authoritative equipment coordinate request\nDrawing: {0}\nDrawing SHA256: {1}\nEquipment occurrences: {2}\nSchedule rows: {3}\nNon-empty OccurrenceIds: {4}\nNon-empty EquipmentTags: {5}\nBlank Eastings: {6}\nBlank Northings: {7}\nDuplicate OccurrenceIds: {8}\nMissing OccurrenceIds: {9}\nPackage directory: {10}\nManifest: {11}\nSchedule: {12}\nDBMOD unchanged: YES\nStatus: READ-ONLY | REQUEST ONLY | NO COORDINATES SUPPLIED\n", snapshot.FileName ?? "<unnamed>", drawingSha256, inventory.Count, request.RowCount, request.NonEmptyOccurrenceIdCount, request.NonEmptyEquipmentTagCount, request.BlankEastingCount, request.BlankNorthingCount, request.DuplicateOccurrenceIdCount, request.MissingOccurrenceIdCount, request.PackageDirectory, request.ManifestPath, request.SchedulePath);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_COORDREQUEST failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        /// <summary>
+        /// Imports a completed authoritative equipment coordinate package for the current drawing. The
+        /// package directory is supplied as command-line text (never a file dialog). The package is
+        /// validated strictly and is installed and activated only when it is fully valid and covers
+        /// every equipment occurrence. A blank or cancelled input writes nothing. Replacing an already
+        /// active different package requires an explicit confirmation; declining keeps the current one.
+        /// The drawing is never modified.
+        /// </summary>
+        [CommandMethod("ES_COORDIMPORT")]
+        public void CoordinateImport()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nES_COORDIMPORT requires an active drawing.\n"); return; }
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null)
+                {
+                    WriteToActiveEditor("\nES_COORDIMPORT requires a drawing saved on disk so the package can be bound to its SHA-256.\n");
+                    return;
+                }
+
+                var options = new PromptStringOptions("\nEngiSentry authoritative equipment coordinate package directory: ") { AllowSpaces = true };
+                PromptResult input = document.Editor.GetString(options);
+                if (input.Status != PromptStatus.OK || string.IsNullOrWhiteSpace(input.StringResult))
+                {
+                    WriteToActiveEditor("\nES_COORDIMPORT cancelled: no package directory was supplied. Nothing was imported.\n");
+                    return;
+                }
+                string packageDirectory = input.StringResult.Trim().Trim('"');
+
+                DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during coordinate import processing.");
+
+                System.Collections.Generic.List<AuthoritativeEquipmentCoordinateInventoryEntry> inventory = BuildCoordinateInventory(plotPlan);
+                AuthoritativeEquipmentCoordinatePackageStore store = new AuthoritativeEquipmentCoordinatePackageStore();
+                AuthoritativeEquipmentCoordinateValidationResult validation = AuthoritativeEquipmentCoordinatePackageValidator.Validate(packageDirectory, inventory, drawingSha256);
+
+                WriteToActiveEditor("\nES_COORDIMPORT validation\nPackage: {0}\nStatus: {1}\n", packageDirectory, validation.Status);
+                foreach (string message in validation.Messages) WriteToActiveEditor("  {0}\n", message);
+
+                if (!validation.IsValid)
+                {
+                    WriteToActiveEditor("\nES_COORDIMPORT REJECTED: the package was not installed or activated. Any existing active package is unchanged.\nStatus: READ-ONLY\n");
+                    return;
+                }
+
+                AuthoritativeEquipmentCoordinateActivePackage? active = store.ReadActive(drawingSha256);
+                if (active != null && string.Equals(active.PackageFingerprint, validation.PackageFingerprint, System.StringComparison.Ordinal))
+                {
+                    WriteToActiveEditor("\nES_COORDIMPORT ALREADY_ACTIVE: this exact package is already active. Nothing changed.\nStatus: READ-ONLY\n");
+                    return;
+                }
+                if (active != null)
+                {
+                    var confirm = new PromptKeywordOptions("\nA different authoritative coordinate package is already active. Replace it with the validated package? [Yes/No]: ", "Yes No") { AllowNone = true };
+                    PromptResult answer = document.Editor.GetKeywords(confirm);
+                    if (answer.Status != PromptStatus.OK || !string.Equals(answer.StringResult, "Yes", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        WriteToActiveEditor("\nES_COORDIMPORT DECLINED: the current active package was kept. Nothing changed.\nStatus: READ-ONLY\n");
+                        return;
+                    }
+                }
+
+                AuthoritativeEquipmentCoordinateImportReceipt receipt = store.Install(drawingSha256, packageDirectory, validation, active?.PackageFingerprint);
+                int afterArtifact = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (snapshot.DbModBefore != afterArtifact) throw new InvalidOperationException("DBMOD changed during coordinate import artifact creation.");
+
+                document.Editor.WriteMessage("\nEngiSentry authoritative equipment coordinate import complete\nStatus: {0}\nDrawing: {1}\nDrawing SHA256: {2}\nPackage fingerprint: {3}\nManifest SHA256: {4}\nSchedule SHA256: {5}\nOccurrences activated: {6}\nIssued by: {7}\nInstalled package directory: {8}\nDBMOD unchanged: YES\nStatus: READ-ONLY (DRAWING UNCHANGED)\n", receipt.Status, snapshot.FileName ?? "<unnamed>", drawingSha256, receipt.PackageFingerprint, receipt.ManifestSha256, receipt.ScheduleSha256, receipt.OccurrenceCount, receipt.IssuedBy, receipt.PackageDirectory);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_COORDIMPORT failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        /// <summary>
+        /// Reports the authoritative coordinate package state for the current drawing. Read only: it
+        /// writes nothing, does not touch the drawing, and records no preference or store entry.
+        /// </summary>
+        [CommandMethod("ES_COORDSTATUS")]
+        public void CoordinateStatus()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) { WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: <none>\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nREAD-ONLY\n"); return; }
+                string drawingName = string.IsNullOrWhiteSpace(document.Name) ? "<unnamed>" : System.IO.Path.GetFileName(document.Name);
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null)
+                {
+                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nDrawing is not saved on disk.\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName);
+                    return;
+                }
+                var provider = new AuthoritativeEquipmentCoordinateProvider();
+                AuthoritativeEquipmentCoordinateActivePackage? active = provider.GetActive(drawingSha256);
+                if (active == null)
+                {
+                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nDrawing SHA256: {1}\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName, drawingSha256);
+                    return;
+                }
+                System.Collections.Generic.IReadOnlyList<AuthoritativeEquipmentCoordinate> coordinates = provider.ResolveForDrawing(drawingSha256);
+                document.Editor.WriteMessage("\nES_COORDSTATUS\nDrawing: {0}\nDrawing SHA256: {1}\nActive package fingerprint: {2}\nManifest SHA256: {3}\nSchedule SHA256: {4}\nOccurrences covered: {5}\nIssued by: {6}\nActivated (UTC): {7}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName, drawingSha256, active.PackageFingerprint, active.ManifestSha256, active.ScheduleSha256, coordinates.Count, active.IssuedBy, active.ActivatedTimestampUtc);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_COORDSTATUS failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
+        }
+
+        /// <summary>
+        /// The current drawing's equipment occurrence inventory, deterministically ordered. The
+        /// occurrence identity is the existing canonical <c>EquipmentPlacement.PlacementId</c>
+        /// (<c>placement:&lt;equipment canonical id&gt;:&lt;tag handle&gt;</c>), which is stable, derived
+        /// from the tag and its handle, and independent of enumeration order.
+        /// </summary>
+        private static System.Collections.Generic.List<AuthoritativeEquipmentCoordinateInventoryEntry> BuildCoordinateInventory(PlotPlanModel plotPlan)
+        {
+            var inventory = new System.Collections.Generic.List<AuthoritativeEquipmentCoordinateInventoryEntry>();
+            int index = 0;
+            foreach (EquipmentPlacement placement in plotPlan.EquipmentPlacements.OrderBy(x => x.PlacementId, System.StringComparer.Ordinal))
+            {
+                index++;
+                inventory.Add(new AuthoritativeEquipmentCoordinateInventoryEntry
+                {
+                    OccurrenceId = placement.PlacementId,
+                    EquipmentTag = placement.NormalizedTag,
+                    OccurrenceIndex = index,
+                    SourceEntityHandle = placement.TagSourceHandle,
+                    Layer = placement.TagSourceLayer ?? string.Empty,
+                    CurrentPlacementStatus = placement.PlacementStatus,
+                    CurrentPlacementReason = "Easting=" + placement.Easting.Status + "; Northing=" + placement.Northing.Status + "; Centerline=" + (placement.CenterlineEvidence?.Status ?? "None")
+                });
+            }
+            return inventory;
+        }
+
+        /// <summary>
         /// Computes the SHA-256 of the on-disk DWG so a resolution can be bound to the exact drawing
         /// revision. The file is opened read-only; a missing or unreadable file yields null.
         /// </summary>
@@ -640,6 +819,22 @@ namespace EngiSentry.AutoCAD2021
                 return new EquipmentPlacementResolutionService().ResolveTrustedForDrawing(drawingSha256, insertionUnits!);
             }
             catch (System.Exception) { return System.Array.Empty<EquipmentPlacementResolution>(); }
+        }
+
+        /// <summary>
+        /// Loads the authoritative equipment coordinates from the drawing's active coordinate package.
+        /// A missing hash, a missing package, or any store problem simply yields no coordinates: the
+        /// existing placement behaviour is left completely unchanged and nothing is ever inferred.
+        /// </summary>
+        private static System.Collections.Generic.IReadOnlyList<AuthoritativeEquipmentCoordinate> ResolveAuthoritativeCoordinates(Document? document)
+        {
+            try
+            {
+                string? drawingSha256 = TryComputeDrawingSha256(document);
+                if (drawingSha256 == null) return System.Array.Empty<AuthoritativeEquipmentCoordinate>();
+                return new AuthoritativeEquipmentCoordinateProvider().ResolveForDrawing(drawingSha256);
+            }
+            catch (System.Exception) { return System.Array.Empty<AuthoritativeEquipmentCoordinate>(); }
         }
 
         private static System.Collections.Generic.List<KnownQaRule> KnownPlotPlanRules()

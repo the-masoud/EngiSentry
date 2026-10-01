@@ -10,7 +10,7 @@ namespace EngiSentry.PlotPlan
         public const double MaxAssociationDistanceFactor = 30.0;
         public const double AmbiguityMarginFactor = 2.0;
 
-        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null, IReadOnlyList<EquipmentPlacementResolution>? engineerResolutions = null)
+        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null, IReadOnlyList<EquipmentPlacementResolution>? engineerResolutions = null, IReadOnlyList<AuthoritativeEquipmentCoordinate>? authoritativeCoordinates = null)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
             if (model == null) throw new ArgumentNullException(nameof(model));
@@ -51,6 +51,7 @@ namespace EngiSentry.PlotPlan
             HashSet<string> unresolvedCenterlineEntities = new HashSet<string>(placements.Where(x => x.CenterlineEvidence?.Status == "Ambiguous" || x.CenterlineEvidence?.Status == "Conflict").Select(x => x.EquipmentEntityId), StringComparer.Ordinal);
             foreach (EquipmentPlacement placement in placements.Where(x => unresolvedCenterlineEntities.Contains(x.EquipmentEntityId))) placement.PlacementStatus = "Ambiguous";
             ApplyEngineerResolutions(placements, engineerResolutions, model.Drawing);
+            ApplyAuthoritativeCoordinates(placements, authoritativeCoordinates);
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
             PlotGeometryModel geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture);
             if (geometryCapture != null)
@@ -109,6 +110,94 @@ namespace EngiSentry.PlotPlan
                 };
             }
         }
+
+        // An authoritative project coordinate package is the project's own statement of where each
+        // equipment occurrence sits. It is applied only after every deterministic and engineer-derived
+        // source, and it never overwrites trusted evidence:
+        //   * when a placement has no selected value for an axis, the authoritative value resolves it;
+        //   * when every already-selected value agrees EXACTLY (no tolerance is invented), the existing
+        //     evidence is kept and the authoritative coordinate is recorded as corroboration;
+        //   * when any already-selected value disagrees, or a centerline conflict already exists, the
+        //     placement is marked Ambiguous and the authoritative evidence is recorded as
+        //     COORDINATE_EVIDENCE_CONFLICT. Nothing is silently replaced or deleted.
+        private static void ApplyAuthoritativeCoordinates(List<EquipmentPlacement> placements, IReadOnlyList<AuthoritativeEquipmentCoordinate>? authoritativeCoordinates)
+        {
+            if (authoritativeCoordinates == null || authoritativeCoordinates.Count == 0) return;
+            var byOccurrence = new Dictionary<string, AuthoritativeEquipmentCoordinate>(StringComparer.Ordinal);
+            foreach (AuthoritativeEquipmentCoordinate coordinate in authoritativeCoordinates)
+            {
+                if (coordinate == null || string.IsNullOrWhiteSpace(coordinate.OccurrenceId)) continue;
+                byOccurrence[coordinate.OccurrenceId.Trim()] = coordinate;
+            }
+            if (byOccurrence.Count == 0) return;
+
+            foreach (EquipmentPlacement placement in placements)
+            {
+                // Both the occurrence identity and the equipment tag must match. A tag alone is never enough.
+                if (!byOccurrence.TryGetValue(placement.PlacementId, out AuthoritativeEquipmentCoordinate? coordinate)) continue;
+                if (!string.Equals(NormalizeTag(coordinate.EquipmentTag), NormalizeTag(placement.NormalizedTag), StringComparison.Ordinal)) continue;
+
+                bool eastingSelected = placement.Easting.SelectedValue.HasValue;
+                bool northingSelected = placement.Northing.SelectedValue.HasValue;
+                bool eastingAgrees = !eastingSelected || placement.Easting.SelectedValue!.Value == coordinate.Easting;
+                bool northingAgrees = !northingSelected || placement.Northing.SelectedValue!.Value == coordinate.Northing;
+                bool centerlineConflict = string.Equals(placement.CenterlineEvidence?.Status, "Conflict", StringComparison.Ordinal);
+
+                if (eastingAgrees && northingAgrees && !centerlineConflict)
+                {
+                    if (!eastingSelected) placement.Easting = AuthoritativeAssociation("E", coordinate);
+                    if (!northingSelected) placement.Northing = AuthoritativeAssociation("N", coordinate);
+                    placement.PlacementStatus = "Complete";
+                    placement.AuthoritativeCoordinate = AuthoritativeEvidence(coordinate, AuthoritativePlacementStatuses.Resolved, null);
+                }
+                else
+                {
+                    string conflicting = !eastingAgrees ? SourceOf(placement.Easting)
+                        : !northingAgrees ? SourceOf(placement.Northing)
+                        : "existing centerline conflict";
+                    placement.PlacementStatus = "Ambiguous";
+                    placement.AuthoritativeCoordinate = AuthoritativeEvidence(coordinate, AuthoritativePlacementStatuses.Conflict, conflicting);
+                }
+            }
+        }
+
+        private static string NormalizeTag(string? tag) => (tag ?? string.Empty).Trim().ToUpperInvariant();
+
+        private static string SourceOf(CoordinateAssociation association)
+            => association.SelectedSourceLayer ?? association.SelectedSourceHandle ?? "existing deterministic evidence";
+
+        private static CoordinateAssociation AuthoritativeAssociation(string axis, AuthoritativeEquipmentCoordinate coordinate) => new CoordinateAssociation
+        {
+            Axis = axis,
+            Status = "Resolved",
+            SelectedSourceHandle = null,
+            SelectedValue = axis == "E" ? coordinate.Easting : coordinate.Northing,
+            SelectedRawText = "Authoritative project schedule",
+            SelectedSourceLayer = null,
+            SelectedDistance = null,
+            Candidates = new List<CoordinateCandidate>()
+        };
+
+        private static AuthoritativeCoordinatePlacementEvidence AuthoritativeEvidence(AuthoritativeEquipmentCoordinate coordinate, string status, string? conflictSource) => new AuthoritativeCoordinatePlacementEvidence
+        {
+            PlacementStatus = status,
+            CoordinateSourceType = coordinate.CoordinateSourceType,
+            SourceUnits = coordinate.SourceUnits,
+            SourceCoordinateBasis = coordinate.SourceCoordinateBasis,
+            TransformType = coordinate.TransformType,
+            OccurrenceId = coordinate.OccurrenceId,
+            EquipmentTag = coordinate.EquipmentTag,
+            Easting = coordinate.Easting,
+            Northing = coordinate.Northing,
+            Elevation = coordinate.Elevation,
+            PackageFingerprint = coordinate.PackageFingerprint,
+            ManifestSha256 = coordinate.ManifestSha256,
+            ScheduleSha256 = coordinate.ScheduleSha256,
+            IssuedBy = coordinate.IssuedBy,
+            SourceReference = coordinate.SourceReference,
+            EvidenceSummary = coordinate.EvidenceSummary,
+            ConflictWithEvidenceSource = conflictSource
+        };
 
         private static bool IsResolutionUnitValid(EquipmentPlacementResolution resolution, SemanticDrawing? drawing)
         {

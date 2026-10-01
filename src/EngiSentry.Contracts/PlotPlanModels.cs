@@ -37,6 +37,13 @@ namespace EngiSentry.Contracts
         /// placement Complete. Deterministic evidence never populates this.
         /// </summary>
         [DataMember(Order = 17, EmitDefaultValue = false)] public EquipmentPlacementEngineerResolution? EngineerResolution { get; set; }
+        /// <summary>
+        /// Present only when an active authoritative coordinate package covers this occurrence.
+        /// <c>PlacementStatus</c> is RESOLVED when the authoritative coordinate resolved the placement
+        /// (or agreed exactly with existing trusted evidence), and COORDINATE_EVIDENCE_CONFLICT when it
+        /// disagreed with existing trusted evidence — in which case nothing is silently overwritten.
+        /// </summary>
+        [DataMember(Order = 18, EmitDefaultValue = false)] public AuthoritativeCoordinatePlacementEvidence? AuthoritativeCoordinate { get; set; }
     }
 
     [DataContract]

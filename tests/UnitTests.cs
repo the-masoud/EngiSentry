@@ -228,6 +228,11 @@ namespace EngiSentry.Tests
                 PhaseProjectEngineerReviewTests.Run();
                 return 0;
             }
+            if (args != null && args.Length == 1 && string.Equals(args[0], "--p14", StringComparison.OrdinalIgnoreCase))
+            {
+                P14AuthoritativeCoordinateTests.Run();
+                return 0;
+            }
             if (args != null && args.Length == 1 && string.Equals(args[0], "--p11.2-ui", StringComparison.OrdinalIgnoreCase))
             {
                 PhaseEquipmentPlacementResolutionUiTests.Run();
@@ -515,6 +520,7 @@ namespace EngiSentry.Tests
             PhaseEquipmentPlacementResolutionTests.Run();
             PhaseEquipmentPlacementResolutionUiTests.Run();
             PhaseEquipmentPlacementResolutionLocalizationTests.Run();
+            P14AuthoritativeCoordinateTests.Run();
             Console.WriteLine("All EngiSentry M2.2 through M5.0 tests passed.");
             return 0;
         }
