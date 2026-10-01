@@ -6,9 +6,16 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <!-- P14.1: netstandard2.0 libraries do not copy package assemblies to their own output by default,
+         which would stop the XLSX dependency from reaching the AutoCAD and test outputs. This matches
+         the existing EngiSentry.CrossDocument convention. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NETStandard.Library" Version="2.0.3" PrivateAssets="All" />
+    <!-- P14.1: the single spreadsheet dependency. It both reads and writes .xlsx, which the existing
+         read-only ExcelDataReader dependency cannot do. -->
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
     <ProjectReference Include="..\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
   </ItemGroup>
 </Project>

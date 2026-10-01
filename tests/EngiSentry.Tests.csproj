@@ -11,6 +11,9 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <OutputPath>bin\x64\$(Configuration)\</OutputPath>
+    <!-- P14.1: the NuGet global packages folder, used to resolve the .NET Framework plumbing assemblies
+         that the XLSX dependency needs at run time. -->
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -19,6 +22,25 @@
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
+    <!-- P14.1: the .NET Framework compatibility plumbing that the XLSX dependency's System.IO.Packaging
+         needs at run time. A legacy (non-SDK) project follows only one level of the project-reference
+         dependency graph, so they are referenced explicitly. None of them is a spreadsheet library. -->
+    <Reference Include="System.Memory">
+      <HintPath>$(NuGetPackageRoot)system.memory\4.5.5\lib\netstandard2.0\System.Memory.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Buffers">
+      <HintPath>$(NuGetPackageRoot)system.buffers\4.5.1\lib\netstandard2.0\System.Buffers.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Numerics.Vectors">
+      <HintPath>$(NuGetPackageRoot)system.numerics.vectors\4.4.0\lib\netstandard2.0\System.Numerics.Vectors.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>$(NuGetPackageRoot)system.runtime.compilerservices.unsafe\4.5.3\lib\netstandard2.0\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <ProjectReference Include="..\src\EngiSentry.Contracts\EngiSentry.Contracts.csproj" />
     <ProjectReference Include="..\src\EngiSentry.AutoCAD2021\EngiSentry.AutoCAD2021.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Semantics\EngiSentry.Semantics.csproj" />
@@ -30,6 +52,6 @@
     <ProjectReference Include="..\src\EngiSentry.Revision\EngiSentry.Revision.csproj" />
     <ProjectReference Include="..\src\EngiSentry.Intelligence\EngiSentry.Intelligence.csproj" />
   </ItemGroup>
-  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /><Compile Include="CrossDocumentTests.cs" /><Compile Include="RevisionTests.cs" /><Compile Include="ProposalContractTests.cs" /><Compile Include="StandardsPackProjectionTests.cs" /><Compile Include="PlacementProposalTests.cs" /><Compile Include="PlacementProposalRuntimeTests.cs" /><Compile Include="ProjectRuleAuthorityBindingTests.cs" /><Compile Include="ProjectRuleAuthorityBindingIntakeTests.cs" /><Compile Include="StandardAuthorityPolicyIntakeTests.cs" /><Compile Include="P11PlacementProposalAcceptanceTests.cs" /><Compile Include="P11ProposalDispositionTests.cs" /><Compile Include="PhaseFPresentationTests.cs" /><Compile Include="PhaseGActivationReadinessTests.cs" /><Compile Include="PhaseHApprovalOnboardingTests.cs" /><Compile Include="PhaseHApprovalHandoffTests.cs" /><Compile Include="PhaseHApprovalQuarantineTests.cs" /><Compile Include="ShurijehRuleCandidateTests.cs" /><Compile Include="PhaseJevAdvisoryTests.cs" /><Compile Include="PhaseJevCalibrationTests.cs" /><Compile Include="PhaseJevEngineerLabelingTests.cs" /><Compile Include="PhaseProjectEngineerReviewTests.cs" /><Compile Include="PhaseProjectEngineerReviewUiTests.cs" /><Compile Include="PhaseProjectEngineerReviewLocalizationTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionUiTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionLocalizationTests.cs" /><Compile Include="ExternalReferenceCompletenessTests.cs" /><Compile Include="DrawingHashOpenHandleTests.cs" /><Compile Include="P14AuthoritativeCoordinateTests.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="UnitTests.cs" /><Compile Include="ProfileTests.cs" /><Compile Include="MeasurementTests.cs" /><Compile Include="ClearanceTests.cs" /><Compile Include="CrossDocumentTests.cs" /><Compile Include="RevisionTests.cs" /><Compile Include="ProposalContractTests.cs" /><Compile Include="StandardsPackProjectionTests.cs" /><Compile Include="PlacementProposalTests.cs" /><Compile Include="PlacementProposalRuntimeTests.cs" /><Compile Include="ProjectRuleAuthorityBindingTests.cs" /><Compile Include="ProjectRuleAuthorityBindingIntakeTests.cs" /><Compile Include="StandardAuthorityPolicyIntakeTests.cs" /><Compile Include="P11PlacementProposalAcceptanceTests.cs" /><Compile Include="P11ProposalDispositionTests.cs" /><Compile Include="PhaseFPresentationTests.cs" /><Compile Include="PhaseGActivationReadinessTests.cs" /><Compile Include="PhaseHApprovalOnboardingTests.cs" /><Compile Include="PhaseHApprovalHandoffTests.cs" /><Compile Include="PhaseHApprovalQuarantineTests.cs" /><Compile Include="ShurijehRuleCandidateTests.cs" /><Compile Include="PhaseJevAdvisoryTests.cs" /><Compile Include="PhaseJevCalibrationTests.cs" /><Compile Include="PhaseJevEngineerLabelingTests.cs" /><Compile Include="PhaseProjectEngineerReviewTests.cs" /><Compile Include="PhaseProjectEngineerReviewUiTests.cs" /><Compile Include="PhaseProjectEngineerReviewLocalizationTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionUiTests.cs" /><Compile Include="PhaseEquipmentPlacementResolutionLocalizationTests.cs" /><Compile Include="ExternalReferenceCompletenessTests.cs" /><Compile Include="DrawingHashOpenHandleTests.cs" /><Compile Include="P14AuthoritativeCoordinateTests.cs" /><Compile Include="P141XlsxCoordinateWorkflowTests.cs" /></ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -103,6 +103,50 @@ namespace EngiSentry.Standards
             // The exact source bytes are read back from the validated package and copied verbatim.
             byte[] manifestBytes = File.ReadAllBytes(Path.Combine(sourcePackageDirectory, AuthoritativeEquipmentCoordinateSchema.ManifestFileName));
             byte[] scheduleBytes = File.ReadAllBytes(Path.Combine(sourcePackageDirectory, AuthoritativeEquipmentCoordinateSchema.ScheduleFileName));
+            return InstallCore(drawingSha256, manifestBytes, scheduleBytes, null, null, validation, previousFingerprint);
+        }
+
+        /// <summary>
+        /// P14.1: installs a package that was normalized out of an engineer-facing workbook. In addition
+        /// to the normalized internal manifest and schedule, the exact imported workbook bytes are
+        /// preserved verbatim as <c>source-workbook.xlsx</c> so the engineer's own file is never lost and
+        /// the import is always traceable back to it.
+        /// </summary>
+        public AuthoritativeEquipmentCoordinateImportReceipt InstallWorkbook(
+            string drawingSha256,
+            byte[] manifestBytes,
+            byte[] scheduleBytes,
+            byte[] sourceWorkbookBytes,
+            AuthoritativeEquipmentCoordinateWorkbookProvenance provenance,
+            AuthoritativeEquipmentCoordinateValidationResult validation,
+            string? previousFingerprint)
+        {
+            if (sourceWorkbookBytes == null || sourceWorkbookBytes.Length == 0)
+                throw new ArgumentException("the source workbook bytes are required", nameof(sourceWorkbookBytes));
+            if (provenance == null) throw new ArgumentNullException(nameof(provenance));
+            if (!IsSha256(provenance.SourceWorkbookSha256))
+                throw new ArgumentException("provenance.SourceWorkbookSha256 must be a 64-character hexadecimal SHA256", nameof(provenance));
+            if (!string.Equals(provenance.SourceWorkbookSha256,
+                AuthoritativeEquipmentCoordinateHashing.ComputeSha256(sourceWorkbookBytes), StringComparison.Ordinal))
+                throw new InvalidOperationException("the source workbook hash does not match the supplied workbook bytes");
+            return InstallCore(drawingSha256, manifestBytes, scheduleBytes, sourceWorkbookBytes, provenance, validation, previousFingerprint);
+        }
+
+        private AuthoritativeEquipmentCoordinateImportReceipt InstallCore(
+            string drawingSha256,
+            byte[] manifestBytes,
+            byte[] scheduleBytes,
+            byte[]? sourceWorkbookBytes,
+            AuthoritativeEquipmentCoordinateWorkbookProvenance? provenance,
+            AuthoritativeEquipmentCoordinateValidationResult validation,
+            string? previousFingerprint)
+        {
+            if (!IsSha256(drawingSha256)) throw new ArgumentException("drawingSha256 must be a 64-character hexadecimal SHA256", nameof(drawingSha256));
+            if (manifestBytes == null) throw new ArgumentNullException(nameof(manifestBytes));
+            if (scheduleBytes == null) throw new ArgumentNullException(nameof(scheduleBytes));
+            if (validation == null) throw new ArgumentNullException(nameof(validation));
+            if (!validation.IsValid) throw new InvalidOperationException("an invalid package can never be installed");
+
             if (!string.Equals(validation.PackageFingerprint, AuthoritativeEquipmentCoordinateHashing.ComputePackageFingerprint(manifestBytes, scheduleBytes), StringComparison.Ordinal))
                 throw new InvalidOperationException("package fingerprint does not match the source bytes");
 
@@ -110,6 +154,8 @@ namespace EngiSentry.Standards
             Directory.CreateDirectory(packageDirectory);
             WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateSchema.ManifestFileName), manifestBytes);
             WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateSchema.ScheduleFileName), scheduleBytes);
+            if (sourceWorkbookBytes != null)
+                WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName), sourceWorkbookBytes);
 
             var receipt = new AuthoritativeEquipmentCoordinateImportReceipt
             {
@@ -125,7 +171,13 @@ namespace EngiSentry.Standards
                 SourceReference = validation.SourceReference ?? string.Empty,
                 OccurrenceCount = validation.ResolvedOccurrenceCount,
                 PackageDirectory = packageDirectory,
-                PreviousPackageFingerprint = string.Equals(previousFingerprint, validation.PackageFingerprint, StringComparison.Ordinal) ? null : previousFingerprint
+                PreviousPackageFingerprint = string.Equals(previousFingerprint, validation.PackageFingerprint, StringComparison.Ordinal) ? null : previousFingerprint,
+                SourceWorkbookSha256 = provenance?.SourceWorkbookSha256,
+                RequestFingerprint = provenance?.RequestFingerprint,
+                SourceDocumentNumber = provenance?.SourceDocumentNumber,
+                SourceRevision = provenance?.SourceRevision,
+                SourceIssueStatus = provenance?.SourceIssueStatus,
+                IssueDate = provenance?.IssueDate
             };
             WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateSchema.ReceiptFileName), Serialize(receipt, typeof(AuthoritativeEquipmentCoordinateImportReceipt)));
 
@@ -139,7 +191,13 @@ namespace EngiSentry.Standards
                 PackageDirectory = packageDirectory,
                 ActivatedTimestampUtc = UtcTimestamp(),
                 OccurrenceCount = validation.ResolvedOccurrenceCount,
-                IssuedBy = validation.IssuedBy ?? string.Empty
+                IssuedBy = validation.IssuedBy ?? string.Empty,
+                SourceWorkbookSha256 = provenance?.SourceWorkbookSha256,
+                RequestFingerprint = provenance?.RequestFingerprint,
+                SourceDocumentNumber = provenance?.SourceDocumentNumber,
+                SourceRevision = provenance?.SourceRevision,
+                SourceIssueStatus = provenance?.SourceIssueStatus,
+                IssueDate = provenance?.IssueDate
             };
             WriteAtomic(ActivePath(drawingSha256), Serialize(active, typeof(AuthoritativeEquipmentCoordinateActivePackage)));
 

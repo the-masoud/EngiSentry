@@ -101,6 +101,21 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 11)] public string SourceReference { get; set; } = string.Empty;
         [DataMember(Order = 12)] public string Notes { get; set; } = string.Empty;
 
+        // P14.1 engineer-facing XLSX provenance. Every member is optional and omitted when unset, so a
+        // package that did not originate from a workbook serializes to exactly the same bytes as before.
+        // These carry the human source-document metadata the engineer typed into the workbook.
+        //
+        // SourceWorkbookSha256 is deliberately NOT part of the manifest: the manifest is the semantic
+        // normalized package, and PackageFingerprint is derived from it. The exact .xlsx file identity is
+        // recorded on the receipt and the active package instead, so re-saving the same content in Excel
+        // never changes the semantic package identity.
+
+        [DataMember(Order = 14, EmitDefaultValue = false)] public string? SourceDocumentNumber { get; set; }
+        [DataMember(Order = 15, EmitDefaultValue = false)] public string? SourceRevision { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public string? SourceIssueStatus { get; set; }
+        /// <summary>The source document issue date, exactly <c>YYYY-MM-DD</c>.</summary>
+        [DataMember(Order = 17, EmitDefaultValue = false)] public string? IssueDate { get; set; }
+
         /// <summary>The eleven manifest fields that must be non-empty.</summary>
         public static readonly IReadOnlyList<string> RequiredNonEmptyFields = new[]
         {
@@ -160,6 +175,14 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 14)] public string IssuedBy { get; set; } = string.Empty;
         [DataMember(Order = 15)] public string SourceReference { get; set; } = string.Empty;
         [DataMember(Order = 16)] public string EvidenceSummary { get; set; } = string.Empty;
+
+        // P14.1 provenance carried through from the workbook the coordinate was normalized out of.
+
+        [DataMember(Order = 17, EmitDefaultValue = false)] public string? SourceWorkbookSha256 { get; set; }
+        [DataMember(Order = 18, EmitDefaultValue = false)] public string? SourceDocumentNumber { get; set; }
+        [DataMember(Order = 19, EmitDefaultValue = false)] public string? SourceRevision { get; set; }
+        [DataMember(Order = 20, EmitDefaultValue = false)] public string? SourceIssueStatus { get; set; }
+        [DataMember(Order = 21, EmitDefaultValue = false)] public string? IssueDate { get; set; }
     }
 
     /// <summary>The structured result of strict package validation. Nothing activates unless <see cref="IsValid"/>.</summary>
@@ -198,6 +221,17 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 11)] public int OccurrenceCount { get; set; }
         [DataMember(Order = 12)] public string PackageDirectory { get; set; } = string.Empty;
         [DataMember(Order = 13, EmitDefaultValue = false)] public string? PreviousPackageFingerprint { get; set; }
+
+        // P14.1: present only when the package was normalized from an engineer-facing XLSX workbook.
+        // SourceWorkbookSha256 identifies the exact .xlsx file bytes; PackageFingerprint still identifies
+        // the semantic normalized authoritative package. The two are deliberately distinct.
+
+        [DataMember(Order = 14, EmitDefaultValue = false)] public string? SourceWorkbookSha256 { get; set; }
+        [DataMember(Order = 15, EmitDefaultValue = false)] public string? RequestFingerprint { get; set; }
+        [DataMember(Order = 16, EmitDefaultValue = false)] public string? SourceDocumentNumber { get; set; }
+        [DataMember(Order = 17, EmitDefaultValue = false)] public string? SourceRevision { get; set; }
+        [DataMember(Order = 18, EmitDefaultValue = false)] public string? SourceIssueStatus { get; set; }
+        [DataMember(Order = 19, EmitDefaultValue = false)] public string? IssueDate { get; set; }
     }
 
     /// <summary>The single active package for one drawing. Written atomically; older packages are never deleted.</summary>
@@ -213,6 +247,15 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 7)] public string ActivatedTimestampUtc { get; set; } = string.Empty;
         [DataMember(Order = 8)] public int OccurrenceCount { get; set; }
         [DataMember(Order = 9)] public string IssuedBy { get; set; } = string.Empty;
+
+        // P14.1: present only when the active package was normalized from an engineer-facing XLSX workbook.
+
+        [DataMember(Order = 10, EmitDefaultValue = false)] public string? SourceWorkbookSha256 { get; set; }
+        [DataMember(Order = 11, EmitDefaultValue = false)] public string? RequestFingerprint { get; set; }
+        [DataMember(Order = 12, EmitDefaultValue = false)] public string? SourceDocumentNumber { get; set; }
+        [DataMember(Order = 13, EmitDefaultValue = false)] public string? SourceRevision { get; set; }
+        [DataMember(Order = 14, EmitDefaultValue = false)] public string? SourceIssueStatus { get; set; }
+        [DataMember(Order = 15, EmitDefaultValue = false)] public string? IssueDate { get; set; }
     }
 
     /// <summary>
@@ -256,5 +299,21 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 15)] public string SourceReference { get; set; } = string.Empty;
         [DataMember(Order = 16)] public string EvidenceSummary { get; set; } = string.Empty;
         [DataMember(Order = 17, EmitDefaultValue = false)] public string? ConflictWithEvidenceSource { get; set; }
+
+        // P14.1 provenance required by the placement contract. SourceX/Y/Z are the coordinate exactly as
+        // it arrived from the authority; FinalWcsX/Y/Z are the values actually placed in the drawing.
+        // P14.1 performs no coordinate transform, so the two are equal and TransformType is IDENTITY.
+
+        [DataMember(Order = 18, EmitDefaultValue = false)] public string? SourceWorkbookSha256 { get; set; }
+        [DataMember(Order = 19, EmitDefaultValue = false)] public string? SourceDocumentNumber { get; set; }
+        [DataMember(Order = 20, EmitDefaultValue = false)] public string? SourceRevision { get; set; }
+        [DataMember(Order = 21, EmitDefaultValue = false)] public string? SourceIssueStatus { get; set; }
+        [DataMember(Order = 22, EmitDefaultValue = false)] public string? IssueDate { get; set; }
+        [DataMember(Order = 23, EmitDefaultValue = false)] public decimal? SourceX { get; set; }
+        [DataMember(Order = 24, EmitDefaultValue = false)] public decimal? SourceY { get; set; }
+        [DataMember(Order = 25, EmitDefaultValue = false)] public decimal? SourceZ { get; set; }
+        [DataMember(Order = 26, EmitDefaultValue = false)] public decimal? FinalWcsX { get; set; }
+        [DataMember(Order = 27, EmitDefaultValue = false)] public decimal? FinalWcsY { get; set; }
+        [DataMember(Order = 28, EmitDefaultValue = false)] public decimal? FinalWcsZ { get; set; }
     }
 }

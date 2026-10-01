@@ -68,7 +68,18 @@ namespace EngiSentry.Standards
             if (!string.Equals(manifest.CoordinateUnits, AuthoritativeEquipmentCoordinateSchema.CoordinateUnitsMeters, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
             if (!string.Equals(manifest.CoordinateBasis, AuthoritativeEquipmentCoordinateSchema.CoordinateBasisPilotWcs, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
 
-            return AuthoritativeEquipmentCoordinatePackageValidator.ReadScheduleCoordinates(manifestBytes, scheduleBytes, manifest);
+            IReadOnlyList<AuthoritativeEquipmentCoordinate> coordinates =
+                AuthoritativeEquipmentCoordinatePackageValidator.ReadScheduleCoordinates(manifestBytes, scheduleBytes, manifest);
+
+            // The exact .xlsx file identity lives on the active package, not in the semantic manifest, so
+            // it is attached here. It identifies the engineer's workbook; PackageFingerprint still
+            // identifies the authoritative package content.
+            if (!string.IsNullOrWhiteSpace(active.SourceWorkbookSha256))
+            {
+                foreach (AuthoritativeEquipmentCoordinate coordinate in coordinates)
+                    coordinate.SourceWorkbookSha256 = active.SourceWorkbookSha256;
+            }
+            return coordinates;
         }
 
         /// <summary>

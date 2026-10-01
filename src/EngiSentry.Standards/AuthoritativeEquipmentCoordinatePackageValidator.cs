@@ -300,6 +300,10 @@ namespace EngiSentry.Standards
                 SourceCoordinateBasis = manifest.CoordinateBasis,
                 IssuedBy = manifest.IssuedBy,
                 SourceReference = manifest.SourceReference,
+                SourceDocumentNumber = manifest.SourceDocumentNumber,
+                SourceRevision = manifest.SourceRevision,
+                SourceIssueStatus = manifest.SourceIssueStatus,
+                IssueDate = manifest.IssueDate,
                 EvidenceSummary = "Authoritative project schedule " + manifest.SourceReference + " issued by " + manifest.IssuedBy
             };
         }

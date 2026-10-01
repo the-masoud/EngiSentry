@@ -196,7 +196,19 @@ namespace EngiSentry.PlotPlan
             IssuedBy = coordinate.IssuedBy,
             SourceReference = coordinate.SourceReference,
             EvidenceSummary = coordinate.EvidenceSummary,
-            ConflictWithEvidenceSource = conflictSource
+            ConflictWithEvidenceSource = conflictSource,
+            SourceWorkbookSha256 = coordinate.SourceWorkbookSha256,
+            SourceDocumentNumber = coordinate.SourceDocumentNumber,
+            SourceRevision = coordinate.SourceRevision,
+            SourceIssueStatus = coordinate.SourceIssueStatus,
+            IssueDate = coordinate.IssueDate,
+            SourceX = coordinate.Easting,
+            SourceY = coordinate.Northing,
+            SourceZ = coordinate.Elevation,
+            // P14.1 performs no coordinate transform, so the placed WCS values are the source values.
+            FinalWcsX = coordinate.Easting,
+            FinalWcsY = coordinate.Northing,
+            FinalWcsZ = coordinate.Elevation
         };
 
         private static bool IsResolutionUnitValid(EquipmentPlacementResolution resolution, SemanticDrawing? drawing)

@@ -14,13 +14,22 @@ namespace EngiSentry.Standards
         public string PackageDirectory { get; set; } = string.Empty;
         public string ManifestPath { get; set; } = string.Empty;
         public string SchedulePath { get; set; } = string.Empty;
+
+        /// <summary>P14.1: the single engineer-facing workbook. The engineer receives only this file.</summary>
+        public string WorkbookPath { get; set; } = string.Empty;
+
         public string DrawingName { get; set; } = string.Empty;
         public string DrawingSha256 { get; set; } = string.Empty;
+
+        /// <summary>P14.1: the canonical request fingerprint binding the workbook to drawing + occurrences.</summary>
+        public string RequestFingerprint { get; set; } = string.Empty;
+
         public int RowCount { get; set; }
         public int NonEmptyOccurrenceIdCount { get; set; }
         public int NonEmptyEquipmentTagCount { get; set; }
         public int BlankEastingCount { get; set; }
         public int BlankNorthingCount { get; set; }
+        public int BlankElevationCount { get; set; }
         public int DuplicateOccurrenceIdCount { get; set; }
         public int MissingOccurrenceIdCount { get; set; }
     }
@@ -133,8 +142,120 @@ namespace EngiSentry.Standards
             };
         }
 
-        internal static string BuildScheduleCsv(IReadOnlyList<AuthoritativeEquipmentCoordinateInventoryEntry> entries)
+        /// <summary>
+        /// P14.1: writes the single engineer-facing workbook
+        /// <c>&lt;root&gt;\&lt;DrawingSha256&gt;\&lt;UTC-timestamp&gt;\EngiSentry-Equipment-Coordinates.xlsx</c>.
+        ///
+        /// The workbook is the ONLY file the engineer receives. No manifest, no schedule, no JSON, no
+        /// CSV, and no hash or fingerprint for the engineer to compute. Every coordinate cell is left
+        /// blank: this is a request, never an answer.
+        /// </summary>
+        public AuthoritativeEquipmentCoordinateRequestResult CreateWorkbook(
+            string? drawingName,
+            string drawingSha256,
+            IReadOnlyList<AuthoritativeEquipmentCoordinateInventoryEntry> inventory,
+            DateTime utcNow)
         {
+            if (!AuthoritativeEquipmentCoordinatePackageStore.IsSha256(drawingSha256))
+                throw new ArgumentException("drawingSha256 must be a 64-character hexadecimal SHA256", nameof(drawingSha256));
+
+            List<AuthoritativeEquipmentCoordinateInventoryEntry> entries = (inventory ?? Array.Empty<AuthoritativeEquipmentCoordinateInventoryEntry>())
+                .Where(x => x != null)
+                .OrderBy(x => x.OccurrenceId, StringComparer.Ordinal)
+                .ToList();
+
+            string packageDirectory = CreatePackageDirectory(drawingSha256, utcNow);
+            AuthoritativeEquipmentCoordinateWorkbookModel model = BuildWorkbookModel(drawingName, drawingSha256, entries, utcNow);
+
+            string workbookPath = Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.WorkbookFileName);
+            AuthoritativeEquipmentCoordinateWorkbookWriter.Write(workbookPath, model);
+
+            return new AuthoritativeEquipmentCoordinateRequestResult
+            {
+                PackageDirectory = packageDirectory,
+                WorkbookPath = workbookPath,
+                DrawingName = drawingName ?? string.Empty,
+                DrawingSha256 = drawingSha256,
+                RequestFingerprint = model.RequestFingerprint,
+                RowCount = entries.Count,
+                NonEmptyOccurrenceIdCount = entries.Count(x => !string.IsNullOrWhiteSpace(x.OccurrenceId)),
+                NonEmptyEquipmentTagCount = entries.Count(x => !string.IsNullOrWhiteSpace(x.EquipmentTag)),
+                BlankEastingCount = entries.Count,     // every Easting is blank by construction
+                BlankNorthingCount = entries.Count,    // every Northing is blank by construction
+                BlankElevationCount = entries.Count,   // every Elevation is blank by construction
+                DuplicateOccurrenceIdCount = entries.GroupBy(x => x.OccurrenceId, StringComparer.Ordinal).Count(g => g.Count() > 1),
+                MissingOccurrenceIdCount = entries.Count(x => string.IsNullOrWhiteSpace(x.OccurrenceId))
+            };
+        }
+
+        /// <summary>
+        /// Builds the workbook content for a drawing. Exposed so the focused tests can generate and
+        /// then deliberately damage a workbook without reimplementing the generator.
+        /// </summary>
+        public static AuthoritativeEquipmentCoordinateWorkbookModel BuildWorkbookModel(
+            string? drawingName,
+            string drawingSha256,
+            IReadOnlyList<AuthoritativeEquipmentCoordinateInventoryEntry> inventory,
+            DateTime utcNow)
+        {
+            if (!AuthoritativeEquipmentCoordinatePackageStore.IsSha256(drawingSha256))
+                throw new ArgumentException("drawingSha256 must be a 64-character hexadecimal SHA256", nameof(drawingSha256));
+
+            List<AuthoritativeEquipmentCoordinateInventoryEntry> entries = (inventory ?? Array.Empty<AuthoritativeEquipmentCoordinateInventoryEntry>())
+                .Where(x => x != null)
+                .OrderBy(x => x.OccurrenceId, StringComparer.Ordinal)
+                .ToList();
+
+            var model = new AuthoritativeEquipmentCoordinateWorkbookModel
+            {
+                SchemaVersion = AuthoritativeEquipmentCoordinateWorkbookSchema.Current,
+                DrawingFileName = drawingName ?? string.Empty,
+                DrawingSha256 = drawingSha256,
+                GeneratedUtc = utcNow.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+                ExpectedOccurrenceCount = entries.Count,
+                ProjectIdentifier = string.Empty,
+                SourceDocumentNumber = string.Empty,
+                SourceRevision = string.Empty,
+                SourceIssueStatus = string.Empty,
+                IssuedBy = string.Empty,
+                IssueDate = string.Empty,
+                Notes = string.Empty
+            };
+
+            int index = 0;
+            foreach (AuthoritativeEquipmentCoordinateInventoryEntry entry in entries)
+            {
+                index++;
+                model.Rows.Add(new AuthoritativeEquipmentCoordinateWorkbookRow
+                {
+                    Number = index,
+                    EquipmentTag = entry.EquipmentTag ?? string.Empty,
+                    Description = string.Empty, // only ever filled from deterministic existing evidence
+                    Easting = string.Empty,
+                    Northing = string.Empty,
+                    Elevation = string.Empty,
+                    OccurrenceId = entry.OccurrenceId ?? string.Empty,
+                    SourceEntityHandle = entry.SourceEntityHandle ?? string.Empty
+                });
+            }
+
+            model.RequestFingerprint = AuthoritativeEquipmentCoordinateRequestFingerprint.Compute(
+                model.SchemaVersion, drawingSha256, model.Rows);
+            return model;
+        }
+
+        private string CreatePackageDirectory(string drawingSha256, DateTime utcNow)
+        {
+            string timestamp = utcNow.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", CultureInfo.InvariantCulture);
+            string drawingDirectory = Path.Combine(root, drawingSha256);
+            string packageDirectory = Path.Combine(drawingDirectory, timestamp);
+            for (int suffix = 1; Directory.Exists(packageDirectory); suffix++)
+                packageDirectory = Path.Combine(drawingDirectory, timestamp + "-" + suffix.ToString(CultureInfo.InvariantCulture));
+            Directory.CreateDirectory(packageDirectory);
+            return packageDirectory;
+        }
+
+        internal static string BuildScheduleCsv(IReadOnlyList<AuthoritativeEquipmentCoordinateInventoryEntry> entries)        {
             var builder = new StringBuilder();
             builder.Append(string.Join(",", ScheduleHeader));
             builder.Append("\r\n");
@@ -159,7 +280,7 @@ namespace EngiSentry.Standards
             return builder.ToString();
         }
 
-        private static string EscapeCsv(string? value)
+        internal static string EscapeCsv(string? value)
         {
             string text = value ?? string.Empty;
             if (text.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0) return text;
