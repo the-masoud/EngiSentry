@@ -59,6 +59,8 @@ namespace EngiSentry.AutoCAD2021
         private readonly string drawingPath;
         private readonly string drawingSha256;
         private readonly string insertionUnits;
+        private readonly PlotPlanModel plotPlan;
+        private readonly EquipmentPlacementCandidateDecisionService candidateDecisionService;
         private readonly ProjectEngineerReviewService reviewService;
         private readonly EquipmentPlacementResolutionService resolutionService;
         private readonly PlacementProposalDispositionService dispositionService;
@@ -78,6 +80,8 @@ namespace EngiSentry.AutoCAD2021
         private ComboBox proposalDisposition;
         private TextBox comment;
         private Button save;
+        private Button acceptCandidate;
+        private Button rejectCandidate;
         private Button technicalToggle;
         private Panel technicalBody;
         private TableLayoutPanel technicalGrid;
@@ -90,6 +94,8 @@ namespace EngiSentry.AutoCAD2021
         private TableLayoutPanel questionsGrid;
         private Card workItemCard;
         private Card pickCard;
+        private Card questionsCard;
+        private Card decisionCard;
         private Card technicalCard;
         private readonly Dictionary<string, Control> answerControls = new Dictionary<string, Control>(StringComparer.Ordinal);
 
@@ -126,22 +132,27 @@ namespace EngiSentry.AutoCAD2021
             string drawingPath = null)
         {
             if (plotPlan == null) throw new ArgumentNullException(nameof(plotPlan));
+            this.plotPlan = plotPlan;
             this.drawingName = drawingName ?? string.Empty;
             this.drawingPath = string.IsNullOrWhiteSpace(drawingPath) ? drawingName : drawingPath;
             this.drawingSha256 = drawingSha256 ?? string.Empty;
             this.insertionUnits = insertionUnits ?? string.Empty;
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
             this.resolutionService = resolutionService ?? throw new ArgumentNullException(nameof(resolutionService));
+            candidateDecisionService = new EquipmentPlacementCandidateDecisionService(resolutionService.Root, reviewService);
             dispositionService = resolutionService.DispositionService;
             this.pickProvider = pickProvider ?? throw new ArgumentNullException(nameof(pickProvider));
             this.proposals = (proposals ?? Array.Empty<PlacementProposal>()).Where(x => x != null && x.EngineeringReviewRequired
                 && string.Equals(x.SourceDrawingSha256, drawingSha256, StringComparison.Ordinal)
                 && string.Equals(x.ProposalFingerprint, PlacementProposalFingerprint.Compute(x), StringComparison.Ordinal))
                 .OrderBy(x => x.ProposalId, StringComparer.Ordinal).ToList();
-            // The queue is keyed by equipment identity: exactly one case per EquipmentEntityId, and
-            // an identity whose placement is already Complete is never queued. Placement
-            // occurrences are never presented as separate cases.
-            unresolved = EquipmentPlacementResolutionQueue.Build(plotPlan.EquipmentPlacements);
+            // Candidate cases keep exact occurrence identity; legacy pick cases keep their
+            // established one-representative-per-equipment queue semantics.
+            var candidateItems = plotPlan.EquipmentPlacements.Where(x => x.DrawingCandidate != null || x.CandidateDecision != null)
+                .OrderBy(x => x.NormalizedTag, StringComparer.Ordinal).ThenBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
+            var candidateEntities = new HashSet<string>(candidateItems.Select(x => x.EquipmentEntityId), StringComparer.Ordinal);
+            unresolved = candidateItems.Concat(EquipmentPlacementResolutionQueue.Build(plotPlan.EquipmentPlacements
+                .Where(x => !candidateEntities.Contains(x.EquipmentEntityId)))).ToList();
             Dock = DockStyle.Fill;
             CreateControls();
             BuildLayout();
@@ -173,6 +184,8 @@ namespace EngiSentry.AutoCAD2021
             // the primary action starts (and stays) disabled until a decision is complete, so it is an
             // owner-drawn action button whose disabled caption stays clearly readable on the dark card
             save = new ReviewActionButton();
+            acceptCandidate = new ReviewActionButton();
+            rejectCandidate = new ReviewActionButton();
             technicalToggle = new Button();
             technicalBody = new Panel();
             technicalGrid = new TableLayoutPanel();
@@ -382,8 +395,8 @@ namespace EngiSentry.AutoCAD2021
 
             workItemCard = BuildWorkItemCard();
             pickCard = BuildPickCard();
-            Card questions = BuildQuestionsCard();
-            Card decision = BuildDecisionCard();
+            questionsCard = BuildQuestionsCard();
+            decisionCard = BuildDecisionCard();
             Card reviewer = BuildReviewerCard();
             technicalCard = BuildTechnicalCard();
 
@@ -392,14 +405,14 @@ namespace EngiSentry.AutoCAD2021
             // record the decision, identify the reviewer, then the collapsed technical reference.
             technicalCard.Dock = DockStyle.Top;
             reviewer.Dock = DockStyle.Top;
-            decision.Dock = DockStyle.Top;
-            questions.Dock = DockStyle.Top;
+            decisionCard.Dock = DockStyle.Top;
+            questionsCard.Dock = DockStyle.Top;
             pickCard.Dock = DockStyle.Top;
             workItemCard.Dock = DockStyle.Top;
             scroll.Controls.Add(technicalCard);
             scroll.Controls.Add(reviewer);
-            scroll.Controls.Add(decision);
-            scroll.Controls.Add(questions);
+            scroll.Controls.Add(decisionCard);
+            scroll.Controls.Add(questionsCard);
             scroll.Controls.Add(pickCard);
             scroll.Controls.Add(workItemCard);
             root.Controls.Add(scroll, 0, 1);
@@ -695,13 +708,13 @@ namespace EngiSentry.AutoCAD2021
             bool rtl = ReviewLocalization.IsPersian;
             if (rtl)
             {
-                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(560)));
                 grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             }
             else
             {
                 grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(220)));
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(560)));
             }
             int hintColumn = rtl ? 1 : 0;
             int saveColumn = rtl ? 0 : 1;
@@ -724,7 +737,25 @@ namespace EngiSentry.AutoCAD2021
             save.AccessibleName = "SaveResolution";
             save.Click += (s, e) => SaveResolution();
             ReviewStyle.StyleButton(save, true);
-            grid.Controls.Add(save, saveColumn, 0);
+            var actionHost = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            save.Dock = DockStyle.Right;
+            save.Width = Scale(180);
+            actionHost.Controls.Add(save);
+            acceptCandidate.Text = "ACCEPT CANDIDATE";
+            acceptCandidate.AccessibleName = "AcceptCandidate";
+            acceptCandidate.Dock = DockStyle.Left;
+            acceptCandidate.Width = Scale(180);
+            acceptCandidate.Click += (s, e) => SaveCandidateDecision(DrawingPlacementCandidateActions.Accept);
+            ReviewStyle.StyleButton(acceptCandidate, true);
+            actionHost.Controls.Add(acceptCandidate);
+            rejectCandidate.Text = "REJECT CANDIDATE";
+            rejectCandidate.AccessibleName = "RejectCandidate";
+            rejectCandidate.Dock = DockStyle.Left;
+            rejectCandidate.Width = Scale(180);
+            rejectCandidate.Click += (s, e) => SaveCandidateDecision(DrawingPlacementCandidateActions.Reject);
+            ReviewStyle.StyleButton(rejectCandidate, false);
+            actionHost.Controls.Add(rejectCandidate);
+            grid.Controls.Add(actionHost, saveColumn, 0);
 
             // one concise helper that always reflects the actual missing requirement, derived from the
             // same validation state the primary action uses — no second validation engine
@@ -876,6 +907,13 @@ namespace EngiSentry.AutoCAD2021
         {
             current = index >= 0 && index < unresolved.Count ? unresolved[index] : null;
             currentProposal = index >= unresolved.Count && index < unresolved.Count + proposals.Count ? proposals[index - unresolved.Count] : null;
+            bool candidate = current?.DrawingCandidate != null;
+            pickCard.Visible = !candidate;
+            questionsCard.Visible = !candidate;
+            decisionCard.Visible = !candidate;
+            save.Visible = !candidate;
+            acceptCandidate.Visible = candidate;
+            rejectCandidate.Visible = candidate;
             pick = null;
             proposalDisposition.SelectedIndex = 0;
             proposalDisposition.Visible = currentProposal != null;
@@ -899,6 +937,21 @@ namespace EngiSentry.AutoCAD2021
                     : current.DrawingCandidate == null ? ReviewStrings.Get("Placement_ValueNone")
                     : "REVIEW_REQUIRED: " + Point((double)current.DrawingCandidate.CandidateX, (double)current.DrawingCandidate.CandidateY));
                 AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewRequired"), ReviewStrings.Get("Placement_ValueYes"));
+                if (current.DrawingCandidate != null)
+                {
+                    DrawingPlacementCandidate candidate = current.DrawingCandidate;
+                    AddInfoRow(summaryGrid, "Occurrence ID", current.PlacementId);
+                    AddInfoRow(summaryGrid, "Candidate X / Y", candidate.CandidateX.ToString(CultureInfo.InvariantCulture) + " / " + candidate.CandidateY.ToString(CultureInfo.InvariantCulture));
+                    AddInfoRow(summaryGrid, "Coordinate basis", candidate.CoordinateBasis);
+                    AddInfoRow(summaryGrid, "Evidence type", candidate.EvidenceType);
+                    AddInfoRow(summaryGrid, "Evidence summary", candidate.EvidenceSummary);
+                    AddInfoRow(summaryGrid, "Tag / X / Y handles", candidate.TagEntityHandle + " / " + candidate.XEntityHandle + " / " + candidate.YEntityHandle);
+                    AddInfoRow(summaryGrid, "Shared axis", candidate.EvidenceType.StartsWith("SHARED_X", StringComparison.Ordinal) ? "X" :
+                        candidate.EvidenceType.StartsWith("SHARED_Y", StringComparison.Ordinal) ? "Y" : "None");
+                    AddInfoRow(summaryGrid, "Provisional Road", ProvisionalClearance(current.PlacementId, EngineeringDistanceEvidenceKeys.AccessRoadEdge));
+                    AddInfoRow(summaryGrid, "Provisional Fence", ProvisionalClearance(current.PlacementId, EngineeringDistanceEvidenceKeys.SecurityFence));
+                    AddInfoRow(summaryGrid, "Current decision", current.CandidateDecision?.Action ?? "PENDING");
+                }
             }
             else if (currentProposal != null)
             {
@@ -984,6 +1037,14 @@ namespace EngiSentry.AutoCAD2021
         private static string PlacementLocation(EquipmentPlacement placement) =>
             "E/N: " + (placement.Easting?.Status ?? "?") + " / " + (placement.Northing?.Status ?? "?");
 
+        private string ProvisionalClearance(string placementId, string basis)
+        {
+            var values = plotPlan.Measurements.ProvisionalSpatialMeasurements
+                .Where(x => x.PlacementId == placementId && x.EngineeringMeasurementBasisKey == basis)
+                .Select(x => x.Distance2D).ToList();
+            return values.Count == 0 ? "Unavailable" : "PROVISIONAL " + values.Min().ToString("0.##", CultureInfo.InvariantCulture) + " mm";
+        }
+
         private static string Point(double easting, double northing) =>
             easting.ToString("R", CultureInfo.InvariantCulture) + ", " + northing.ToString("R", CultureInfo.InvariantCulture);
 
@@ -1051,9 +1112,15 @@ namespace EngiSentry.AutoCAD2021
                 }
             }
             save.Enabled = ready;
+            bool candidateReady = current?.DrawingCandidate != null && current.ResolutionState == PlacementResolutionState.ReviewRequired
+                && !string.IsNullOrWhiteSpace(reviewerName.Text) && !string.IsNullOrWhiteSpace(reviewerRole.Text);
+            acceptCandidate.Enabled = candidateReady && current.DrawingCandidate.CoordinatesInDrawingUnits;
+            rejectCandidate.Enabled = candidateReady;
             if (whyLabel != null)
             {
-                whyLabel.Text = ready ? ReviewStrings.Get("Placement_WhyReady") : MissingRequirement();
+                whyLabel.Text = current?.DrawingCandidate != null
+                    ? (candidateReady ? "Select ACCEPT or REJECT for this exact occurrence." : "Reviewer name and role are required.")
+                    : ready ? ReviewStrings.Get("Placement_WhyReady") : MissingRequirement();
                 whyLabel.ForeColor = ready ? ReviewUi.Completed : ReviewUi.Muted;
             }
         }
@@ -1095,6 +1162,7 @@ namespace EngiSentry.AutoCAD2021
         {
             if (currentProposal != null) { SaveProposalDisposition(); return; }
             if (current == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoSelection"), true); return; }
+            if (current.DrawingCandidate != null) { ShowMessage("Use ACCEPT or REJECT for this exact candidate occurrence.", true); return; }
             if (pick == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorNoPick"), true); return; }
             decimal? easting = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointX);
             decimal? northing = EquipmentPlacementPickFormatting.ToStoredDecimal(pick.PointY);
@@ -1146,6 +1214,30 @@ namespace EngiSentry.AutoCAD2021
             RefreshPlacements();
             UpdateTechnicalDetails();
             ShowMessage(ReviewStrings.Format("Placement_StatusResolutionSaved", target.NormalizedTag), false);
+        }
+
+        private void SaveCandidateDecision(string action)
+        {
+            EquipmentPlacement target = current;
+            if (target?.DrawingCandidate == null || target.ResolutionState != PlacementResolutionState.ReviewRequired)
+            { ShowMessage("Select one current REVIEW_REQUIRED occurrence.", true); return; }
+            try
+            {
+                DrawingPlacementCandidateDecision decision = candidateDecisionService.Record(target, drawingName, drawingPath,
+                    drawingSha256, insertionUnits, action, reviewerName.Text, reviewerRole.Text, comment.Text);
+                target.CandidateDecision = decision;
+                target.ResolutionState = action == DrawingPlacementCandidateActions.Accept
+                    ? PlacementResolutionState.Resolved : PlacementResolutionState.Unresolved;
+                target.ResolutionReason = action == DrawingPlacementCandidateActions.Accept
+                    ? "Engineer confirmed this exact DWG candidate" : "Engineer rejected this exact DWG candidate";
+                if (action == DrawingPlacementCandidateActions.Accept) target.PlacementStatus = "Complete";
+                placementList.Items[placementList.SelectedIndex] = QueueLabel(target);
+                UpdateSummary();
+                UpdateTechnicalDetails();
+                UpdateSaveState();
+                ShowMessage(action + " recorded for " + target.PlacementId + ". Rerun ES_PLOTQA for governed QA.", false);
+            }
+            catch (Exception exception) { ShowMessage("Candidate decision was not saved: " + exception.Message, true); }
         }
 
         private void SaveProposalDisposition()

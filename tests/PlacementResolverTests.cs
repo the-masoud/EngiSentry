@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using EngiSentry.Contracts;
 using EngiSentry.Core;
 using EngiSentry.PlotPlan;
+using EngiSentry.Standards;
 
 namespace EngiSentry.Tests
 {
@@ -164,6 +166,93 @@ namespace EngiSentry.Tests
             Check(Build(invalid).EquipmentPlacements.Single().ResolutionState == PlacementResolutionState.Unresolved,
                 "nonfinite coordinate annotation rejected");
             Check(fixture.snapshot.TextEntities.Count == 3, "source snapshot was not mutated");
+            CandidateDecisionTests();
+        }
+
+        private static void CandidateDecisionTests()
+        {
+            var f = SharedFixture(true);
+            PlotPlanModel initial = Build(f);
+            Check(initial.EquipmentPlacements.All(x => x.ResolutionState == PlacementResolutionState.ReviewRequired),
+                "unapproved candidates remain review required");
+            string temp = Path.Combine(Path.GetTempPath(), "EngiSentryCandidateReview-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(temp);
+            string drawingPath = Path.Combine(temp, "test.dwg");
+            File.WriteAllText(drawingPath, "test-only drawing identity; no AutoCAD or engineer approval");
+            string sha = HumanEngineeringReviewDecisionFileStore.ComputeSha256(drawingPath);
+            var reviewService = new ProjectEngineerReviewService(Path.Combine(temp, "reviews"));
+            var decisions = new EquipmentPlacementCandidateDecisionService(Path.Combine(temp, "resolutions"), reviewService);
+            try
+            {
+                EquipmentPlacement a = initial.EquipmentPlacements.Single(x => x.NormalizedTag == "P-01A");
+                EquipmentPlacement b = initial.EquipmentPlacements.Single(x => x.NormalizedTag == "P-01B");
+                DrawingPlacementCandidateDecision accepted = decisions.Record(a, "test.dwg", drawingPath, sha,
+                    "Millimeters", DrawingPlacementCandidateActions.Accept, "TEST_ONLY", "Automated fixture");
+                DrawingPlacementCandidateDecision rejected = decisions.Record(b, "test.dwg", drawingPath, sha,
+                    "Millimeters", DrawingPlacementCandidateActions.Reject, "TEST_ONLY", "Automated fixture");
+                Check(HumanEngineeringReviewDecisionFileStore.ComputeSha256(drawingPath) == sha,
+                    "accept and reject do not mutate drawing bytes");
+                var loaded = decisions.ResolveForDrawing(sha, "Millimeters");
+                Check(loaded.Count == 2 && loaded.All(x => !string.IsNullOrEmpty(x.ResponseId) &&
+                    !string.IsNullOrEmpty(x.CandidateFingerprint)), "review persistence and provenance reload");
+                PlotPlanModel decided = Build(f, candidateDecisions: loaded);
+                EquipmentPlacement acceptedPlacement = decided.EquipmentPlacements.Single(x => x.PlacementId == a.PlacementId);
+                EquipmentPlacement rejectedPlacement = decided.EquipmentPlacements.Single(x => x.PlacementId == b.PlacementId);
+                Check(acceptedPlacement.ResolutionState == PlacementResolutionState.Resolved &&
+                    acceptedPlacement.PlacementStatus == "Complete" && acceptedPlacement.CandidateDecision?.DecisionId == accepted.DecisionId &&
+                    acceptedPlacement.Easting.SelectedRawText == DrawingPlacementCandidateActions.ConfirmedSource,
+                    "exact accept resolves with truthful provenance");
+                Check(rejectedPlacement.ResolutionState == PlacementResolutionState.Unresolved &&
+                    rejectedPlacement.PlacementStatus != "Complete" && rejectedPlacement.CandidateDecision?.DecisionId == rejected.DecisionId,
+                    "exact reject stays out of governed placement");
+                Check(decided.EquipmentPlacements.Count(x => x.ResolutionState == PlacementResolutionState.Resolved) == 1,
+                    "A/B occurrence isolation");
+
+                var geometry = new PlotGeometryCapture();
+                f.model.RoadLabels.Add(new TextEvidence { SourceHandle = "ROAD-TEXT", SourceLayer = "ROAD-TEXT", RawText = "ROAD EDGE", PositionX = 5, PositionY = 1 });
+                f.model.BoundaryLabels.Add(new BoundaryEvidence { SourceHandle = "FENCE-TEXT", SourceLayer = "FENCE-TEXT", RawText = "FENCE", BoundaryType = "Fence", PositionX = 5, PositionY = 2 });
+                geometry.ModelSpaceTextSources.Add(new PlotTextSourceRecord { SourceHandle = "ROAD-TEXT", SourceLayer = "ROAD-TEXT", PositionX = 5, PositionY = 1, Height = 1 });
+                geometry.ModelSpaceTextSources.Add(new PlotTextSourceRecord { SourceHandle = "FENCE-TEXT", SourceLayer = "FENCE-TEXT", PositionX = 5, PositionY = 2, Height = 1 });
+                geometry.Primitives.Add(new PlotGeometryPrimitive { SourceHandle = "ROAD", SourceLayer = "ROAD", GeometryKind = "Line",
+                    Vertices = new List<PlotGeometryVertex> { new PlotGeometryVertex { X = 0, Y = 0 }, new PlotGeometryVertex { X = 10, Y = 0 } } });
+                geometry.Primitives.Add(new PlotGeometryPrimitive { SourceHandle = "FENCE", SourceLayer = "FENCE", GeometryKind = "Line",
+                    Vertices = new List<PlotGeometryVertex> { new PlotGeometryVertex { X = 0, Y = 2 }, new PlotGeometryVertex { X = 10, Y = 2 } } });
+                PlotPlanModel measured = PlotPlanBuilder.Build(EntityIndexer.Build(f.model), f.model, f.snapshot, geometry,
+                    candidateDecisions: loaded);
+                Check(measured.Measurements.EquipmentSpatialMeasurements.Any(x => x.PlacementId == a.PlacementId && x.SubjectKind == "Road") &&
+                    measured.Measurements.EquipmentSpatialMeasurements.All(x => x.PlacementId != b.PlacementId),
+                    "accepted candidate enters governed measurement; rejected does not");
+                var authority = new AuthoritativeEquipmentCoordinate { OccurrenceId = a.PlacementId, EquipmentTag = "P-01A", Easting = 900m, Northing = 800m };
+                PlotPlanModel higher = Build(f, new[] { authority }, loaded);
+                Check(higher.EquipmentPlacements.Single(x => x.PlacementId == a.PlacementId).Easting.SelectedValue == 900m &&
+                    higher.EquipmentPlacements.Single(x => x.PlacementId == a.PlacementId).CandidateDecision == null,
+                    "exact authoritative provider supersedes candidate decision");
+                Check(decisions.ResolveForDrawing(new string('A', 64), "Millimeters").Count == 0,
+                    "wrong drawing fingerprint ignored");
+                var wrongHandle = new DrawingPlacementCandidateDecision { OccurrenceId = a.PlacementId,
+                    EquipmentTag = a.NormalizedTag, TagHandle = "OTHER-HANDLE", CandidateFingerprint = accepted.CandidateFingerprint,
+                    CandidateX = accepted.CandidateX, CandidateY = accepted.CandidateY, XHandle = accepted.XHandle,
+                    YHandle = accepted.YHandle, EvidenceType = accepted.EvidenceType, EvidenceSummary = accepted.EvidenceSummary,
+                    InsertionUnits = accepted.InsertionUnits, Action = accepted.Action };
+                Check(Build(f, candidateDecisions: new[] { wrongHandle }).EquipmentPlacements.Single(x => x.PlacementId == a.PlacementId)
+                    .ResolutionState == PlacementResolutionState.ReviewRequired, "wrong occurrence handle ignored");
+
+                var duplicate = SharedFixture(true);
+                duplicate.model.EquipmentTags.ForEach(x => x.NormalizedTag = "P-03A");
+                duplicate.snapshot.TextEntities.Where(x => x.Layer == "EQ-TAG").ToList().ForEach(x => x.Text = "P-03A");
+                PlotPlanModel duplicatePlan = Build(duplicate);
+                Check(duplicatePlan.EquipmentPlacements.Count == 2 &&
+                    duplicatePlan.EquipmentPlacements.Select(x => x.PlacementId).Distinct().Count() == 2,
+                    "duplicate canonical tag keeps exact occurrences");
+                EquipmentPlacement first = duplicatePlan.EquipmentPlacements.OrderBy(x => x.PlacementId).First();
+                DrawingPlacementCandidateDecision firstOnly = decisions.Record(first, "test.dwg", drawingPath, sha,
+                    "Millimeters", DrawingPlacementCandidateActions.Accept, "TEST_ONLY", "Automated fixture");
+                PlotPlanModel duplicateDecided = Build(duplicate, candidateDecisions: new[] { firstOnly });
+                Check(duplicateDecided.EquipmentPlacements.Count(x => x.ResolutionState == PlacementResolutionState.Resolved) == 1 &&
+                    duplicateDecided.EquipmentPlacements.Count(x => x.ResolutionState == PlacementResolutionState.ReviewRequired) == 1,
+                    "P-03A occurrence A does not approve occurrence B");
+            }
+            finally { Directory.Delete(temp, true); }
         }
 
         private static (DrawingSnapshot snapshot, EngineeringDrawingModel model) New(string units = "Millimeters") =>
@@ -200,7 +289,9 @@ namespace EngiSentry.Tests
             f.model.Coordinates.Add(new CoordinateEvidence { SourceHandle = handle, SourceLayer = "EQ-ID", RawText = text, PositionX = x, PositionY = y, Axis = axis, Value = value, ParseStatus = "Parsed" });
         }
         private static PlotPlanModel Build((DrawingSnapshot snapshot, EngineeringDrawingModel model) f,
-            IReadOnlyList<AuthoritativeEquipmentCoordinate>? coordinates = null) =>
-            PlotPlanBuilder.Build(EntityIndexer.Build(f.model), f.model, f.snapshot, authoritativeCoordinates: coordinates);
+            IReadOnlyList<AuthoritativeEquipmentCoordinate>? coordinates = null,
+            IReadOnlyList<DrawingPlacementCandidateDecision>? candidateDecisions = null) =>
+            PlotPlanBuilder.Build(EntityIndexer.Build(f.model), f.model, f.snapshot,
+                authoritativeCoordinates: coordinates, candidateDecisions: candidateDecisions);
     }
 }

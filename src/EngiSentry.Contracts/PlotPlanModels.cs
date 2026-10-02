@@ -87,6 +87,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 20, EmitDefaultValue = false)] public DrawingPlacementCandidate? DrawingCandidate { get; set; }
         [DataMember(Order = 21)] public string ResolutionReason { get; set; } = string.Empty;
         [DataMember(Order = 22)] public DrawingPlacementDiagnostic DrawingDiagnostic { get; set; } = new DrawingPlacementDiagnostic();
+        [DataMember(Order = 23, EmitDefaultValue = false)] public DrawingPlacementCandidateDecision? CandidateDecision { get; set; }
     }
 
     [DataContract]

@@ -10,7 +10,7 @@ namespace EngiSentry.PlotPlan
         public const double MaxAssociationDistanceFactor = 30.0;
         public const double AmbiguityMarginFactor = 2.0;
 
-        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null, IReadOnlyList<EquipmentPlacementResolution>? engineerResolutions = null, IReadOnlyList<AuthoritativeEquipmentCoordinate>? authoritativeCoordinates = null)
+        public static PlotPlanModel Build(EngineeringEntityIndex index, EngineeringDrawingModel model, DrawingSnapshot snapshot, PlotGeometryCapture? geometryCapture = null, IReadOnlyList<EquipmentPlacementResolution>? engineerResolutions = null, IReadOnlyList<AuthoritativeEquipmentCoordinate>? authoritativeCoordinates = null, IReadOnlyList<DrawingPlacementCandidateDecision>? candidateDecisions = null)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
             if (model == null) throw new ArgumentNullException(nameof(model));
@@ -53,6 +53,7 @@ namespace EngiSentry.PlotPlan
             ApplyEngineerResolutions(placements, engineerResolutions, model.Drawing);
             ApplyAuthoritativeCoordinates(placements, authoritativeCoordinates);
             DrawingPlacementCandidateResolver.Apply(placements, allText, model.Drawing);
+            ApplyCandidateDecisions(placements, candidateDecisions, model.Drawing);
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
             PlotGeometryModel geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture);
             if (geometryCapture != null)
@@ -84,6 +85,48 @@ namespace EngiSentry.PlotPlan
                 measurements.ProvisionalSpatialMeasurements = PlotSpatialMeasurementBuilder.Build(provisionalPlacements, geometry)
                     .EquipmentSpatialMeasurements;
             return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
+        }
+
+        private static void ApplyCandidateDecisions(List<EquipmentPlacement> placements,
+            IReadOnlyList<DrawingPlacementCandidateDecision>? decisions, SemanticDrawing? drawing)
+        {
+            if (decisions == null) return;
+            foreach (DrawingPlacementCandidateDecision decision in decisions)
+            {
+                EquipmentPlacement? placement = placements.SingleOrDefault(x => x.PlacementId == decision.OccurrenceId);
+                if (placement == null || placement.ResolutionState == PlacementResolutionState.Resolved) continue;
+                DrawingPlacementCandidate? candidate = placement.DrawingCandidate;
+                if (candidate == null || placement.ResolutionState != PlacementResolutionState.ReviewRequired ||
+                    !string.Equals(drawing?.InsertionUnits, decision.InsertionUnits, StringComparison.Ordinal) ||
+                    placement.NormalizedTag != decision.EquipmentTag || placement.TagSourceHandle != decision.TagHandle ||
+                    candidate.CandidateX != decision.CandidateX || candidate.CandidateY != decision.CandidateY ||
+                    candidate.XEntityHandle != decision.XHandle || candidate.YEntityHandle != decision.YHandle ||
+                    candidate.EvidenceType != decision.EvidenceType || candidate.EvidenceSummary != decision.EvidenceSummary ||
+                    DrawingPlacementCandidateDecisionIdentity.CandidateFingerprint(placement, candidate) != decision.CandidateFingerprint)
+                {
+                    placement.ResolutionReason = "Stored candidate decision is stale for this drawing occurrence";
+                    placement.DrawingDiagnostic.RejectionReason = placement.ResolutionReason;
+                    continue;
+                }
+                placement.CandidateDecision = decision;
+                if (decision.Action == DrawingPlacementCandidateActions.Reject)
+                {
+                    placement.ResolutionState = PlacementResolutionState.Unresolved;
+                    placement.ResolutionReason = "Engineer rejected this exact drawing candidate";
+                    placement.DrawingDiagnostic.RejectionReason = placement.ResolutionReason;
+                    continue;
+                }
+                if (decision.Action != DrawingPlacementCandidateActions.Accept || !candidate.CoordinatesInDrawingUnits) continue;
+                placement.Easting = new CoordinateAssociation { Axis = "E", Status = "Resolved", SelectedValue = candidate.CandidateX,
+                    SelectedSourceHandle = candidate.XEntityHandle, SelectedSourceLayer = "EQ-ID",
+                    SelectedRawText = DrawingPlacementCandidateActions.ConfirmedSource };
+                placement.Northing = new CoordinateAssociation { Axis = "N", Status = "Resolved", SelectedValue = candidate.CandidateY,
+                    SelectedSourceHandle = candidate.YEntityHandle, SelectedSourceLayer = "EQ-ID",
+                    SelectedRawText = DrawingPlacementCandidateActions.ConfirmedSource };
+                placement.PlacementStatus = "Complete";
+                placement.ResolutionState = PlacementResolutionState.Resolved;
+                placement.ResolutionReason = "Engineer confirmed this exact DWG candidate; source remains inferred annotation evidence";
+            }
         }
 
         // An explicit engineer pick is the only way an otherwise-unresolved placement becomes

@@ -149,8 +149,13 @@ namespace EngiSentry.Tests
             var control = NewControl(reviewService, resolutionService, new StubPickProvider(null));
             List<Button> buttons = Descendants(control).OfType<Button>().ToList();
             CollectionAssert(buttons.Select(b => b.Text).OrderBy(x => x, StringComparer.Ordinal).ToList(),
-                new List<string> { "Clear Selection", "Pick Equipment", "Pick Free-Space Point", "Record Decision", "Show Technical Details" },
+                new List<string> { "ACCEPT CANDIDATE", "Clear Selection", "Pick Equipment", "Pick Free-Space Point", "REJECT CANDIDATE", "Record Decision", "Show Technical Details" },
                 "The action labels must stay exactly the accepted set.");
+
+            Assert(buttons.Any(b => b.Text == "ACCEPT CANDIDATE") && buttons.Any(b => b.Text == "REJECT CANDIDATE"),
+                "Exact candidate review actions must be present.");
+            Assert(!buttons.Any(b => b.Text.IndexOf("ALL", StringComparison.OrdinalIgnoreCase) >= 0),
+                "Bulk candidate actions must remain absent.");
 
             Button save = buttons.Single(b => b.Text == "Record Decision");
             Button pick = buttons.Single(b => b.Text == "Pick Equipment");

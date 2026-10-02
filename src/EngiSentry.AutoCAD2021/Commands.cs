@@ -171,7 +171,8 @@ namespace EngiSentry.AutoCAD2021
                 WriteToActiveEditor("[ES_PLOTQA] Trusted engineer resolutions applied: {0}\n", engineerResolutions.Count);
                 System.Collections.Generic.IReadOnlyList<AuthoritativeEquipmentCoordinate> authoritativeCoordinates = ResolveAuthoritativeCoordinates(document);
                 WriteToActiveEditor("[ES_PLOTQA] Active authoritative coordinate package covers {0} occurrence(s)\n", authoritativeCoordinates.Count);
-                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions, authoritativeCoordinates);
+                System.Collections.Generic.IReadOnlyList<DrawingPlacementCandidateDecision> candidateDecisions = ResolveCandidateDecisions(document, snapshot.InsertionUnits);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions, authoritativeCoordinates, candidateDecisions);
                 int authoritativeResolvedCount = plotPlan.EquipmentPlacements.Count(x => string.Equals(x.AuthoritativeCoordinate?.PlacementStatus, AuthoritativePlacementStatuses.Resolved, System.StringComparison.Ordinal));
                 int authoritativeConflictCount = plotPlan.EquipmentPlacements.Count(x => string.Equals(x.AuthoritativeCoordinate?.PlacementStatus, AuthoritativePlacementStatuses.Conflict, System.StringComparison.Ordinal));
                 WriteToActiveEditor("[ES_PLOTQA] Authoritative evidence: resolved {0}, conflict {1}\n", authoritativeResolvedCount, authoritativeConflictCount);
@@ -604,7 +605,8 @@ namespace EngiSentry.AutoCAD2021
                 EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
                 EngineeringEntityIndex index = EntityIndexer.Build(semantic);
                 System.Collections.Generic.IReadOnlyList<EquipmentPlacementResolution> engineerResolutions = ResolveEngineerResolutions(document, snapshot.InsertionUnits);
-                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions);
+                PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot, geometryCapture, engineerResolutions,
+                    ResolveAuthoritativeCoordinates(document), ResolveCandidateDecisions(document, snapshot.InsertionUnits));
                 int afterProcessing = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 if (snapshot.DbModBefore != afterProcessing) throw new InvalidOperationException("DBMOD changed during placement resolution processing.");
                 int unresolved = EquipmentPlacementResolutionQueue.CountUnresolved(plotPlan.EquipmentPlacements);
@@ -614,6 +616,54 @@ namespace EngiSentry.AutoCAD2021
                 VisualResultsPalette.ShowEquipmentPlacementResolution(plotPlan, snapshot.FileName ?? "<unnamed>", drawingSha256!, snapshot.InsertionUnits ?? string.Empty, new ProjectEngineerReviewService(), new EquipmentPlacementResolutionService(), new EditorEquipmentPlacementPickProvider(document), proposals, document.Name);
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_PLACEMENTRESOLVE failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); VisualResultsPalette.ShowFailure("ES_PLACEMENTRESOLVE", Application.DocumentManager?.MdiActiveDocument, "<active drawing>", exception.Message); }
+        }
+
+        /// <summary>Command-line form of the same exact-occurrence review used by the palette.</summary>
+        [CommandMethod("ES_PLACEMENTCANDIDATE")]
+        public void PlacementCandidateReview()
+        {
+            try
+            {
+                Document? document = Application.DocumentManager?.MdiActiveDocument;
+                if (document == null) throw new InvalidOperationException("An active drawing is required.");
+                string? sha = TryComputeDrawingSha256(document);
+                if (sha == null) throw new InvalidOperationException("The drawing must be saved on disk.");
+                DrawingScanner.Scan(document, true, out DrawingSnapshot snapshot, out PlotGeometryCapture geometry);
+                EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                PlotPlanModel plan = PlotPlanBuilder.Build(index, semantic, snapshot, geometry,
+                    ResolveEngineerResolutions(document, snapshot.InsertionUnits), ResolveAuthoritativeCoordinates(document),
+                    ResolveCandidateDecisions(document, snapshot.InsertionUnits));
+                PromptResult idResult = document.Editor.GetString("\nExact occurrence ID to review: ");
+                if (idResult.Status != PromptStatus.OK) return;
+                EquipmentPlacement? placement = plan.EquipmentPlacements.SingleOrDefault(x => x.PlacementId == idResult.StringResult);
+                if (placement?.ResolutionState != PlacementResolutionState.ReviewRequired || placement.DrawingCandidate == null)
+                    throw new InvalidOperationException("That exact occurrence has no current REVIEW_REQUIRED candidate.");
+                DrawingPlacementCandidate candidate = placement.DrawingCandidate;
+                document.Editor.WriteMessage("\nOccurrence: {0}\nTag: {1}\nX: {2} Y: {3}\nBasis: {4}\nEvidence: {5}\nHandles: TAG={6} X={7} Y={8}\nReason: {9}\n",
+                    placement.PlacementId, placement.NormalizedTag, candidate.CandidateX, candidate.CandidateY,
+                    candidate.CoordinateBasis, candidate.EvidenceType, candidate.TagEntityHandle,
+                    candidate.XEntityHandle, candidate.YEntityHandle, candidate.EvidenceSummary);
+                PromptResult actionResult = document.Editor.GetString("\nExplicit action ACCEPT or REJECT: ");
+                if (actionResult.Status != PromptStatus.OK) return;
+                string action = actionResult.StringResult.Trim().ToUpperInvariant();
+                if (action != DrawingPlacementCandidateActions.Accept && action != DrawingPlacementCandidateActions.Reject)
+                    throw new InvalidOperationException("Only ACCEPT or REJECT is valid.");
+                var nameOptions = new PromptStringOptions("\nReviewer name: ") { AllowSpaces = true };
+                PromptResult name = document.Editor.GetString(nameOptions);
+                if (name.Status != PromptStatus.OK) return;
+                var roleOptions = new PromptStringOptions("\nReviewer role: ") { AllowSpaces = true };
+                PromptResult role = document.Editor.GetString(roleOptions);
+                if (role.Status != PromptStatus.OK) return;
+                var service = new EquipmentPlacementCandidateDecisionService();
+                DrawingPlacementCandidateDecision decision = service.Record(placement, snapshot.FileName ?? System.IO.Path.GetFileName(document.Name),
+                    document.Name, sha, snapshot.InsertionUnits ?? string.Empty, action, name.StringResult, role.StringResult);
+                int after = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                if (after != snapshot.DbModBefore) throw new InvalidOperationException("DBMOD changed during candidate review.");
+                document.Editor.WriteMessage("\nCandidate decision recorded: {0} {1} {2}\nDBMOD unchanged: YES\n",
+                    decision.OccurrenceId, decision.Action, decision.DecisionId);
+            }
+            catch (System.Exception exception) { WriteToActiveEditor("\nES_PLACEMENTCANDIDATE failed: {0}\n", exception.Message); }
         }
 
         /// <summary>
@@ -881,6 +931,17 @@ namespace EngiSentry.AutoCAD2021
                 return new EquipmentPlacementResolutionService().ResolveTrustedForDrawing(drawingSha256, insertionUnits!);
             }
             catch (System.Exception) { return System.Array.Empty<EquipmentPlacementResolution>(); }
+        }
+
+        private static System.Collections.Generic.IReadOnlyList<DrawingPlacementCandidateDecision> ResolveCandidateDecisions(Document? document, string? insertionUnits)
+        {
+            try
+            {
+                string? sha = TryComputeDrawingSha256(document);
+                if (sha == null || string.IsNullOrWhiteSpace(insertionUnits)) return System.Array.Empty<DrawingPlacementCandidateDecision>();
+                return new EquipmentPlacementCandidateDecisionService().ResolveForDrawing(sha, insertionUnits!);
+            }
+            catch (System.Exception) { return System.Array.Empty<DrawingPlacementCandidateDecision>(); }
         }
 
         /// <summary>

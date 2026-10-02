@@ -1,0 +1,16 @@
+_.NETLOAD
+C:/Users/M.Zeynali/Documents/EngiSentry/src/EngiSentry.AutoCAD2021/bin/x64/Release/EngiSentry.AutoCAD2021.dll
+ES_PLOTQA
+ES_PLACEMENTCANDIDATE
+placement:equipment:P-01A:57D2CC
+ACCEPT
+Pilot Reviewer
+Project Engineer
+ES_PLACEMENTCANDIDATE
+placement:equipment:P-01B:57D2CE
+REJECT
+Pilot Reviewer
+Project Engineer
+ES_PLOTQA
+_.QUIT
+_Y
