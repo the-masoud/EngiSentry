@@ -24,6 +24,9 @@
         <Command Global="ES_JEVLABEL" Local="ES_JEVLABEL" />
         <Command Global="ES_ENGINEERREVIEW" Local="ES_ENGINEERREVIEW" />
         <Command Global="ES_PLACEMENTRESOLVE" Local="ES_PLACEMENTRESOLVE" />
+        <Command Global="ES_COORDREQUEST" Local="ES_COORDREQUEST" />
+        <Command Global="ES_COORDIMPORT" Local="ES_COORDIMPORT" />
+        <Command Global="ES_COORDSTATUS" Local="ES_COORDSTATUS" />
       </Commands>
     </ComponentEntry>
   </Components>

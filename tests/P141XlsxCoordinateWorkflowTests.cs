@@ -31,6 +31,7 @@ namespace EngiSentry.Tests
             WorkbookRoundTripAcceptance();
             SemanticIdentityAcceptance();
             StoreAndProviderAcceptance();
+            NestedStorePathAcceptance();
             PlacementProvenanceAcceptance();
             NegativeMatrix();
             Console.WriteLine("P14.1 engineer-facing XLSX coordinate workflow tests passed.");
@@ -166,6 +167,19 @@ namespace EngiSentry.Tests
                     "the request must have no duplicate and no missing occurrence id.");
                 Assert(AuthoritativeEquipmentCoordinatePackageValidator.IsSha256(request.RequestFingerprint),
                     "the request fingerprint must be a 64-character SHA256.");
+                Assert(string.Equals(request.WorkbookPath,
+                    Path.Combine(root, AuthoritativeEquipmentCoordinateWorkbookSchema.WorkbookFileName), StringComparison.Ordinal),
+                    "the request must use the one stable engineer-facing workbook path.");
+                byte[] original = File.ReadAllBytes(request.WorkbookPath);
+                bool refusedExisting = false;
+                try
+                {
+                    new AuthoritativeEquipmentCoordinateRequestBuilder(root)
+                        .CreateWorkbook(SyntheticDrawingName, SyntheticDrawingSha, SyntheticInventory(), SyntheticUtc);
+                }
+                catch (IOException) { refusedExisting = true; }
+                Assert(refusedExisting && File.ReadAllBytes(request.WorkbookPath).SequenceEqual(original),
+                    "a second request must fail without overwriting the existing workbook.");
             }
             finally { TryDelete(root); }
         }
@@ -259,6 +273,10 @@ namespace EngiSentry.Tests
             try
             {
                 var store = new AuthoritativeEquipmentCoordinatePackageStore(root);
+                var provider = new AuthoritativeEquipmentCoordinateProvider(store);
+                Assert(provider.InspectStatus(SyntheticDrawingSha, null, false).State
+                    == AuthoritativeEquipmentCoordinateStatusState.NoActivePackage,
+                    "status must clearly distinguish an empty coordinate store.");
                 byte[] workbook = WorkbookBytes();
                 AuthoritativeEquipmentCoordinateWorkbookImportResult read = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
                     workbook, SyntheticInventory(), SyntheticDrawingSha);
@@ -283,7 +301,23 @@ namespace EngiSentry.Tests
                     "the preserved workbook hash must match the recorded SourceWorkbookSha256.");
                 Assert(store.IsActive(SyntheticDrawingSha, receipt.PackageFingerprint), "the installed package must become active.");
 
-                var provider = new AuthoritativeEquipmentCoordinateProvider(store);
+                Assert(provider.InspectStatus(SyntheticDrawingSha, read.RequestFingerprint, false).State
+                    == AuthoritativeEquipmentCoordinateStatusState.ActiveValid,
+                    "the active workbook must be valid for its drawing and occurrence request.");
+                AuthoritativeEquipmentCoordinateStatusSnapshot wrongDrawing = provider.InspectStatus(
+                    new string('A', 64), read.RequestFingerprint, false);
+                Assert(wrongDrawing.State == AuthoritativeEquipmentCoordinateStatusState.ActiveMismatch
+                    && wrongDrawing.ActivePackage == null,
+                    "an active package for another drawing must be reported as mismatched.");
+                Assert(provider.InspectStatus(SyntheticDrawingSha, new string('F', 64), false).State
+                    == AuthoritativeEquipmentCoordinateStatusState.ActiveMismatch,
+                    "an active package must reject a different live occurrence fingerprint.");
+                Assert(provider.InspectStatus(SyntheticDrawingSha, read.RequestFingerprint, true).State
+                    == AuthoritativeEquipmentCoordinateStatusState.ActiveMismatch,
+                    "an unsaved modified drawing must not be reported as bound to the on-disk package.");
+                Assert(provider.GetActive(SyntheticDrawingSha)?.SourceDocumentNumber == "SYNTHETIC-DOC-0001"
+                    && provider.GetActive(SyntheticDrawingSha)?.SourceWorkbookSha256 == read.SourceWorkbookSha256,
+                    "status provenance must come from the active package.");
                 IReadOnlyList<AuthoritativeEquipmentCoordinate> resolved = provider.ResolveForDrawing(SyntheticDrawingSha);
                 Assert(resolved.Count == 4, "the provider must resolve every coordinate of the active package.");
                 Assert(resolved.All(x => string.Equals(x.SourceWorkbookSha256, read.SourceWorkbookSha256, StringComparison.Ordinal)),
@@ -301,8 +335,90 @@ namespace EngiSentry.Tests
                     "a mismatched tag must never resolve an occurrence.");
                 Assert(provider.Resolve(new string('0', 64), "placement:equipment:P-90A:AAAA01", "P-90A") == null,
                     "another drawing must never see this package.");
+
+                AuthoritativeEquipmentCoordinateWorkbookImportResult invalid = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
+                    WorkbookBytes(m => m.Rows[0].Northing = string.Empty), SyntheticInventory(), SyntheticDrawingSha);
+                Assert(!invalid.IsValid && invalid.Validation == null,
+                    "a missing Northing must be rejected before installation.");
+                Assert(store.ReadActive(SyntheticDrawingSha)?.PackageFingerprint == receipt.PackageFingerprint
+                    && store.ReadActive(SyntheticDrawingSha)?.SourceWorkbookSha256 == receipt.SourceWorkbookSha256,
+                    "a rejected later workbook must preserve the previously active package and workbook identities.");
+
+                byte[] resavedBytes = WorkbookBytes(m => m.GeneratedUtc = "2099-01-01T00:00:00.000Z");
+                AuthoritativeEquipmentCoordinateWorkbookImportResult resaved = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
+                    resavedBytes, SyntheticInventory(), SyntheticDrawingSha);
+                Assert(resaved.IsValid && resaved.Validation!.PackageFingerprint == receipt.PackageFingerprint
+                    && resaved.SourceWorkbookSha256 != receipt.SourceWorkbookSha256,
+                    "the collision fixture must have the same semantic package and different workbook bytes.");
+                bool refusedConflictingSource = false;
+                try
+                {
+                    store.InstallWorkbook(SyntheticDrawingSha, resaved.NormalizedManifestBytes!, resaved.NormalizedScheduleBytes!,
+                        resaved.SourceWorkbookBytes!, Provenance(resaved), resaved.Validation!, receipt.PackageFingerprint);
+                }
+                catch (InvalidOperationException) { refusedConflictingSource = true; }
+                Assert(refusedConflictingSource && store.ReadActive(SyntheticDrawingSha)?.SourceWorkbookSha256 == receipt.SourceWorkbookSha256
+                    && File.ReadAllBytes(preservedWorkbook).SequenceEqual(workbook),
+                    "a semantic duplicate from different XLSX bytes must not replace active provenance or stored source bytes.");
             }
             finally { TryDelete(root); }
+        }
+
+        private static void NestedStorePathAcceptance()
+        {
+            string baseRoot = Path.Combine(Path.GetTempPath(), "es-path-" + Guid.NewGuid().ToString("N"));
+            string root = Path.Combine(baseRoot, new string('n', Math.Max(1, 120 - baseRoot.Length - 1)));
+            Assert(root.Length >= 113, "the path regression root must be at least as nested as the recovery store root.");
+            try
+            {
+                byte[] workbook = WorkbookBytes();
+                AuthoritativeEquipmentCoordinateWorkbookImportResult read = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
+                    workbook, SyntheticInventory(), SyntheticDrawingSha);
+                Assert(read.IsValid && read.Validation != null, "the nested-path workbook fixture must validate.");
+                var store = new AuthoritativeEquipmentCoordinatePackageStore(root);
+                AuthoritativeEquipmentCoordinateImportReceipt receipt = store.InstallWorkbook(
+                    SyntheticDrawingSha, read.NormalizedManifestBytes!, read.NormalizedScheduleBytes!,
+                    read.SourceWorkbookBytes!, Provenance(read), read.Validation!, null);
+                Assert(receipt.PackageDirectory == Path.Combine(root, "p", receipt.PackageFingerprint),
+                    "the compact package directory must retain the full content fingerprint without repeating the drawing SHA.");
+                Assert(store.ReadActive(SyntheticDrawingSha)?.PackageFingerprint == read.Validation.PackageFingerprint,
+                    "the nested store must activate the exact validated package identity.");
+                string sourcePath = Path.Combine(receipt.PackageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName);
+                Assert(File.ReadAllBytes(sourcePath).SequenceEqual(workbook)
+                    && receipt.SourceWorkbookSha256 == read.SourceWorkbookSha256,
+                    "the nested store must retain the exact workbook bytes and independent source identity.");
+                var reopened = new AuthoritativeEquipmentCoordinateProvider(new AuthoritativeEquipmentCoordinatePackageStore(root));
+                Assert(reopened.ResolveForDrawing(SyntheticDrawingSha).Count == 4
+                    && reopened.InspectStatus(SyntheticDrawingSha, read.RequestFingerprint, false).State
+                        == AuthoritativeEquipmentCoordinateStatusState.ActiveValid,
+                    "the provider must reopen all active occurrences from the nested store.");
+                AuthoritativeEquipmentCoordinateWorkbookImportResult invalid = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
+                    WorkbookBytes(m => m.Rows[0].Northing = string.Empty), SyntheticInventory(), SyntheticDrawingSha);
+                Assert(!invalid.IsValid && store.ReadActive(SyntheticDrawingSha)?.PackageFingerprint == receipt.PackageFingerprint
+                    && store.ReadActive(SyntheticDrawingSha)?.SourceWorkbookSha256 == receipt.SourceWorkbookSha256,
+                    "a later invalid workbook must preserve the nested store's active package.");
+            }
+            finally { TryDelete(baseRoot); }
+
+            string unusableBase = Path.Combine(Path.GetTempPath(), "es-too-long-" + Guid.NewGuid().ToString("N"));
+            string unusable = Path.Combine(unusableBase, new string('x', Math.Max(1, 180 - unusableBase.Length - 1)));
+            byte[] candidate = WorkbookBytes();
+            AuthoritativeEquipmentCoordinateWorkbookImportResult valid = AuthoritativeEquipmentCoordinateWorkbookReader.Read(
+                candidate, SyntheticInventory(), SyntheticDrawingSha);
+            Assert(valid.IsValid && valid.Validation != null, "the unusable-path fixture must be valid before store activation.");
+            bool clearFailure = false;
+            try
+            {
+                new AuthoritativeEquipmentCoordinatePackageStore(unusable).InstallWorkbook(
+                    SyntheticDrawingSha, valid.NormalizedManifestBytes!, valid.NormalizedScheduleBytes!,
+                    valid.SourceWorkbookBytes!, Provenance(valid), valid.Validation!, null);
+            }
+            catch (InvalidOperationException exception)
+            {
+                clearFailure = exception.Message.Contains("configured authoritative coordinate store root is too long");
+            }
+            Assert(clearFailure && !Directory.Exists(unusableBase),
+                "an unusable store path must fail clearly before writing any package or active pointer.");
         }
 
         // ---------------------------------------------------------------- placement provenance
@@ -420,6 +536,7 @@ namespace EngiSentry.Tests
                 new NegativeCase { Name = "P141-N22 blank issue date", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.MissingSourceMetadata, Mutate = m => m.IssueDate = string.Empty },
                 new NegativeCase { Name = "P141-N23 locale-ambiguous issue date", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidIssueDate, Mutate = m => m.IssueDate = "10/01/2026" },
                 new NegativeCase { Name = "P141-N24 impossible issue date", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidIssueDate, Mutate = m => m.IssueDate = "2026-02-31" },
+                new NegativeCase { Name = "P141-N24a padded issue date", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidIssueDate, Mutate = m => m.IssueDate = " 2026-10-01" },
 
                 // COORDINATES
                 new NegativeCase { Name = "P141-N25 blank Easting", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].Easting = string.Empty },
@@ -429,7 +546,9 @@ namespace EngiSentry.Tests
                 new NegativeCase { Name = "P141-N29 Easting as formula error", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].EastingKind = AuthoritativeEquipmentCoordinateCellKind.Error },
                 new NegativeCase { Name = "P141-N30 Northing as text", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[1].NorthingKind = AuthoritativeEquipmentCoordinateCellKind.Text },
                 new NegativeCase { Name = "P141-N31 Elevation as text", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].ElevationKind = AuthoritativeEquipmentCoordinateCellKind.Text },
-                new NegativeCase { Name = "P141-N32 Elevation as formula", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].ElevationKind = AuthoritativeEquipmentCoordinateCellKind.Formula }
+                new NegativeCase { Name = "P141-N32 Elevation as formula", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].ElevationKind = AuthoritativeEquipmentCoordinateCellKind.Formula },
+                new NegativeCase { Name = "P141-N32a NaN Easting", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].Easting = "NaN" },
+                new NegativeCase { Name = "P141-N32b Infinity Northing", Expected = AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidCoordinate, Mutate = m => m.Rows[0].Northing = "Infinity" }
             };
 
             foreach (NegativeCase testCase in cases)

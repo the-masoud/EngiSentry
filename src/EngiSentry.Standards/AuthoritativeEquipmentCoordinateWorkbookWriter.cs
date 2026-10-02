@@ -50,7 +50,7 @@ namespace EngiSentry.Standards
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
             // OpenXml 3.x requires a readable AND writable stream even when creating a package.
-            using (var stream = new FileStream(path, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                 Write(stream, model);
         }
 

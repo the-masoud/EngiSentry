@@ -144,7 +144,7 @@ namespace EngiSentry.Standards
 
         /// <summary>
         /// P14.1: writes the single engineer-facing workbook
-        /// <c>&lt;root&gt;\&lt;DrawingSha256&gt;\&lt;UTC-timestamp&gt;\EngiSentry-Equipment-Coordinates.xlsx</c>.
+        /// <c>&lt;root&gt;\EngiSentry-Equipment-Coordinates.xlsx</c>.
         ///
         /// The workbook is the ONLY file the engineer receives. No manifest, no schedule, no JSON, no
         /// CSV, and no hash or fingerprint for the engineer to compute. Every coordinate cell is left
@@ -164,7 +164,9 @@ namespace EngiSentry.Standards
                 .OrderBy(x => x.OccurrenceId, StringComparer.Ordinal)
                 .ToList();
 
-            string packageDirectory = CreatePackageDirectory(drawingSha256, utcNow);
+            // The engineer-facing request has one stable output path. A second invocation must fail
+            // visibly instead of creating another ambiguous request or replacing an edited workbook.
+            string packageDirectory = root;
             AuthoritativeEquipmentCoordinateWorkbookModel model = BuildWorkbookModel(drawingName, drawingSha256, entries, utcNow);
 
             string workbookPath = Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.WorkbookFileName);
@@ -242,17 +244,6 @@ namespace EngiSentry.Standards
             model.RequestFingerprint = AuthoritativeEquipmentCoordinateRequestFingerprint.Compute(
                 model.SchemaVersion, drawingSha256, model.Rows);
             return model;
-        }
-
-        private string CreatePackageDirectory(string drawingSha256, DateTime utcNow)
-        {
-            string timestamp = utcNow.ToUniversalTime().ToString("yyyyMMdd'T'HHmmssfff'Z'", CultureInfo.InvariantCulture);
-            string drawingDirectory = Path.Combine(root, drawingSha256);
-            string packageDirectory = Path.Combine(drawingDirectory, timestamp);
-            for (int suffix = 1; Directory.Exists(packageDirectory); suffix++)
-                packageDirectory = Path.Combine(drawingDirectory, timestamp + "-" + suffix.ToString(CultureInfo.InvariantCulture));
-            Directory.CreateDirectory(packageDirectory);
-            return packageDirectory;
         }
 
         internal static string BuildScheduleCsv(IReadOnlyList<AuthoritativeEquipmentCoordinateInventoryEntry> entries)        {

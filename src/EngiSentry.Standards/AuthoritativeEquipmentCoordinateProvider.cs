@@ -6,6 +6,21 @@ using EngiSentry.Contracts;
 
 namespace EngiSentry.Standards
 {
+    public enum AuthoritativeEquipmentCoordinateStatusState
+    {
+        NoActivePackage,
+        ActiveValid,
+        ActiveMismatch
+    }
+
+    public sealed class AuthoritativeEquipmentCoordinateStatusSnapshot
+    {
+        public AuthoritativeEquipmentCoordinateStatusState State { get; set; }
+        public AuthoritativeEquipmentCoordinateActivePackage? ActivePackage { get; set; }
+        public int ValidOccurrenceCount { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
     /// <summary>
     /// Resolves authoritative equipment coordinates from the active package for a drawing.
     ///
@@ -30,6 +45,59 @@ namespace EngiSentry.Standards
         public AuthoritativeEquipmentCoordinatePackageStore Store => store;
 
         public AuthoritativeEquipmentCoordinateActivePackage? GetActive(string? drawingSha256) => store.ReadActive(drawingSha256);
+
+        /// <summary>Reports whether the active package is usable for this exact drawing and request.</summary>
+        public AuthoritativeEquipmentCoordinateStatusSnapshot InspectStatus(
+            string? drawingSha256, string? currentRequestFingerprint, bool drawingModified)
+        {
+            AuthoritativeEquipmentCoordinateActivePackage? active = store.ReadActive(drawingSha256);
+            if (active == null)
+            {
+                bool otherDrawingActive = store.HasActiveForOtherDrawing(drawingSha256);
+                return new AuthoritativeEquipmentCoordinateStatusSnapshot
+                {
+                    State = otherDrawingActive ? AuthoritativeEquipmentCoordinateStatusState.ActiveMismatch
+                        : AuthoritativeEquipmentCoordinateStatusState.NoActivePackage,
+                    Reason = otherDrawingActive
+                        ? "An authoritative package is active for a different drawing; it is not usable here."
+                        : "No authoritative coordinate package is active."
+                };
+            }
+
+            var status = new AuthoritativeEquipmentCoordinateStatusSnapshot
+            {
+                State = AuthoritativeEquipmentCoordinateStatusState.ActiveMismatch,
+                ActivePackage = active,
+                Reason = "The active package is not valid for the current drawing and request."
+            };
+            if (!string.Equals(active.DrawingSha256, drawingSha256, StringComparison.Ordinal))
+            {
+                status.Reason = "The active package drawing binding does not match the current drawing.";
+                return status;
+            }
+            if (drawingModified)
+            {
+                status.Reason = "The drawing has unsaved in-memory changes; its on-disk binding cannot verify the current state.";
+                return status;
+            }
+            if (!string.IsNullOrWhiteSpace(active.SourceWorkbookSha256)
+                && !string.Equals(active.RequestFingerprint, currentRequestFingerprint, StringComparison.Ordinal))
+            {
+                status.Reason = "The active workbook request fingerprint does not match the current occurrence set.";
+                return status;
+            }
+
+            IReadOnlyList<AuthoritativeEquipmentCoordinate> coordinates = ResolveForDrawing(drawingSha256);
+            status.ValidOccurrenceCount = coordinates.Count;
+            if (coordinates.Count == 0 || coordinates.Count != active.OccurrenceCount)
+            {
+                status.Reason = "The active package did not re-verify to full occurrence coverage.";
+                return status;
+            }
+            status.State = AuthoritativeEquipmentCoordinateStatusState.ActiveValid;
+            status.Reason = "The active package is valid for this drawing and occurrence set.";
+            return status;
+        }
 
         /// <summary>
         /// Every authoritative coordinate for the drawing's active package, or an empty list when no
@@ -61,6 +129,17 @@ namespace EngiSentry.Standards
             if (!string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputeSha256(manifestBytes), active.ManifestSha256, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
             if (!string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputeSha256(scheduleBytes), active.ScheduleSha256, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
             if (!string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputePackageFingerprint(manifestBytes, scheduleBytes), active.PackageFingerprint, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
+            if (!string.IsNullOrWhiteSpace(active.SourceWorkbookSha256))
+            {
+                string sourceWorkbookPath = Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName);
+                if (!File.Exists(sourceWorkbookPath)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
+                try
+                {
+                    if (!string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputeSha256(File.ReadAllBytes(sourceWorkbookPath)),
+                        active.SourceWorkbookSha256, StringComparison.Ordinal)) return Array.Empty<AuthoritativeEquipmentCoordinate>();
+                }
+                catch (Exception) { return Array.Empty<AuthoritativeEquipmentCoordinate>(); }
+            }
 
             AuthoritativeEquipmentCoordinateManifest? manifest = AuthoritativeEquipmentCoordinatePackageSerializer.TryDeserializeManifest(manifestBytes);
             if (manifest == null) return Array.Empty<AuthoritativeEquipmentCoordinate>();

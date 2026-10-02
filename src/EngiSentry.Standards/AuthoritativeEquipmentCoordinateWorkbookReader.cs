@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using EngiSentry.Contracts;
@@ -156,7 +157,9 @@ namespace EngiSentry.Standards
                     }
                     foreach (string required in new[]
                     {
+                        AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnNumber,
                         AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnEquipmentTag,
+                        AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnDescription,
                         AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnEasting,
                         AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnNorthing,
                         AuthoritativeEquipmentCoordinateWorkbookSchema.ColumnElevation,
@@ -331,7 +334,8 @@ namespace EngiSentry.Standards
                     return Fail(result, AuthoritativeEquipmentCoordinateWorkbookStatuses.MissingSourceMetadata,
                         "a required source-document field is empty; complete all six fields before importing");
             }
-            if (!DateTime.TryParseExact(metadata.IssueDate.Trim(),
+            if (!Regex.IsMatch(metadata.IssueDate, @"^\d{4}-\d{2}-\d{2}$", RegexOptions.CultureInvariant)
+                || !DateTime.TryParseExact(metadata.IssueDate,
                 AuthoritativeEquipmentCoordinateWorkbookSchema.IssueDateFormat,
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
                 return Fail(result, AuthoritativeEquipmentCoordinateWorkbookStatuses.InvalidIssueDate,
@@ -566,7 +570,7 @@ namespace EngiSentry.Standards
             int bang = formula.LastIndexOf('!');
             string cellPart = bang >= 0 ? formula.Substring(bang + 1) : formula;
             if (!TrySplitCellReference(cellPart, out int column, out uint row)) return string.Empty;
-            return ReadCell(FindCell(worksheet, row, column), sharedStrings).Text.Trim();
+            return ReadCell(FindCell(worksheet, row, column), sharedStrings).Text;
         }
 
         /// <summary>Literal finite numeric cells only. Text, formulas, errors and blanks are all rejected.</summary>

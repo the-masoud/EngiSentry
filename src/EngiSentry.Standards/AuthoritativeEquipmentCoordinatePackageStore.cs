@@ -11,9 +11,9 @@ namespace EngiSentry.Standards
     ///
     /// Layout:
     /// <code>
-    /// &lt;root&gt;\&lt;DrawingSha256&gt;\&lt;PackageFingerprint&gt;\equipment-coordinate-manifest.json
-    /// &lt;root&gt;\&lt;DrawingSha256&gt;\&lt;PackageFingerprint&gt;\equipment-coordinate-schedule.csv
-    /// &lt;root&gt;\&lt;DrawingSha256&gt;\&lt;PackageFingerprint&gt;\import-receipt.json
+    /// &lt;root&gt;\p\&lt;PackageFingerprint&gt;\equipment-coordinate-manifest.json
+    /// &lt;root&gt;\p\&lt;PackageFingerprint&gt;\equipment-coordinate-schedule.csv
+    /// &lt;root&gt;\p\&lt;PackageFingerprint&gt;\import-receipt.json
     /// &lt;root&gt;\&lt;DrawingSha256&gt;\active.json
     /// </code>
     ///
@@ -51,7 +51,16 @@ namespace EngiSentry.Standards
         public string Root => root;
 
         public string DrawingDirectory(string drawingSha256) => Path.Combine(root, RequireSha(drawingSha256));
-        public string PackageDirectory(string drawingSha256, string fingerprint) => Path.Combine(DrawingDirectory(drawingSha256), RequireSha(fingerprint));
+        public string PackageDirectory(string drawingSha256, string fingerprint)
+        {
+            string sha = RequireSha(drawingSha256);
+            string packageSha = RequireSha(fingerprint);
+            string compact = Path.Combine(root, "p", packageSha);
+            if (Directory.Exists(compact)) return compact;
+            // Packages installed before the compact layout remain readable without migration.
+            string legacy = Path.Combine(root, sha, packageSha);
+            return Directory.Exists(legacy) ? legacy : compact;
+        }
         public string ActivePath(string drawingSha256) => Path.Combine(DrawingDirectory(drawingSha256), AuthoritativeEquipmentCoordinateSchema.ActiveFileName);
 
         /// <summary>The active package descriptor for a drawing, or null when none is active.</summary>
@@ -67,6 +76,25 @@ namespace EngiSentry.Standards
                     return serializer.ReadObject(stream) as AuthoritativeEquipmentCoordinateActivePackage;
             }
             catch (Exception) { return null; }
+        }
+
+        /// <summary>Whether this store contains a readable active package for a different drawing.</summary>
+        public bool HasActiveForOtherDrawing(string? drawingSha256)
+        {
+            if (!Directory.Exists(root)) return false;
+            try
+            {
+                foreach (string directory in Directory.EnumerateDirectories(root))
+                {
+                    string candidateSha = Path.GetFileName(directory);
+                    if (!IsSha256(candidateSha) || string.Equals(candidateSha, drawingSha256, StringComparison.Ordinal)) continue;
+                    AuthoritativeEquipmentCoordinateActivePackage? candidate = ReadActive(candidateSha);
+                    if (candidate != null && string.Equals(candidate.DrawingSha256, candidateSha, StringComparison.Ordinal)) return true;
+                }
+            }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+            return false;
         }
 
         public AuthoritativeEquipmentCoordinateImportReceipt? ReadReceipt(string? drawingSha256, string? fingerprint)
@@ -151,11 +179,22 @@ namespace EngiSentry.Standards
                 throw new InvalidOperationException("package fingerprint does not match the source bytes");
 
             string packageDirectory = PackageDirectory(drawingSha256, validation.PackageFingerprint);
+            EnsureUsableStorePaths(packageDirectory, drawingSha256);
+            string sourceWorkbookPath = Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName);
+            if (sourceWorkbookBytes != null && File.Exists(sourceWorkbookPath)
+                && !string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputeSha256(File.ReadAllBytes(sourceWorkbookPath)),
+                    provenance?.SourceWorkbookSha256, StringComparison.Ordinal))
+                throw new InvalidOperationException("This package fingerprint already stores a different source workbook; the active package was not changed.");
             Directory.CreateDirectory(packageDirectory);
             WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateSchema.ManifestFileName), manifestBytes);
             WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateSchema.ScheduleFileName), scheduleBytes);
             if (sourceWorkbookBytes != null)
-                WriteIfAbsent(Path.Combine(packageDirectory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName), sourceWorkbookBytes);
+            {
+                WriteIfAbsent(sourceWorkbookPath, sourceWorkbookBytes);
+                if (!string.Equals(AuthoritativeEquipmentCoordinateHashing.ComputeSha256(File.ReadAllBytes(sourceWorkbookPath)),
+                    provenance?.SourceWorkbookSha256, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Stored source workbook bytes do not match this import; the active package was not changed.");
+            }
 
             var receipt = new AuthoritativeEquipmentCoordinateImportReceipt
             {
@@ -233,6 +272,34 @@ namespace EngiSentry.Standards
             using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None)) stream.Write(bytes, 0, bytes.Length);
             if (File.Exists(path)) File.Replace(temporary, path, null);
             else File.Move(temporary, path);
+        }
+
+        private void EnsureUsableStorePaths(string packageDirectory, string drawingSha256)
+        {
+            // AutoCAD 2021 runs on .NET Framework 4.8, where the ordinary Windows path limit applies.
+            // Check before creating even the package directory so an unusable override fails cleanly.
+            try
+            {
+                string directory = Path.GetFullPath(packageDirectory);
+                if (directory.Length >= 248) throw new PathTooLongException();
+                foreach (string path in new[]
+                {
+                    Path.Combine(directory, AuthoritativeEquipmentCoordinateSchema.ManifestFileName),
+                    Path.Combine(directory, AuthoritativeEquipmentCoordinateSchema.ScheduleFileName),
+                    Path.Combine(directory, AuthoritativeEquipmentCoordinateWorkbookSchema.SourceWorkbookFileName),
+                    Path.Combine(directory, AuthoritativeEquipmentCoordinateSchema.ReceiptFileName),
+                    ActivePath(drawingSha256) + ".tmp"
+                })
+                {
+                    if (Path.GetFullPath(path).Length >= 260) throw new PathTooLongException();
+                }
+            }
+            catch (PathTooLongException exception)
+            {
+                throw new InvalidOperationException(
+                    "The configured authoritative coordinate store root is too long for AutoCAD 2021 file storage: " + root,
+                    exception);
+            }
         }
 
         private static byte[] Serialize(object value, Type type)

@@ -656,6 +656,7 @@ namespace EngiSentry.AutoCAD2021
 
                 document.Editor.WriteMessage("\nEngiSentry authoritative equipment coordinate request\nDrawing: {0}\nDrawing SHA256: {1}\nEquipment occurrences: {2}\nWorkbook rows: {3}\nEquipment Tags: {4}\nOccurrenceIds: {5}\nBlank Eastings: {6}\nBlank Northings: {7}\nBlank Elevations: {8}\nDuplicate OccurrenceIds: {9}\nMissing occurrences: {10}\nWorkbook: {11}\nFiles the engineer must handle: 1\nDBMOD unchanged: YES\nStatus: READ-ONLY | REQUEST ONLY | NO COORDINATES SUPPLIED\n", snapshot.FileName ?? "<unnamed>", drawingSha256, inventory.Count, request.RowCount, request.NonEmptyEquipmentTagCount, request.NonEmptyOccurrenceIdCount, request.BlankEastingCount, request.BlankNorthingCount, request.BlankElevationCount, request.DuplicateOccurrenceIdCount, request.MissingOccurrenceIdCount, request.WorkbookPath);
             }
+            catch (System.IO.IOException exception) { WriteToActiveEditor("\nES_COORDREQUEST failed: the output workbook already exists or cannot be created. Existing file preserved.\nReason: {0}\n", exception.Message); }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_COORDREQUEST failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
 
@@ -777,23 +778,49 @@ namespace EngiSentry.AutoCAD2021
                 string? drawingSha256 = TryComputeDrawingSha256(document);
                 if (drawingSha256 == null)
                 {
-                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nDrawing is not saved on disk.\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName);
+                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nDrawing is not saved on disk.\nCurrent drawing binding: NOT VERIFIED\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nStatus: READ-ONLY\n", drawingName);
                     return;
                 }
+                int dbmodBefore = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
                 var provider = new AuthoritativeEquipmentCoordinateProvider();
-                AuthoritativeEquipmentCoordinateActivePackage? active = provider.GetActive(drawingSha256);
+                AuthoritativeEquipmentCoordinateActivePackage? currentActive = provider.GetActive(drawingSha256);
+                string? currentRequestFingerprint = null;
+                bool drawingModified = dbmodBefore != 0;
+                if (currentActive != null && !drawingModified)
+                {
+                    DrawingScanner.Scan(document, out DrawingSnapshot snapshot);
+                    EngineeringDrawingModel semantic = SemanticExtractor.Extract(snapshot);
+                    EngineeringEntityIndex index = EntityIndexer.Build(semantic);
+                    PlotPlanModel plotPlan = PlotPlanBuilder.Build(index, semantic, snapshot);
+                    currentRequestFingerprint = AuthoritativeEquipmentCoordinateRequestFingerprint.Compute(
+                        AuthoritativeEquipmentCoordinateWorkbookSchema.Current, drawingSha256, BuildCoordinateInventory(plotPlan));
+                    int afterScan = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                    drawingModified = snapshot.DbModBefore != afterScan || afterScan != dbmodBefore;
+                }
+                AuthoritativeEquipmentCoordinateStatusSnapshot status = provider.InspectStatus(
+                    drawingSha256, currentRequestFingerprint, drawingModified);
+                int dbmodAfter = Convert.ToInt32(Application.GetSystemVariable("DBMOD"), System.Globalization.CultureInfo.InvariantCulture);
+                bool dbmodUnchanged = dbmodBefore == dbmodAfter;
+                if (!dbmodUnchanged)
+                    status = provider.InspectStatus(drawingSha256, currentRequestFingerprint, true);
+                AuthoritativeEquipmentCoordinateActivePackage? active = status.ActivePackage;
                 if (active == null)
                 {
-                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nDrawing SHA256: {1}\nStatus: NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName, drawingSha256);
+                    string state = status.State == AuthoritativeEquipmentCoordinateStatusState.NoActivePackage
+                        ? "NO ACTIVE AUTHORITATIVE COORDINATE PACKAGE" : "ACTIVE PACKAGE MISMATCHED TO CURRENT DRAWING";
+                    WriteToActiveEditor("\nES_COORDSTATUS\nDrawing: {0}\nActive coordinate package: NO FOR THIS DRAWING\nCurrent drawing binding: {1}\nReason: {2}\nDBMOD unchanged: {3}\nStatus: {4} | READ-ONLY\n",
+                        drawingName, status.State == AuthoritativeEquipmentCoordinateStatusState.NoActivePackage ? "NO ACTIVE PACKAGE" : "MISMATCH",
+                        status.Reason, dbmodUnchanged ? "YES" : "NO", state);
                     return;
                 }
-                System.Collections.Generic.IReadOnlyList<AuthoritativeEquipmentCoordinate> coordinates = provider.ResolveForDrawing(drawingSha256);
                 string sourceType = string.IsNullOrWhiteSpace(active.SourceWorkbookSha256) ? "PROJECT_PACKAGE" : "XLSX";
-                string validationStatus = coordinates.Count > 0 && coordinates.Count == active.OccurrenceCount
-                    ? "VALID (re-verified against the stored package)"
-                    : "NOT RE-VERIFIED";
-
-                document.Editor.WriteMessage("\nES_COORDSTATUS\nDrawing: {0}\nDrawing SHA256: {1}\nActive coordinate package: YES\nSource type: {2}\nSource Document Number: {3}\nSource Revision: {4}\nSource Issue Status: {5}\nIssued By: {6}\nIssue Date: {7}\nCoordinateUnits: {8}\nCoordinateBasis: {9}\nValid occurrence coverage: {10}\nTotal occurrence count: {11}\nValidation status: {12}\nActivated (UTC): {13}\nDBMOD unchanged: YES\nStatus: READ-ONLY\n", drawingName, drawingSha256, sourceType, active.SourceDocumentNumber ?? "<none>", active.SourceRevision ?? "<none>", active.SourceIssueStatus ?? "<none>", active.IssuedBy, active.IssueDate ?? "<none>", AuthoritativeEquipmentCoordinateSchema.CoordinateUnitsMeters, AuthoritativeEquipmentCoordinateSchema.CoordinateBasisPilotWcs, coordinates.Count, active.OccurrenceCount, validationStatus, active.ActivatedTimestampUtc);
+                string binding = status.State == AuthoritativeEquipmentCoordinateStatusState.ActiveValid ? "VALID" : "MISMATCH";
+                document.Editor.WriteMessage("\nES_COORDSTATUS\nDrawing: {0}\nActive coordinate package: YES\nSource type: {1}\nCoverage: {2}/{3}\nCurrent drawing binding: {4}\nBinding reason: {5}\nCoordinateUnits: {6}\nCoordinateBasis: {7}\nSource Document Number: {8}\nSource Revision: {9}\nSource Issue Status: {10}\nIssued By: {11}\nIssue Date: {12}\nSource workbook SHA256: {13}\nPackage fingerprint: {14}\nActivated (UTC): {15}\nDBMOD unchanged: {16}\nStatus: {17} | READ-ONLY\n",
+                    drawingName, sourceType, status.ValidOccurrenceCount, active.OccurrenceCount, binding, status.Reason,
+                    AuthoritativeEquipmentCoordinateSchema.CoordinateUnitsMeters, AuthoritativeEquipmentCoordinateSchema.CoordinateBasisPilotWcs,
+                    active.SourceDocumentNumber ?? "<none>", active.SourceRevision ?? "<none>", active.SourceIssueStatus ?? "<none>",
+                    active.IssuedBy, active.IssueDate ?? "<none>", active.SourceWorkbookSha256 ?? "<none>", active.PackageFingerprint,
+                    active.ActivatedTimestampUtc, dbmodUnchanged ? "YES" : "NO", binding == "VALID" ? "ACTIVE PACKAGE VALID" : "ACTIVE PACKAGE MISMATCHED");
             }
             catch (System.Exception exception) { WriteToActiveEditor("\nES_COORDSTATUS failed\nReason: {0}: {1}\n", exception.GetType().FullName, exception.Message); }
         }
