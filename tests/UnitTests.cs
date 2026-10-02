@@ -250,6 +250,7 @@ namespace EngiSentry.Tests
                 return 0;
             }
             PilotEquipmentCoordinateRegression();
+            PlacementResolverTests.Run();
             EquipmentCenterlinePlacementRegression();
             CrossDocumentTests.Run();
             RevisionTests.Run();

@@ -52,6 +52,7 @@ namespace EngiSentry.PlotPlan
             foreach (EquipmentPlacement placement in placements.Where(x => unresolvedCenterlineEntities.Contains(x.EquipmentEntityId))) placement.PlacementStatus = "Ambiguous";
             ApplyEngineerResolutions(placements, engineerResolutions, model.Drawing);
             ApplyAuthoritativeCoordinates(placements, authoritativeCoordinates);
+            DrawingPlacementCandidateResolver.Apply(placements, allText, model.Drawing);
             placements = placements.OrderBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
             PlotGeometryModel geometry = geometryCapture == null ? new PlotGeometryModel() : PlotGeometryBuilder.Build(model, geometryCapture);
             if (geometryCapture != null)
@@ -67,6 +68,21 @@ namespace EngiSentry.PlotPlan
             }
             geometry.EngineeringSpatialSubjects = EngineeringSpatialSubjectBuilder.Build(model, geometry).ToList();
             PlotSpatialMeasurementModel measurements = PlotSpatialMeasurementBuilder.Build(placements, geometry);
+            // Provisional evidence is stored separately. Governed rule evaluators consume only
+            // EquipmentSpatialMeasurements, so an inferred point cannot produce PASS or FAIL.
+            var provisionalPlacements = placements.Where(x => x.ResolutionState == PlacementResolutionState.ReviewRequired
+                    && x.DrawingCandidate != null && x.DrawingCandidate.CoordinatesInDrawingUnits)
+                .Select(x => new EquipmentPlacement
+                {
+                    PlacementId = x.PlacementId, EquipmentEntityId = x.EquipmentEntityId,
+                    NormalizedTag = x.NormalizedTag, EngineeringApplicabilityKey = x.EngineeringApplicabilityKey,
+                    PlacementStatus = "Complete",
+                    Easting = new CoordinateAssociation { Axis = "E", Status = "Resolved", SelectedValue = x.DrawingCandidate!.CandidateX },
+                    Northing = new CoordinateAssociation { Axis = "N", Status = "Resolved", SelectedValue = x.DrawingCandidate!.CandidateY }
+                }).ToList();
+            if (provisionalPlacements.Count > 0)
+                measurements.ProvisionalSpatialMeasurements = PlotSpatialMeasurementBuilder.Build(provisionalPlacements, geometry)
+                    .EquipmentSpatialMeasurements;
             return new PlotPlanModel { Drawing = model.Drawing, EquipmentPlacements = placements, Geometry = geometry, Measurements = measurements, Statistics = new PlotPlanStatistics { EquipmentPlacementCount = placements.Count, CompletePlacementCount = placements.Count(x => x.PlacementStatus == "Complete"), IncompletePlacementCount = placements.Count(x => x.PlacementStatus == "Incomplete"), AmbiguousPlacementCount = placements.Count(x => x.PlacementStatus == "Ambiguous"), ResolvedEastingCount = placements.Count(x => x.Easting.Status == "Resolved"), ResolvedNorthingCount = placements.Count(x => x.Northing.Status == "Resolved") } };
         }
 
@@ -90,6 +106,9 @@ namespace EngiSentry.PlotPlan
             foreach (EquipmentPlacement placement in placements)
             {
                 if (placement.PlacementStatus == "Complete") continue;
+                // EPR-1 is keyed by canonical equipment identity, not occurrence. It cannot
+                // safely assign one reviewed point to multiple drawing occurrences.
+                if (placements.Count(x => x.EquipmentEntityId == placement.EquipmentEntityId) != 1) continue;
                 if (!trusted.TryGetValue(placement.EquipmentEntityId, out EquipmentPlacementResolution? resolution)) continue;
                 placement.Easting = EngineerAssociation("E", resolution);
                 placement.Northing = EngineerAssociation("N", resolution);

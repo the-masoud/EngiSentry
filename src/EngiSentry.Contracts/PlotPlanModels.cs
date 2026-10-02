@@ -4,6 +4,45 @@ using System.Runtime.Serialization;
 namespace EngiSentry.Contracts
 {
     [DataContract]
+    public enum PlacementResolutionState
+    {
+        [EnumMember] Unresolved = 0,
+        [EnumMember] ReviewRequired = 1,
+        [EnumMember] Resolved = 2
+    }
+
+    [DataContract]
+    public sealed class DrawingPlacementCandidate
+    {
+        [DataMember(Order = 1)] public string OccurrenceId { get; set; } = string.Empty;
+        [DataMember(Order = 2)] public string EquipmentTag { get; set; } = string.Empty;
+        [DataMember(Order = 3)] public decimal CandidateX { get; set; }
+        [DataMember(Order = 4)] public decimal CandidateY { get; set; }
+        [DataMember(Order = 5)] public string CoordinateBasis { get; set; } = "DrawingLocalMillimeters";
+        [DataMember(Order = 6)] public string EvidenceType { get; set; } = "EQ_TAG_EQ_ID_ANNOTATION_CLUSTER";
+        [DataMember(Order = 7)] public string TagEntityHandle { get; set; } = string.Empty;
+        [DataMember(Order = 8)] public string XEntityHandle { get; set; } = string.Empty;
+        [DataMember(Order = 9)] public string YEntityHandle { get; set; } = string.Empty;
+        [DataMember(Order = 10)] public string EvidenceSummary { get; set; } = string.Empty;
+        [DataMember(Order = 11)] public string CandidateConfidenceClass { get; set; } = "StructuredInferred";
+        [DataMember(Order = 12)] public string? AmbiguityReason { get; set; }
+        [DataMember(Order = 13)] public bool RequiresEngineerReview { get; set; } = true;
+        [DataMember(Order = 14)] public bool CoordinatesInDrawingUnits { get; set; }
+    }
+
+    [DataContract]
+    public sealed class DrawingPlacementDiagnostic
+    {
+        [DataMember(Order = 1)] public List<string> XCandidateHandles { get; set; } = new List<string>();
+        [DataMember(Order = 2)] public List<string> YCandidateHandles { get; set; } = new List<string>();
+        [DataMember(Order = 3)] public List<string> SharedAxisCandidateHandles { get; set; } = new List<string>();
+        [DataMember(Order = 4)] public string? CandidateIntersection { get; set; }
+        [DataMember(Order = 5)] public string EvidenceClass { get; set; } = "None";
+        [DataMember(Order = 6)] public string RejectionReason { get; set; } = string.Empty;
+        [DataMember(Order = 7)] public int CompetingCandidateCount { get; set; }
+    }
+
+    [DataContract]
     public sealed class PlotPlanModel
     {
         [DataMember(Order = 1)] public SemanticDrawing? Drawing { get; set; }
@@ -44,6 +83,10 @@ namespace EngiSentry.Contracts
         /// disagreed with existing trusted evidence — in which case nothing is silently overwritten.
         /// </summary>
         [DataMember(Order = 18, EmitDefaultValue = false)] public AuthoritativeCoordinatePlacementEvidence? AuthoritativeCoordinate { get; set; }
+        [DataMember(Order = 19)] public PlacementResolutionState ResolutionState { get; set; } = PlacementResolutionState.Unresolved;
+        [DataMember(Order = 20, EmitDefaultValue = false)] public DrawingPlacementCandidate? DrawingCandidate { get; set; }
+        [DataMember(Order = 21)] public string ResolutionReason { get; set; } = string.Empty;
+        [DataMember(Order = 22)] public DrawingPlacementDiagnostic DrawingDiagnostic { get; set; } = new DrawingPlacementDiagnostic();
     }
 
     [DataContract]
@@ -249,6 +292,8 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 1)] public List<EquipmentPairMeasurement> EquipmentPairMeasurements { get; set; } = new List<EquipmentPairMeasurement>();
         [DataMember(Order = 2)] public List<EquipmentSpatialMeasurement> EquipmentSpatialMeasurements { get; set; } = new List<EquipmentSpatialMeasurement>();
         [DataMember(Order = 3)] public PlotSpatialMeasurementStatistics Statistics { get; set; } = new PlotSpatialMeasurementStatistics();
+        /// <summary>Inferred-placement measurements are excluded from governed rule evaluation.</summary>
+        [DataMember(Order = 4)] public List<EquipmentSpatialMeasurement> ProvisionalSpatialMeasurements { get; set; } = new List<EquipmentSpatialMeasurement>();
     }
 
     [DataContract]

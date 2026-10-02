@@ -870,7 +870,7 @@ namespace EngiSentry.AutoCAD2021
         }
 
         private static string QueueLabel(EquipmentPlacement placement) =>
-            placement.NormalizedTag + "  |  " + placement.EquipmentEntityId + "  |  " + placement.PlacementStatus;
+            placement.NormalizedTag + "  |  " + placement.PlacementId + "  |  " + placement.ResolutionState.ToString().ToUpperInvariant();
 
         private void SelectWorkItem(int index)
         {
@@ -893,9 +893,11 @@ namespace EngiSentry.AutoCAD2021
             if (current != null)
             {
                 tagLabel.Text = current.NormalizedTag;
-                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewStatus"), current.PlacementStatus);
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewStatus"), current.ResolutionState.ToString().ToUpperInvariant());
                 AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldOriginal"), PlacementLocation(current));
-                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldProposed"), pick == null ? ReviewStrings.Get("Placement_ValueNone") : PickPoint(pick));
+                AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldProposed"), pick != null ? PickPoint(pick)
+                    : current.DrawingCandidate == null ? ReviewStrings.Get("Placement_ValueNone")
+                    : "REVIEW_REQUIRED: " + Point((double)current.DrawingCandidate.CandidateX, (double)current.DrawingCandidate.CandidateY));
                 AddInfoRow(summaryGrid, ReviewStrings.Get("Placement_FieldReviewRequired"), ReviewStrings.Get("Placement_ValueYes"));
             }
             else if (currentProposal != null)
@@ -950,6 +952,13 @@ namespace EngiSentry.AutoCAD2021
                 AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechEastingStatus"), current.Easting?.Status);
                 AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechNorthingStatus"), current.Northing?.Status);
                 AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechCenterline"), current.CenterlineEvidence?.Status ?? ReviewStrings.Get("Placement_ValueNone"));
+                if (current.DrawingCandidate != null)
+                {
+                    AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_FieldPickEvidence"), current.DrawingCandidate.EvidenceSummary);
+                    AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechHandle"),
+                        "TAG=" + current.DrawingCandidate.TagEntityHandle + " X=" + current.DrawingCandidate.XEntityHandle + " Y=" + current.DrawingCandidate.YEntityHandle);
+                    AddInfoRow(technicalGrid, ReviewStrings.Get("Placement_TechUnits"), current.DrawingCandidate.CoordinateBasis);
+                }
             }
             if (currentProposal != null)
             {
