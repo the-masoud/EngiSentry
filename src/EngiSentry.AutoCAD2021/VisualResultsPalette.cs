@@ -173,6 +173,7 @@ namespace EngiSentry.AutoCAD2021
 
         public static void ShowPlotQa(Document document, DrawingSnapshot snapshot, PlotPlanQaReport report, string outputPath, StandardAuthorityReviewPackage standardsReviewPackage = null, string standardsReviewPackagePath = null, string standardsReviewPackageSha256 = null)
         {
+            ReviewLocalization.Apply(ReviewUiPreferences.Load());
             PlotPlanModel plotPlan = report.PlotPlan;
             QaReport qaReport = report.Qa;
             PlotPlanStatistics p = plotPlan.Statistics;
@@ -181,24 +182,25 @@ namespace EngiSentry.AutoCAD2021
             EngineeringDistanceRunSummary distanceSummary = qaReport.EngineeringDistanceSummary;
             List<VisualMetric> metrics = new List<VisualMetric>
             {
-                new VisualMetric("Rules", q.RuleCount.ToString(CultureInfo.InvariantCulture)),
-                new VisualMetric("Findings", q.TotalFindings.ToString(CultureInfo.InvariantCulture)),
-                new VisualMetric("Warnings", q.WarningFindings.ToString(CultureInfo.InvariantCulture)),
-                new VisualMetric("Errors", q.ErrorFindings.ToString(CultureInfo.InvariantCulture))
+                new VisualMetric(ReviewStrings.Get("Results_MetricRules"), q.RuleCount.ToString(CultureInfo.InvariantCulture)),
+                new VisualMetric(ReviewStrings.Get("Results_MetricFindings"), q.TotalFindings.ToString(CultureInfo.InvariantCulture)),
+                new VisualMetric(ReviewStrings.Get("Results_MetricWarnings"), q.WarningFindings.ToString(CultureInfo.InvariantCulture)),
+                new VisualMetric(ReviewStrings.Get("Results_MetricErrors"), q.ErrorFindings.ToString(CultureInfo.InvariantCulture))
             };
             Publish(new VisualResultsData
             {
                 Command = "ES_PLOTQA",
-                Title = "Plot Plan QA",
+                Title = ReviewStrings.Get("Results_PlotPlanQaTitle"),
                 Drawing = snapshot.FileName,
                 Status = qaReport.OverallStatus,
-                StatusDetail = "Plot-plan QA evaluation completed",
+                StatusDetail = ReviewStrings.Get("Results_PlotPlanQaCompleted"),
                 OutputPath = outputPath,
                 Document = document,
-                Note = "Placements: " + p.EquipmentPlacementCount.ToString(CultureInfo.InvariantCulture) +
-                       " | Incomplete: " + p.IncompletePlacementCount.ToString(CultureInfo.InvariantCulture) +
-                       " | Geometry gaps: " + g.MissingAssociationCount.ToString(CultureInfo.InvariantCulture) +
-                       " | Spatial gaps: " + g.MissingSpatialConstraintCount.ToString(CultureInfo.InvariantCulture),
+                Note = ReviewStrings.Format("Results_PlotPlanQaSummary",
+                       p.EquipmentPlacementCount.ToString(CultureInfo.InvariantCulture),
+                       p.IncompletePlacementCount.ToString(CultureInfo.InvariantCulture),
+                       g.MissingAssociationCount.ToString(CultureInfo.InvariantCulture),
+                       g.MissingSpatialConstraintCount.ToString(CultureInfo.InvariantCulture)),
                 Metrics = metrics,
                 QaFindings = qaReport.Findings,
                 DistanceRows = PlotPlanDistanceRows(distanceSummary, plotPlan.Measurements),
@@ -386,24 +388,25 @@ namespace EngiSentry.AutoCAD2021
 
         public static void ShowCrossQa(Document document, DrawingSnapshot snapshot, ExternalEquipmentRegister register, QaReport report, string outputPath)
         {
+            ReviewLocalization.Apply(ReviewUiPreferences.Load());
             QaStatistics s = report.Statistics;
             Publish(new VisualResultsData
             {
                 Command = "ES_CROSSQA",
-                Title = "Cross-Document QA",
+                Title = ReviewStrings.Get("Results_CrossQaTitle"),
                 Drawing = snapshot.FileName,
                 Status = report.OverallStatus,
-                StatusDetail = "External register comparison completed",
+                StatusDetail = ReviewStrings.Get("Results_CrossQaCompleted"),
                 OutputPath = outputPath,
                 Document = document,
-                Note = "External register: " + register.SourceFileName + " | SHA256: " + register.SourceSha256,
+                Note = ReviewStrings.Format("Results_CrossQaSource", register.SourceFileName, register.SourceSha256),
                 Metrics = new List<VisualMetric>
                 {
-                    new VisualMetric("Source rows", register.Statistics.SourceRowCount.ToString(CultureInfo.InvariantCulture)),
-                    new VisualMetric("Expanded identities", register.Statistics.ExpandedEquipmentCount.ToString(CultureInfo.InvariantCulture)),
-                    new VisualMetric("Findings", s.TotalFindings.ToString(CultureInfo.InvariantCulture)),
-                    new VisualMetric("Warnings", s.WarningFindings.ToString(CultureInfo.InvariantCulture)),
-                    new VisualMetric("Errors", s.ErrorFindings.ToString(CultureInfo.InvariantCulture))
+                    new VisualMetric(ReviewStrings.Get("Results_MetricSourceRows"), register.Statistics.SourceRowCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric(ReviewStrings.Get("Results_MetricExpandedIdentities"), register.Statistics.ExpandedEquipmentCount.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric(ReviewStrings.Get("Results_MetricFindings"), s.TotalFindings.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric(ReviewStrings.Get("Results_MetricWarnings"), s.WarningFindings.ToString(CultureInfo.InvariantCulture)),
+                    new VisualMetric(ReviewStrings.Get("Results_MetricErrors"), s.ErrorFindings.ToString(CultureInfo.InvariantCulture))
                 },
                 QaFindings = report.Findings
             });
@@ -542,12 +545,40 @@ namespace EngiSentry.AutoCAD2021
         {
             return PlotPlanDistancePresentation.Build(summary, measurements).Select(x => new VisualDistanceRow
             {
-                Name = x.Name,
+                Name = LocalizeDistanceName(x.Name),
                 Minimum = x.MinimumDistanceMeters.ToString("0.###", CultureInfo.InvariantCulture) + " m",
-                Observed = x.Observed,
+                Observed = LocalizeDistanceObserved(x.Observed),
                 Status = x.DisplayStatus,
-                Interpretation = x.Interpretation
+                Interpretation = LocalizeDistanceInterpretation(x.Interpretation)
             }).ToList();
+        }
+
+        private static string LocalizeDistanceName(string name)
+        {
+            if (name == "Equipment → Road") return ReviewStrings.Get("Results_DistanceEquipmentRoad");
+            if (name == "Equipment → Plant / Security Fence") return ReviewStrings.Get("Results_DistanceEquipmentFence");
+            if (name == "Equipment → Unit Boundary") return ReviewStrings.Get("Results_DistanceEquipmentUnitBoundary");
+            return name ?? string.Empty;
+        }
+
+        private static string LocalizeDistanceObserved(string observed)
+        {
+            if (!ReviewLocalization.IsPersian || string.IsNullOrWhiteSpace(observed)) return observed ?? string.Empty;
+            if (string.Equals(observed, "<not resolved>", StringComparison.Ordinal)) return ReviewStrings.Get("Results_NotResolved");
+            return observed.Replace(" resolved)", " " + ReviewStrings.Get("Results_ResolvedSuffix") + ")");
+        }
+
+        private static string LocalizeDistanceInterpretation(string interpretation)
+        {
+            if (!ReviewLocalization.IsPersian || string.IsNullOrWhiteSpace(interpretation)) return interpretation ?? string.Empty;
+            return interpretation
+                .Replace("No resolved evidence is available for this check.", ReviewStrings.Get("Results_DistanceNoEvidence"))
+                .Replace("Requirement met based on available evidence.", ReviewStrings.Get("Results_DistanceRequirementMet"))
+                .Replace("Observed evidence is below the configured project minimum.", ReviewStrings.Get("Results_DistanceBelowMinimum"))
+                .Replace("Project criterion only — no approved standards-governance basis is active.", ReviewStrings.Get("Results_DistanceProjectCriterionOnly"))
+                .Replace("Engineering review required.", ReviewStrings.Get("Results_DistanceEngineeringReviewRequired"))
+                .Replace("Source quarantined — not auto-enforced.", ReviewStrings.Get("Results_DistanceSourceQuarantined"))
+                .Replace("Governance state: ", ReviewStrings.Get("Results_DistanceGovernanceStatePrefix"));
         }
 
         private static string DisplayDistanceStatus(string status)
@@ -700,9 +731,10 @@ namespace EngiSentry.AutoCAD2021
         {
             try
             {
+                ReviewLocalization.Apply(ReviewUiPreferences.Load());
                 EnsureWindow();
                 if (control == null || control.IsDisposed) control = new VisualResultsControl { Dock = DockStyle.Fill };
-                ShowControl(control, "EngiSentry Results", new Size(930, 680));
+                ShowControl(control, ReviewStrings.Get("Results_WindowTitle"), new Size(930, 680));
 
                 control.SetResult(data);
                 EnsureUsableWindowSize(data);
@@ -750,7 +782,7 @@ namespace EngiSentry.AutoCAD2021
         private static void EnsureWindow()
         {
             if (window != null && !window.IsDisposed) return;
-            window = new Form { Text = "EngiSentry Results", StartPosition = FormStartPosition.CenterScreen, Size = new Size(930, 680), MinimumSize = new Size(520, 360), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = true, ShowInTaskbar = true, BackColor = Color.FromArgb(30, 31, 34) };
+            window = new Form { Text = ReviewStrings.Get("Results_WindowTitle"), StartPosition = FormStartPosition.CenterScreen, Size = new Size(930, 680), MinimumSize = new Size(520, 360), FormBorderStyle = FormBorderStyle.Sizable, MaximizeBox = true, MinimizeBox = true, ShowInTaskbar = true, BackColor = Color.FromArgb(30, 31, 34) };
             window.FormClosed += (sender, args) => { window = null; control = null; labelingControl = null; reviewControl = null; placementResolutionControl = null; };
             Autodesk.AutoCAD.ApplicationServices.Application.ShowModelessDialog(window);
         }
@@ -999,7 +1031,8 @@ namespace EngiSentry.AutoCAD2021
         {
             BackColor = Color.FromArgb(30, 31, 34);
             ForeColor = Color.FromArgb(235, 237, 240);
-            Font = new System.Drawing.Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            Font = new System.Drawing.Font(ReviewLocalization.UiFontFamily, 9F, FontStyle.Regular, GraphicsUnit.Point);
+            RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
             Dock = DockStyle.Fill;
             BuildLayout();
         }
@@ -1007,14 +1040,14 @@ namespace EngiSentry.AutoCAD2021
         public void SetResult(VisualResultsData data)
         {
             current = data;
-            titleLabel.Text = data.Title ?? "EngiSentry Results";
+            titleLabel.Text = data.Title ?? ReviewStrings.Get("Results_WindowTitle");
             commandLabel.Text = data.Command ?? string.Empty;
-            drawingLabel.Text = "Drawing: " + (string.IsNullOrWhiteSpace(data.Drawing) ? "<none>" : data.Drawing);
+            drawingLabel.Text = ReviewStrings.Get("Results_DrawingPrefix") + " " + (string.IsNullOrWhiteSpace(data.Drawing) ? ReviewStrings.Get("Results_None") : data.Drawing);
             statusLabel.Text = string.IsNullOrWhiteSpace(data.StatusDetail) ? data.Status : data.Status + "  |  " + data.StatusDetail;
             statusLabel.ForeColor = StatusColor(data.Status);
             noteLabel.Text = data.Note ?? string.Empty;
             noteLabel.Visible = !string.IsNullOrWhiteSpace(data.Note);
-            artifactPathLabel.Text = string.IsNullOrWhiteSpace(data.OutputPath) ? string.Empty : "QA artifact: " + data.OutputPath;
+            artifactPathLabel.Text = string.IsNullOrWhiteSpace(data.OutputPath) ? string.Empty : ReviewStrings.Get("Results_ArtifactPrefix") + " " + data.OutputPath;
             artifactPathLabel.Visible = !string.IsNullOrWhiteSpace(data.OutputPath);
             openOutputButton.Enabled = !string.IsNullOrWhiteSpace(data.OutputPath);
             zoomEvidenceButton.Visible = data.QaFindings != null && data.QaFindings.Count > 0;
@@ -1040,14 +1073,16 @@ namespace EngiSentry.AutoCAD2021
             Panel header = new Panel { Dock = DockStyle.Top, Height = 54, BackColor = Color.FromArgb(38, 40, 44), Padding = new Padding(10, 5, 10, 4) };
             titleLabel.Dock = DockStyle.Top;
             titleLabel.Height = 20;
-            titleLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 12.5F, FontStyle.Bold);
+            titleLabel.Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 12.5F, FontStyle.Bold);
             titleLabel.ForeColor = Color.White;
+            titleLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.TopRight : ContentAlignment.TopLeft;
             commandLabel.Dock = DockStyle.Right;
             commandLabel.Width = 115;
             commandLabel.TextAlign = ContentAlignment.TopRight;
             commandLabel.ForeColor = Color.FromArgb(160, 166, 175);
             drawingLabel.Dock = DockStyle.Fill;
             drawingLabel.AutoEllipsis = true;
+            drawingLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             drawingLabel.ForeColor = Color.FromArgb(190, 195, 202);
             header.Controls.Add(drawingLabel);
             header.Controls.Add(commandLabel);
@@ -1056,7 +1091,7 @@ namespace EngiSentry.AutoCAD2021
             metricsPanel.Dock = DockStyle.Top;
             metricsPanel.Height = 104;
             metricsPanel.Padding = new Padding(8, 6, 8, 6);
-            metricsPanel.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            metricsPanel.FlowDirection = ReviewLocalization.IsPersian ? System.Windows.Forms.FlowDirection.RightToLeft : System.Windows.Forms.FlowDirection.LeftToRight;
             metricsPanel.WrapContents = true;
             metricsPanel.AutoScroll = false;
             metricsPanel.BackColor = Color.FromArgb(30, 31, 34);
@@ -1066,16 +1101,16 @@ namespace EngiSentry.AutoCAD2021
             statusLabel.Dock = DockStyle.Top;
             statusLabel.Height = 19;
             statusLabel.AutoEllipsis = true;
-            statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            statusLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             noteLabel.Dock = DockStyle.Bottom;
             noteLabel.Height = 19;
             noteLabel.AutoEllipsis = true;
-            noteLabel.TextAlign = ContentAlignment.MiddleLeft;
+            noteLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             noteLabel.ForeColor = Color.FromArgb(160, 166, 175);
             artifactPathLabel.Dock = DockStyle.Bottom;
             artifactPathLabel.Height = 19;
             artifactPathLabel.AutoEllipsis = true;
-            artifactPathLabel.TextAlign = ContentAlignment.MiddleLeft;
+            artifactPathLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             artifactPathLabel.ForeColor = Color.FromArgb(160, 166, 175);
             statusPanel.Controls.Add(statusLabel);
             statusPanel.Controls.Add(noteLabel);
@@ -1085,9 +1120,10 @@ namespace EngiSentry.AutoCAD2021
             bodyPanel.Padding = new Padding(10, 2, 10, 8);
             gridLabel.Dock = DockStyle.Top;
             gridLabel.Height = 17;
-            gridLabel.Text = "DETAILS";
+            gridLabel.Text = ReviewStrings.Get("Results_SectionDetails");
             gridLabel.ForeColor = Color.FromArgb(160, 166, 175);
-            gridLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
+            gridLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            gridLabel.Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold);
             detailGrid.Dock = DockStyle.Fill;
             ConfigureGrid();
             bodyPanel.Controls.Add(detailGrid);
@@ -1096,9 +1132,10 @@ namespace EngiSentry.AutoCAD2021
             reviewPanel.Height = 360;
             reviewLabel.Dock = DockStyle.Top;
             reviewLabel.Height = 17;
-            reviewLabel.Text = "ENGINEERING REVIEW";
+            reviewLabel.Text = ReviewStrings.Get("Results_SectionEngineeringReview");
             reviewLabel.ForeColor = Color.FromArgb(160, 166, 175);
-            reviewLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
+            reviewLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            reviewLabel.Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold);
             reviewPanel.Padding = new Padding(0, 2, 0, 0);
             reviewGrid.Dock = DockStyle.Top;
             reviewGrid.Height = 110;
@@ -1110,15 +1147,15 @@ namespace EngiSentry.AutoCAD2021
             ConfigureReviewGrid();
             BuildReviewInputPanel();
 
-            FlowLayoutPanel footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(6, 3, 6, 4), BackColor = Color.FromArgb(38, 40, 44), FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight, WrapContents = false, AutoScroll = true };
-            openOutputButton.Text = "Open Output Folder";
+            FlowLayoutPanel footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(6, 3, 6, 4), BackColor = Color.FromArgb(38, 40, 44), FlowDirection = ReviewLocalization.IsPersian ? System.Windows.Forms.FlowDirection.RightToLeft : System.Windows.Forms.FlowDirection.LeftToRight, WrapContents = false, AutoScroll = true };
+            openOutputButton.Text = ReviewStrings.Get("Results_ButtonOpenOutputFolder");
             openOutputButton.AutoSize = true;
             openOutputButton.FlatStyle = FlatStyle.Flat;
             openOutputButton.FlatAppearance.BorderColor = Color.FromArgb(80, 84, 92);
             openOutputButton.ForeColor = Color.White;
             openOutputButton.BackColor = Color.FromArgb(52, 55, 61);
             openOutputButton.Click += OpenOutputFolder;
-            zoomEvidenceButton.Text = "Zoom To Evidence";
+            zoomEvidenceButton.Text = ReviewStrings.Get("Results_ButtonZoomToEvidence");
             zoomEvidenceButton.AutoSize = true;
             zoomEvidenceButton.FlatStyle = FlatStyle.Flat;
             zoomEvidenceButton.FlatAppearance.BorderColor = Color.FromArgb(80, 84, 92);
@@ -1145,8 +1182,9 @@ namespace EngiSentry.AutoCAD2021
             detailGrid.BorderStyle = BorderStyle.None;
             detailGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
             detailGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            detailGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold) };
-            detailGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False };
+            detailGrid.RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
+            detailGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold) };
+            detailGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False, Font = new System.Drawing.Font(ReviewLocalization.UiFontFamily, 8.5F) };
             detailGrid.EnableHeadersVisualStyles = false;
             detailGrid.MultiSelect = false;
             detailGrid.ReadOnly = true;
@@ -1162,9 +1200,10 @@ namespace EngiSentry.AutoCAD2021
             distancePanel.Height = 122;
             distanceLabel.Dock = DockStyle.Top;
             distanceLabel.Height = 17;
-            distanceLabel.Text = "PROJECT DISTANCE CRITERIA";
+            distanceLabel.Text = ReviewStrings.Get("Results_SectionDistanceCriteria");
             distanceLabel.ForeColor = Color.FromArgb(160, 166, 175);
-            distanceLabel.Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold);
+            distanceLabel.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
+            distanceLabel.Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold);
             distanceGrid.Dock = DockStyle.Fill;
             ConfigureDistanceGrid();
             distancePanel.Controls.Add(distanceGrid);
@@ -1182,8 +1221,9 @@ namespace EngiSentry.AutoCAD2021
             reviewGrid.BorderStyle = BorderStyle.None;
             reviewGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
             reviewGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            reviewGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold) };
-            reviewGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False };
+            reviewGrid.RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
+            reviewGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold) };
+            reviewGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False, Font = new System.Drawing.Font(ReviewLocalization.UiFontFamily, 8.5F) };
             reviewGrid.EnableHeadersVisualStyles = false;
             reviewGrid.MultiSelect = false;
             reviewGrid.ReadOnly = true;
@@ -1203,12 +1243,14 @@ namespace EngiSentry.AutoCAD2021
             reviewerTextBox.Width = 180;
             humanReviewComboBox.Width = 180;
             humanReviewComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+            humanReviewComboBox.FormattingEnabled = true;
+            humanReviewComboBox.Format += (sender, args) => args.Value = DisplayHumanReviewState(args.ListItem == null ? null : args.ListItem.ToString());
             humanReviewComboBox.Items.AddRange(new object[] { HumanEngineeringReviewDecisionStates.ReviewAccepted, HumanEngineeringReviewDecisionStates.ReviewRejected, HumanEngineeringReviewDecisionStates.NeedsClarification });
             humanReviewComboBox.SelectedIndex = 0;
             reviewCommentTextBox.Multiline = true;
             reviewCommentTextBox.Height = 34;
             reviewCommentTextBox.Width = 290;
-            saveReviewDecisionButton.Text = "Save Review Decision";
+            saveReviewDecisionButton.Text = ReviewStrings.Get("Results_ButtonSaveReviewDecision");
             saveReviewDecisionButton.AutoSize = true;
             saveReviewDecisionButton.Enabled = false;
             saveReviewDecisionButton.Click += SaveReviewDecision;
@@ -1226,9 +1268,9 @@ namespace EngiSentry.AutoCAD2021
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-            AddReviewInput(layout, "Reviewer", reviewerTextBox, 0, 0);
-            AddReviewInput(layout, "Human Review", humanReviewComboBox, 0, 1);
-            AddReviewInput(layout, "Comment", reviewCommentTextBox, 0, 2);
+            AddReviewInput(layout, ReviewStrings.Get("Results_ReviewReviewer"), reviewerTextBox, 0, 0);
+            AddReviewInput(layout, ReviewStrings.Get("Results_ReviewHumanReview"), humanReviewComboBox, 0, 1);
+            AddReviewInput(layout, ReviewStrings.Get("Results_ReviewComment"), reviewCommentTextBox, 0, 2);
             layout.Controls.Add(saveReviewDecisionButton, 2, 2);
             layout.SetColumnSpan(saveReviewDecisionButton, 2);
             layout.Controls.Add(existingReviewLabel, 0, 3);
@@ -1247,7 +1289,7 @@ namespace EngiSentry.AutoCAD2021
                 control.ForeColor = Color.FromArgb(190, 195, 202);
                 control.Dock = DockStyle.Fill;
                 control.AutoEllipsis = false;
-                control.TextAlign = ContentAlignment.MiddleLeft;
+                control.TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft;
             }
             decisionStatusLabel.AutoSize = false;
             decisionStatusLabel.AutoEllipsis = false;
@@ -1255,8 +1297,8 @@ namespace EngiSentry.AutoCAD2021
 
         private static void AddReviewInput(TableLayoutPanel layout, string label, Control control, int column, int row)
         {
-            var panel = new Panel { Dock = DockStyle.Fill };
-            var caption = new Label { Text = label + ":", Dock = DockStyle.Left, Width = 105, ForeColor = Color.FromArgb(168, 174, 184), TextAlign = ContentAlignment.MiddleLeft };
+            var panel = new Panel { Dock = DockStyle.Fill, RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No };
+            var caption = new Label { Text = label + ":", Dock = ReviewLocalization.IsPersian ? DockStyle.Right : DockStyle.Left, Width = 105, ForeColor = Color.FromArgb(168, 174, 184), TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft };
             control.Dock = DockStyle.Fill;
             panel.Controls.Add(control);
             panel.Controls.Add(caption);
@@ -1283,8 +1325,8 @@ namespace EngiSentry.AutoCAD2021
             foreach (VisualMetric metric in items)
             {
                 Panel card = new Panel { Width = cardWidth, Height = cardHeight, Margin = new Padding(0, 0, gap, 4), BackColor = Color.FromArgb(43, 45, 50), Padding = new Padding(8, 5, 7, 4) };
-                Label value = new Label { Dock = DockStyle.Top, Height = hasTable ? 18 : 22, Text = metric.Value, ForeColor = Color.White, Font = new System.Drawing.Font("Segoe UI Semibold", hasTable ? 10.5F : 12.5F, FontStyle.Bold), AutoEllipsis = true };
-                Label label = new Label { Dock = DockStyle.Fill, Text = metric.Label.ToUpperInvariant(), ForeColor = Color.FromArgb(168, 174, 184), Font = new System.Drawing.Font("Segoe UI", 7F, FontStyle.Regular), AutoEllipsis = true };
+                Label value = new Label { Dock = DockStyle.Top, Height = hasTable ? 18 : 22, Text = metric.Value, ForeColor = Color.White, Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, hasTable ? 10.5F : 12.5F, FontStyle.Bold), AutoEllipsis = true, TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft };
+                Label label = new Label { Dock = DockStyle.Fill, Text = ReviewLocalization.IsPersian ? metric.Label : metric.Label.ToUpperInvariant(), ForeColor = Color.FromArgb(168, 174, 184), Font = new System.Drawing.Font(ReviewLocalization.UiFontFamily, 7F, FontStyle.Regular), AutoEllipsis = true, TextAlign = ReviewLocalization.IsPersian ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft };
                 card.Controls.Add(label);
                 card.Controls.Add(value);
                 metricsPanel.Controls.Add(card);
@@ -1299,24 +1341,24 @@ namespace EngiSentry.AutoCAD2021
             detailGrid.ScrollBars = ScrollBars.Vertical;
             if (data.QaFindings != null && data.QaFindings.Count > 0)
             {
-                gridLabel.Text = "FINDINGS";
-                AddColumn("Severity", 82);
-                AddColumn("Rule", 105);
-                AddColumn("Tag / Subject", 145);
-                AddColumn("Message", 420);
+                gridLabel.Text = ReviewStrings.Get("Results_SectionFindings");
+                AddColumn(ReviewStrings.Get("Results_ColumnSeverity"), 82);
+                AddColumn(ReviewStrings.Get("Results_ColumnRule"), 105);
+                AddColumn(ReviewStrings.Get("Results_ColumnTagSubject"), 145);
+                AddColumn(ReviewStrings.Get("Results_ColumnMessage"), 420);
                 foreach (QaFinding finding in data.QaFindings)
                 {
-                    int row = detailGrid.Rows.Add(finding.Severity, finding.RuleId, Subject(finding), finding.Message);
+                    int row = detailGrid.Rows.Add(DisplaySeverity(finding.Severity), finding.RuleId, Subject(finding), DisplayFindingMessage(finding));
                     detailGrid.Rows[row].Tag = finding;
                 }
             }
             else if (data.RevisionChanges != null && data.RevisionChanges.Count > 0)
             {
-                gridLabel.Text = "CHANGES";
+                gridLabel.Text = ReviewStrings.Get("Results_SectionChanges");
                 detailGrid.ScrollBars = data.RevisionChanges.Count <= 8 ? ScrollBars.None : ScrollBars.Vertical;
-                AddColumn("Change", 145);
-                AddColumn("Equipment Tag", 150);
-                AddColumn("Details", 520);
+                AddColumn(ReviewStrings.Get("Results_ColumnChange"), 145);
+                AddColumn(ReviewStrings.Get("Results_ColumnEquipmentTag"), 150);
+                AddColumn(ReviewStrings.Get("Results_ColumnDetails"), 520);
                 foreach (RevisionChangeRecord change in data.RevisionChanges)
                 {
                     int row = detailGrid.Rows.Add(RevisionChangeLabel(change), change.NormalizedTag, RevisionChangeDetail(change));
@@ -1329,8 +1371,8 @@ namespace EngiSentry.AutoCAD2021
             }
             else if (string.Equals(data.Command, "ES_REVISION", StringComparison.OrdinalIgnoreCase) && !string.Equals(data.Status, "FAILED", StringComparison.OrdinalIgnoreCase) && !string.Equals(data.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
             {
-                gridLabel.Text = "CHANGES";
-                AddColumn("Result", 710);
+                gridLabel.Text = ReviewStrings.Get("Results_SectionChanges");
+                AddColumn(ReviewStrings.Get("Results_ColumnResult"), 710);
                 detailGrid.ScrollBars = ScrollBars.None;
                 int row = detailGrid.Rows.Add("No engineering changes detected between the active baseline and current drawing.");
                 detailGrid.Rows[row].Height = 28;
@@ -1338,9 +1380,9 @@ namespace EngiSentry.AutoCAD2021
             }
             else
             {
-                gridLabel.Text = "DETAILS";
-                AddColumn("Metric", 190);
-                AddColumn("Value", 520);
+                gridLabel.Text = ReviewStrings.Get("Results_SectionDetails");
+                AddColumn(ReviewStrings.Get("Results_ColumnMetric"), 190);
+                AddColumn(ReviewStrings.Get("Results_ColumnValue"), 520);
                 foreach (VisualDetail detail in data.Details ?? new List<VisualDetail>()) detailGrid.Rows.Add(detail.Label, detail.Value);
             }
             BuildReviewGrid(data.AuthorityReviewItems);
@@ -1354,8 +1396,9 @@ namespace EngiSentry.AutoCAD2021
             distanceGrid.AllowUserToResizeRows = false;
             distanceGrid.BackgroundColor = Color.FromArgb(30, 31, 34);
             distanceGrid.BorderStyle = BorderStyle.None;
-            distanceGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font("Segoe UI Semibold", 8F, FontStyle.Bold) };
-            distanceGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False };
+            distanceGrid.RightToLeft = ReviewLocalization.IsPersian ? RightToLeft.Yes : RightToLeft.No;
+            distanceGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(52, 55, 61), ForeColor = Color.FromArgb(230, 233, 237), Font = new System.Drawing.Font(ReviewLocalization.UiFontFamilySemibold, 8F, FontStyle.Bold) };
+            distanceGrid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(30, 31, 34), ForeColor = Color.FromArgb(225, 228, 232), SelectionBackColor = Color.FromArgb(55, 75, 95), SelectionForeColor = Color.White, WrapMode = DataGridViewTriState.False, Font = new System.Drawing.Font(ReviewLocalization.UiFontFamily, 8.5F) };
             distanceGrid.EnableHeadersVisualStyles = false;
             distanceGrid.ReadOnly = true;
             distanceGrid.RowHeadersVisible = false;
@@ -1371,11 +1414,11 @@ namespace EngiSentry.AutoCAD2021
             List<VisualDistanceRow> values = (rows ?? Enumerable.Empty<VisualDistanceRow>()).ToList();
             distancePanel.Visible = values.Count > 0;
             if (values.Count == 0) return;
-            AddDistanceColumn("Check", 230);
-            AddDistanceColumn("Minimum", 105);
-            AddDistanceColumn("Observed", 115);
-            AddDistanceColumn("Status", 145);
-            AddDistanceColumn("Interpretation", 420);
+            AddDistanceColumn(ReviewStrings.Get("Results_ColumnCheck"), 230);
+            AddDistanceColumn(ReviewStrings.Get("Results_ColumnMinimum"), 105);
+            AddDistanceColumn(ReviewStrings.Get("Results_ColumnObserved"), 115);
+            AddDistanceColumn(ReviewStrings.Get("Results_ColumnStatus"), 145);
+            AddDistanceColumn(ReviewStrings.Get("Results_ColumnInterpretation"), 420);
             foreach (VisualDistanceRow value in values) distanceGrid.Rows.Add(value.Name, value.Minimum, value.Observed, value.Status, value.Interpretation);
         }
 
@@ -1400,10 +1443,10 @@ namespace EngiSentry.AutoCAD2021
             reviewPanel.Visible = reviewItems.Count > 0;
             if (reviewItems.Count == 0) return;
 
-            AddReviewColumn("Rule", 235);
-            AddReviewColumn("Decision", 170);
-            AddReviewColumn("Enforcement", 180);
-            AddReviewColumn("Authority evidence", 560);
+            AddReviewColumn(ReviewStrings.Get("Results_ColumnRule"), 235);
+            AddReviewColumn(ReviewStrings.Get("Results_ColumnDecision"), 170);
+            AddReviewColumn(ReviewStrings.Get("Results_ColumnEnforcement"), 180);
+            AddReviewColumn(ReviewStrings.Get("Results_ColumnAuthorityEvidence"), 560);
             foreach (StandardAuthorityReviewItem item in reviewItems)
             {
                 int row = reviewGrid.Rows.Add(item.RuleId, item.DecisionState, item.EffectiveEnforcementMode, ReviewEvidence(item));
@@ -1444,20 +1487,20 @@ namespace EngiSentry.AutoCAD2021
             StandardAuthorityReviewItem item = row == null ? null : row.Tag as StandardAuthorityReviewItem;
             if (item == null)
             {
-                existingReviewLabel.Text = "Existing human review: <none>";
-                evidenceCurrentnessLabel.Text = "Evidence: none";
-                historyStateLabel.Text = "History: none";
-                existingReviewerLabel.Text = "Reviewer: <none>";
+                existingReviewLabel.Text = ReviewStrings.Get("Results_ExistingHumanReviewNone");
+                evidenceCurrentnessLabel.Text = ReviewStrings.Get("Results_EvidenceNone");
+                historyStateLabel.Text = ReviewStrings.Get("Results_HistoryNone");
+                existingReviewerLabel.Text = ReviewStrings.Get("Results_ReviewerNone");
                 return;
             }
 
-            existingReviewLabel.Text = "Existing human review: <none>";
-            evidenceCurrentnessLabel.Text = "Evidence: none";
-            historyStateLabel.Text = "History: none";
-            existingReviewerLabel.Text = "Reviewer: <none> | Decision time: <none>";
+            existingReviewLabel.Text = ReviewStrings.Get("Results_ExistingHumanReviewNone");
+            evidenceCurrentnessLabel.Text = ReviewStrings.Get("Results_EvidenceNone");
+            historyStateLabel.Text = ReviewStrings.Get("Results_HistoryNone");
+            existingReviewerLabel.Text = ReviewStrings.Get("Results_ReviewerDecisionNone");
             if (current == null || current.StandardsReviewPackage == null || string.IsNullOrWhiteSpace(current.StandardsReviewPackagePath) || string.IsNullOrWhiteSpace(current.StandardsReviewPackageSha256))
             {
-                decisionStatusLabel.Text = "Decision persistence unavailable: review package context is missing.";
+                decisionStatusLabel.Text = ReviewStrings.Get("Results_DecisionPersistenceUnavailable");
                 return;
             }
 
@@ -1469,24 +1512,24 @@ namespace EngiSentry.AutoCAD2021
                 HumanEngineeringReviewDecisionHistoryEntry activeEntry = history.Entries.SingleOrDefault(entry => entry.RuleId == item.RuleId && entry.State == HumanEngineeringReviewDecisionHistoryStates.Active);
                 if (activeEntry == null)
                 {
-                    decisionStatusLabel.Text = "No prior human review decision.";
+                    decisionStatusLabel.Text = ReviewStrings.Get("Results_NoPriorHumanReview");
                     saveReviewDecisionButton.Enabled = true;
                     return;
                 }
 
                 HumanEngineeringReviewDecisionRecord activeDecision = records.Single(record => record.DecisionRecordId == activeEntry.DecisionRecordId);
                 HumanEngineeringReviewDecisionEvaluation evaluation = HumanEngineeringReviewDecisionStalenessValidator.Evaluate(activeDecision, current.StandardsReviewPackage, current.StandardsReviewPackageSha256);
-                existingReviewLabel.Text = "Existing human review: " + activeDecision.HumanReviewState;
-                evidenceCurrentnessLabel.Text = "Evidence: " + evaluation.Status;
-                historyStateLabel.Text = "History: " + activeEntry.State;
-                existingReviewerLabel.Text = "Reviewer: " + activeDecision.ReviewerDisplayName + " | Decision time: " + activeDecision.DecisionTimestampUtc.ToString("u", CultureInfo.InvariantCulture);
-                decisionStatusLabel.Text = evaluation.Reasons.Count == 0 ? "Existing decision is current." : "Existing decision is stale: " + string.Join(", ", evaluation.Reasons);
+                existingReviewLabel.Text = ReviewStrings.Format("Results_ExistingHumanReview", DisplayHumanReviewState(activeDecision.HumanReviewState));
+                evidenceCurrentnessLabel.Text = ReviewStrings.Format("Results_EvidenceState", evaluation.Status);
+                historyStateLabel.Text = ReviewStrings.Format("Results_HistoryState", activeEntry.State);
+                existingReviewerLabel.Text = ReviewStrings.Format("Results_ReviewerDecisionTime", activeDecision.ReviewerDisplayName, activeDecision.DecisionTimestampUtc.ToString("u", CultureInfo.InvariantCulture));
+                decisionStatusLabel.Text = evaluation.Reasons.Count == 0 ? ReviewStrings.Get("Results_DecisionCurrent") : ReviewStrings.Format("Results_DecisionStale", string.Join(", ", evaluation.Reasons));
                 saveReviewDecisionButton.Enabled = true;
                 humanReviewComboBox.SelectedItem = activeDecision.HumanReviewState;
             }
             catch (Exception exception)
             {
-                decisionStatusLabel.Text = "Decision history unavailable: " + exception.Message;
+                decisionStatusLabel.Text = ReviewStrings.Format("Results_DecisionHistoryUnavailable", exception.Message);
             }
         }
 
@@ -1498,12 +1541,12 @@ namespace EngiSentry.AutoCAD2021
                 StandardAuthorityReviewItem item = row == null ? null : row.Tag as StandardAuthorityReviewItem;
                 if (item == null || current == null || current.Document == null)
                 {
-                    SetNote("Select an engineering review item with a valid active document.");
+                    SetNote(ReviewStrings.Get("Results_SelectReviewItem"));
                     return;
                 }
                 if (current.StandardsReviewPackage == null || string.IsNullOrWhiteSpace(current.StandardsReviewPackagePath) || string.IsNullOrWhiteSpace(current.StandardsReviewPackageSha256))
                 {
-                    SetNote("Review decision persistence is unavailable because the review package context is missing.");
+                    SetNote(ReviewStrings.Get("Results_ReviewPersistenceUnavailable"));
                     return;
                 }
                 Document activeDocument = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager == null
@@ -1511,27 +1554,27 @@ namespace EngiSentry.AutoCAD2021
                     : Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 if (activeDocument == null || !object.ReferenceEquals(activeDocument, current.Document))
                 {
-                    SetNote("The active AutoCAD document no longer matches the drawing reviewed by ES_PLOTQA. Reactivate that drawing or rerun ES_PLOTQA.");
+                    SetNote(ReviewStrings.Get("Results_ActiveDrawingMismatch"));
                     return;
                 }
                 string activeDrawingName = Path.GetFileName(activeDocument.Name);
                 if (!string.Equals(activeDrawingName, current.StandardsReviewPackage.DrawingName, StringComparison.Ordinal))
                 {
-                    SetNote("The active document does not match the captured review package drawing.");
+                    SetNote(ReviewStrings.Get("Results_CapturedDrawingMismatch"));
                     return;
                 }
                 int dbmodBefore = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture);
                 string persistedHash = HumanEngineeringReviewDecisionFileStore.ComputeSha256(current.StandardsReviewPackagePath);
                 if (!string.Equals(persistedHash, current.StandardsReviewPackageSha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    SetNote("Review package changed since ES_PLOTQA; rerun ES_PLOTQA before recording a decision.");
+                    SetNote(ReviewStrings.Get("Results_ReviewPackageChanged"));
                     return;
                 }
                 string reviewer = (reviewerTextBox.Text ?? string.Empty).Trim();
                 string humanReviewState = humanReviewComboBox.SelectedItem == null ? string.Empty : humanReviewComboBox.SelectedItem.ToString();
                 if (string.IsNullOrWhiteSpace(reviewer) || (humanReviewState != HumanEngineeringReviewDecisionStates.ReviewAccepted && humanReviewState != HumanEngineeringReviewDecisionStates.ReviewRejected && humanReviewState != HumanEngineeringReviewDecisionStates.NeedsClarification))
                 {
-                    SetNote("Reviewer and a valid human review state are required.");
+                    SetNote(ReviewStrings.Get("Results_ReviewerStateRequired"));
                     return;
                 }
                 string directory = Path.GetDirectoryName(current.StandardsReviewPackagePath);
@@ -1540,21 +1583,21 @@ namespace EngiSentry.AutoCAD2021
                 HumanEngineeringReviewDecisionHistoryEntry activeEntry = history.Entries.SingleOrDefault(entry => entry.RuleId == item.RuleId && entry.State == HumanEngineeringReviewDecisionHistoryStates.Active);
                 DateTime decisionTimestampUtc = DateTime.UtcNow;
                 HumanEngineeringReviewDecisionRecord decision = HumanEngineeringReviewDecisionBuilder.Create(current.StandardsReviewPackage, persistedHash, item.RuleId, humanReviewState, reviewer, decisionTimestampUtc, authenticatedReviewerIdentity: null, comment: string.IsNullOrWhiteSpace(reviewCommentTextBox.Text) ? null : reviewCommentTextBox.Text.Trim(), supersedesDecisionRecordId: activeEntry == null ? null : activeEntry.DecisionRecordId);
-                DialogResult confirmation = MessageBox.Show("Rule: " + item.RuleId + "\nHuman Review: " + humanReviewState + "\nReviewer: " + reviewer + "\n\nThis records an immutable human review decision.\nIt does not approve or activate an engineering rule.", "Confirm Review Decision", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+                DialogResult confirmation = MessageBox.Show(ReviewStrings.Format("Results_ConfirmReviewBody", item.RuleId, DisplayHumanReviewState(humanReviewState), reviewer), ReviewStrings.Get("Results_ConfirmReviewTitle"), MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
                 if (confirmation != DialogResult.OK) return;
                 string decisionPath = HumanEngineeringReviewDecisionFileStore.Write(decision, directory);
                 int dbmodAfter = Convert.ToInt32(Autodesk.AutoCAD.ApplicationServices.Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture);
                 if (dbmodBefore != dbmodAfter)
                 {
-                    SetNote("Review decision workflow changed DBMOD; no drawing save was performed.");
+                    SetNote(ReviewStrings.Get("Results_ReviewDbmodChanged"));
                     return;
                 }
-                SetNote("Immutable human review decision saved: " + decisionPath);
+                SetNote(ReviewStrings.Format("Results_ReviewDecisionSaved", decisionPath));
                 UpdateReviewDecisionPanel();
             }
             catch (Exception exception)
             {
-                SetNote("Review decision was not saved: " + exception.Message);
+                SetNote(ReviewStrings.Format("Results_ReviewDecisionNotSaved", exception.Message));
             }
         }
 
@@ -1660,14 +1703,14 @@ namespace EngiSentry.AutoCAD2021
                 string folder = Directory.Exists(current.OutputPath) ? current.OutputPath : Path.GetDirectoryName(current.OutputPath);
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
-                    SetNote("Output folder is not available: " + current.OutputPath);
+                    SetNote(ReviewStrings.Format("Results_OutputFolderUnavailable", current.OutputPath));
                     return;
                 }
                 Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = "\"" + folder + "\"", UseShellExecute = false });
             }
             catch (Exception exception)
             {
-                SetNote("Could not open output folder: " + exception.Message);
+                SetNote(ReviewStrings.Format("Results_OutputFolderOpenFailed", exception.Message));
             }
         }
 
@@ -1681,7 +1724,7 @@ namespace EngiSentry.AutoCAD2021
                 Document document = current == null ? null : current.Document;
                 if (document == null || string.IsNullOrWhiteSpace(handleText))
                 {
-                    SetNote("No valid source handle is available for this finding.");
+                    SetNote(ReviewStrings.Get("Results_NoValidSourceHandle"));
                     return;
                 }
 
@@ -1689,7 +1732,7 @@ namespace EngiSentry.AutoCAD2021
                 long handleValue;
                 if (!long.TryParse(selectionHandle, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out handleValue))
                 {
-                    SetNote("The finding source handle is invalid.");
+                    SetNote(ReviewStrings.Get("Results_InvalidSourceHandle"));
                     return;
                 }
 
@@ -1731,12 +1774,131 @@ namespace EngiSentry.AutoCAD2021
                     "(if _es_e (progn (command \"_.ZOOM\" \"_O\" _es_e \"\") " +
                     "(sssetfirst nil (ssadd _es_e))))) ";
                 document.SendStringToExecute(zoomCommand + Environment.NewLine, true, false, false);
-                SetNote("Zoom requested for evidence handle " + handleText + " using AutoCAD ZOOM Object.");
+                SetNote(ReviewStrings.Format("Results_ZoomRequested", handleText));
             }
             catch (Exception exception)
             {
-                SetNote("Evidence could not be resolved: " + exception.Message);
+                SetNote(ReviewStrings.Format("Results_EvidenceResolveFailed", exception.Message));
             }
+        }
+
+        private static string DisplaySeverity(string severity)
+        {
+            if (!ReviewLocalization.IsPersian || string.IsNullOrWhiteSpace(severity)) return severity ?? string.Empty;
+            if (string.Equals(severity, "Info", StringComparison.OrdinalIgnoreCase)) return ReviewStrings.Get("Results_SeverityInfo");
+            if (string.Equals(severity, "Warning", StringComparison.OrdinalIgnoreCase)) return ReviewStrings.Get("Results_SeverityWarning");
+            if (string.Equals(severity, "Error", StringComparison.OrdinalIgnoreCase)) return ReviewStrings.Get("Results_SeverityError");
+            return severity;
+        }
+
+        private static string DisplayHumanReviewState(string state)
+        {
+            if (!ReviewLocalization.IsPersian || string.IsNullOrWhiteSpace(state)) return state ?? string.Empty;
+            if (string.Equals(state, HumanEngineeringReviewDecisionStates.ReviewAccepted, StringComparison.Ordinal)) return ReviewStrings.Get("Results_HumanReviewAccepted");
+            if (string.Equals(state, HumanEngineeringReviewDecisionStates.ReviewRejected, StringComparison.Ordinal)) return ReviewStrings.Get("Results_HumanReviewRejected");
+            if (string.Equals(state, HumanEngineeringReviewDecisionStates.NeedsClarification, StringComparison.Ordinal)) return ReviewStrings.Get("Results_HumanReviewNeedsClarification");
+            return state;
+        }
+
+        private static string DisplayFindingMessage(QaFinding finding)
+        {
+            if (finding == null || !ReviewLocalization.IsPersian) return finding == null ? string.Empty : finding.Message ?? string.Empty;
+            switch (finding.RuleId)
+            {
+                case "ENGI-EQ-001": return ReviewStrings.Get("Results_Finding_EQ001");
+                case "ENGI-EQ-002": return ReviewStrings.Get("Results_Finding_EQ002");
+                case "ENGI-EQ-003": return DisplayMultipleDrawingTagFinding(finding);
+                case "ENGI-EQ-004": return ReviewStrings.Get("Results_Finding_EQ004");
+                case "ENGI-EQ-005": return ReviewStrings.Get("Results_Finding_EQ005");
+                case "ENGI-IDX-001": return ReviewStrings.Get("Results_Finding_IDX001");
+                case "ENGI-IDX-002": return ReviewStrings.Get("Results_Finding_IDX002");
+                case "ENGI-STR-001": return ReviewStrings.Get("Results_Finding_STR001");
+                case "PP-COORD-001": return DisplayPlacementCoordinateFinding(finding);
+                case "PP-COORD-002": return DisplayPlacementCoordinateFinding(finding);
+                case "PP-COORD-003": return ReviewStrings.Get("Results_Finding_PPCOORD003");
+                case "PP-GEO-001": return ReviewStrings.Get("Results_Finding_PPGEO001");
+                case "PP-GEO-002": return ReviewStrings.Get("Results_Finding_PPGEO002");
+                case "PP-SPAT-001": return ReviewStrings.Get("Results_Finding_PPSPAT001");
+                case "PP-SPAT-002": return ReviewStrings.Get("Results_Finding_PPSPAT002");
+                case "XDOC-EQ-001": return ReviewStrings.Get("Results_Finding_XDOC001");
+                case "XDOC-EQ-002": return ReviewStrings.Get("Results_Finding_XDOC002");
+                case "XDOC-EQ-003": return ReviewStrings.Get("Results_Finding_XDOC003");
+                case "ENGI-REF-001":
+                    return ReviewStrings.Format("Results_Finding_REF001", finding.Evidence == null ? 0 : finding.Evidence.OccurrenceCount);
+            }
+            if (string.Equals(finding.Category, "EngineeringDistance", StringComparison.Ordinal))
+            {
+                string message = finding.Message ?? string.Empty;
+                if (message.IndexOf("Road", StringComparison.OrdinalIgnoreCase) >= 0) return ReviewStrings.Get("Results_Finding_DistanceRoad");
+                if (message.IndexOf("Security Fence", StringComparison.OrdinalIgnoreCase) >= 0) return ReviewStrings.Get("Results_Finding_DistanceFence");
+                if (message.IndexOf("Unit Boundary", StringComparison.OrdinalIgnoreCase) >= 0) return ReviewStrings.Get("Results_Finding_DistanceUnitBoundary");
+                return ReviewStrings.Get("Results_Finding_DistanceBoundary");
+            }
+            return finding.Message ?? string.Empty;
+        }
+
+        private static string DisplayMultipleDrawingTagFinding(QaFinding finding)
+        {
+            QaEvidence evidence = finding == null ? null : finding.Evidence;
+            if (evidence == null) return ReviewStrings.Get("Results_Finding_EQ003");
+            List<string> handles = (evidence.DrawingTagSourceHandles ?? new List<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
+                .ToList();
+            int count = evidence.OccurrenceCount ?? handles.Count;
+            string handleText = handles.Count == 0 ? ReviewStrings.Get("Results_None") : string.Join(", ", handles);
+            return ReviewStrings.Format("Results_Finding_EQ003_Detail", count.ToString(CultureInfo.InvariantCulture), LtrToken(handleText));
+        }
+
+        private static string DisplayPlacementCoordinateFinding(QaFinding finding)
+        {
+            QaEvidence evidence = finding == null ? null : finding.Evidence;
+            if (evidence == null) return finding != null && finding.RuleId == "PP-COORD-002"
+                ? ReviewStrings.Get("Results_Finding_PPCOORD002")
+                : ReviewStrings.Get("Results_Finding_PPCOORD001");
+
+            string occurrenceHandle = string.IsNullOrWhiteSpace(evidence.TagSourceHandle) ? ReviewStrings.Get("Results_None") : LtrToken(evidence.TagSourceHandle);
+            CoordinateAssociation easting = (evidence.CoordinateAssociations ?? new List<CoordinateAssociation>())
+                .FirstOrDefault(x => string.Equals(x.Axis, "Easting", StringComparison.OrdinalIgnoreCase));
+            CoordinateAssociation northing = (evidence.CoordinateAssociations ?? new List<CoordinateAssociation>())
+                .FirstOrDefault(x => string.Equals(x.Axis, "Northing", StringComparison.OrdinalIgnoreCase));
+
+            return ReviewStrings.Format(
+                "Results_Finding_PlacementCoordinateDetail",
+                occurrenceHandle,
+                DisplayCoordinateAssociation(easting),
+                DisplayCoordinateAssociation(northing));
+        }
+
+        private static string DisplayCoordinateAssociation(CoordinateAssociation association)
+        {
+            if (association == null) return ReviewStrings.Get("Results_CoordMissing");
+            string status = association.Status ?? string.Empty;
+            if (string.Equals(status, "Resolved", StringComparison.OrdinalIgnoreCase))
+            {
+                if (association.SelectedValue.HasValue)
+                {
+                    string handle = string.IsNullOrWhiteSpace(association.SelectedSourceHandle) ? ReviewStrings.Get("Results_None") : association.SelectedSourceHandle;
+                    return ReviewStrings.Format(
+                        "Results_CoordResolvedValue",
+                        LtrToken(association.SelectedValue.Value.ToString("0.###", CultureInfo.InvariantCulture)),
+                        LtrToken(handle));
+                }
+                return ReviewStrings.Get("Results_CoordResolved");
+            }
+            if (string.Equals(status, "Ambiguous", StringComparison.OrdinalIgnoreCase))
+            {
+                int count = association.Candidates == null ? 0 : association.Candidates.Count;
+                return ReviewStrings.Format("Results_CoordAmbiguous", count.ToString(CultureInfo.InvariantCulture));
+            }
+            if (string.Equals(status, "Missing", StringComparison.OrdinalIgnoreCase)) return ReviewStrings.Get("Results_CoordMissing");
+            return string.IsNullOrWhiteSpace(status) ? ReviewStrings.Get("Results_CoordMissing") : status;
+        }
+
+        private static string LtrToken(string value)
+        {
+            return string.IsNullOrEmpty(value) ? string.Empty : "\u200E" + value + "\u200E";
         }
 
         private static string Subject(QaFinding finding)

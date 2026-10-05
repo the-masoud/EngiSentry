@@ -683,4 +683,131 @@
   <data name="Question_placement_units_confirmed" xml:space="preserve">
     <value>واحد نقشه برای این مختصات تأیید شده است</value>
   </data>
+
+  <data name="Results_WindowTitle" xml:space="preserve"><value>نتایج EngiSentry</value></data>
+  <data name="Results_DrawingPrefix" xml:space="preserve"><value>نقشه:</value></data>
+  <data name="Results_None" xml:space="preserve"><value>&lt;هیچ‌کدام&gt;</value></data>
+  <data name="Results_ArtifactPrefix" xml:space="preserve"><value>فایل خروجی QA:</value></data>
+  <data name="Results_PlotPlanQaTitle" xml:space="preserve"><value>کنترل QA پلات‌پلن</value></data>
+  <data name="Results_PlotPlanQaCompleted" xml:space="preserve"><value>ارزیابی QA پلات‌پلن تکمیل شد</value></data>
+  <data name="Results_PlotPlanQaSummary" xml:space="preserve"><value>جانمایی‌ها: {0} | ناقص: {1} | کمبود هندسی: {2} | کمبود مکانی: {3}</value></data>
+  <data name="Results_CrossQaTitle" xml:space="preserve"><value>کنترل QA بین‌اسنادی</value></data>
+  <data name="Results_CrossQaCompleted" xml:space="preserve"><value>مقایسه با رجیستر خارجی تکمیل شد</value></data>
+  <data name="Results_CrossQaSource" xml:space="preserve"><value>رجیستر خارجی: {0} | SHA256: {1}</value></data>
+  <data name="Results_MetricRules" xml:space="preserve"><value>قوانین</value></data>
+  <data name="Results_MetricFindings" xml:space="preserve"><value>یافته‌ها</value></data>
+  <data name="Results_MetricWarnings" xml:space="preserve"><value>هشدارها</value></data>
+  <data name="Results_MetricErrors" xml:space="preserve"><value>خطاها</value></data>
+  <data name="Results_MetricSourceRows" xml:space="preserve"><value>ردیف‌های منبع</value></data>
+  <data name="Results_MetricExpandedIdentities" xml:space="preserve"><value>هویت‌های گسترش‌یافته</value></data>
+  <data name="Results_SectionDetails" xml:space="preserve"><value>جزئیات</value></data>
+  <data name="Results_SectionFindings" xml:space="preserve"><value>یافته‌ها</value></data>
+  <data name="Results_SectionChanges" xml:space="preserve"><value>تغییرات</value></data>
+  <data name="Results_SectionDistanceCriteria" xml:space="preserve"><value>معیارهای فاصله پروژه</value></data>
+  <data name="Results_SectionEngineeringReview" xml:space="preserve"><value>بازبینی مهندسی</value></data>
+  <data name="Results_ButtonOpenOutputFolder" xml:space="preserve"><value>باز کردن پوشه خروجی</value></data>
+  <data name="Results_ButtonZoomToEvidence" xml:space="preserve"><value>بزرگ‌نمایی روی شواهد</value></data>
+  <data name="Results_ButtonSaveReviewDecision" xml:space="preserve"><value>ذخیره تصمیم بازبینی</value></data>
+  <data name="Results_ReviewReviewer" xml:space="preserve"><value>بازبین</value></data>
+  <data name="Results_ReviewHumanReview" xml:space="preserve"><value>بازبینی انسانی</value></data>
+  <data name="Results_ReviewComment" xml:space="preserve"><value>توضیحات</value></data>
+  <data name="Results_ColumnSeverity" xml:space="preserve"><value>شدت</value></data>
+  <data name="Results_ColumnRule" xml:space="preserve"><value>قانون</value></data>
+  <data name="Results_ColumnTagSubject" xml:space="preserve"><value>تگ / موضوع</value></data>
+  <data name="Results_ColumnMessage" xml:space="preserve"><value>پیام</value></data>
+  <data name="Results_ColumnChange" xml:space="preserve"><value>تغییر</value></data>
+  <data name="Results_ColumnEquipmentTag" xml:space="preserve"><value>تگ تجهیز</value></data>
+  <data name="Results_ColumnDetails" xml:space="preserve"><value>جزئیات</value></data>
+  <data name="Results_ColumnResult" xml:space="preserve"><value>نتیجه</value></data>
+  <data name="Results_ColumnMetric" xml:space="preserve"><value>شاخص</value></data>
+  <data name="Results_ColumnValue" xml:space="preserve"><value>مقدار</value></data>
+  <data name="Results_ColumnCheck" xml:space="preserve"><value>کنترل</value></data>
+  <data name="Results_ColumnMinimum" xml:space="preserve"><value>حداقل</value></data>
+  <data name="Results_ColumnObserved" xml:space="preserve"><value>مشاهده‌شده</value></data>
+  <data name="Results_ColumnStatus" xml:space="preserve"><value>وضعیت</value></data>
+  <data name="Results_ColumnInterpretation" xml:space="preserve"><value>تفسیر</value></data>
+  <data name="Results_ColumnDecision" xml:space="preserve"><value>تصمیم</value></data>
+  <data name="Results_ColumnEnforcement" xml:space="preserve"><value>نحوه اعمال</value></data>
+  <data name="Results_ColumnAuthorityEvidence" xml:space="preserve"><value>شواهد مرجع</value></data>
+  <data name="Results_DistanceEquipmentRoad" xml:space="preserve"><value>فاصله تجهیز تا جاده</value></data>
+  <data name="Results_DistanceEquipmentFence" xml:space="preserve"><value>فاصله تجهیز تا حصار سایت / امنیتی</value></data>
+  <data name="Results_DistanceEquipmentUnitBoundary" xml:space="preserve"><value>فاصله تجهیز تا مرز واحد</value></data>
+  <data name="Results_NotResolved" xml:space="preserve"><value>&lt;حل‌نشده&gt;</value></data>
+  <data name="Results_ResolvedSuffix" xml:space="preserve"><value>حل‌شده</value></data>
+  <data name="Results_DistanceNoEvidence" xml:space="preserve"><value>برای این کنترل، شاهد حل‌شده‌ای در دسترس نیست.</value></data>
+  <data name="Results_DistanceRequirementMet" xml:space="preserve"><value>بر اساس شواهد موجود، الزام رعایت شده است.</value></data>
+  <data name="Results_DistanceBelowMinimum" xml:space="preserve"><value>شاهد مشاهده‌شده کمتر از حداقل تنظیم‌شده پروژه است.</value></data>
+  <data name="Results_DistanceProjectCriterionOnly" xml:space="preserve"><value>فقط معیار پروژه فعال است؛ مبنای مصوب حاکمیت استاندارد برای اجرای خودکار فعال نیست.</value></data>
+  <data name="Results_DistanceEngineeringReviewRequired" xml:space="preserve"><value>بازبینی مهندسی لازم است.</value></data>
+  <data name="Results_DistanceSourceQuarantined" xml:space="preserve"><value>منبع قرنطینه شده و به‌صورت خودکار اعمال نمی‌شود.</value></data>
+  <data name="Results_DistanceGovernanceStatePrefix" xml:space="preserve"><value>وضعیت حاکمیتی: </value></data>
+
+  <data name="Results_ExistingHumanReviewNone" xml:space="preserve"><value>بازبینی انسانی موجود: &lt;هیچ‌کدام&gt;</value></data>
+  <data name="Results_EvidenceNone" xml:space="preserve"><value>شواهد: هیچ‌کدام</value></data>
+  <data name="Results_HistoryNone" xml:space="preserve"><value>سابقه: هیچ‌کدام</value></data>
+  <data name="Results_ReviewerNone" xml:space="preserve"><value>بازبین: &lt;هیچ‌کدام&gt;</value></data>
+  <data name="Results_ReviewerDecisionNone" xml:space="preserve"><value>بازبین: &lt;هیچ‌کدام&gt; | زمان تصمیم: &lt;هیچ‌کدام&gt;</value></data>
+  <data name="Results_DecisionPersistenceUnavailable" xml:space="preserve"><value>ذخیره‌سازی تصمیم در دسترس نیست؛ زمینه بسته بازبینی موجود نیست.</value></data>
+  <data name="Results_NoPriorHumanReview" xml:space="preserve"><value>تصمیم بازبینی انسانی قبلی وجود ندارد.</value></data>
+  <data name="Results_ExistingHumanReview" xml:space="preserve"><value>بازبینی انسانی موجود: {0}</value></data>
+  <data name="Results_EvidenceState" xml:space="preserve"><value>شواهد: {0}</value></data>
+  <data name="Results_HistoryState" xml:space="preserve"><value>سابقه: {0}</value></data>
+  <data name="Results_ReviewerDecisionTime" xml:space="preserve"><value>بازبین: {0} | زمان تصمیم: {1}</value></data>
+  <data name="Results_DecisionCurrent" xml:space="preserve"><value>تصمیم موجود با شواهد فعلی منطبق است.</value></data>
+  <data name="Results_DecisionStale" xml:space="preserve"><value>تصمیم موجود قدیمی شده است: {0}</value></data>
+  <data name="Results_DecisionHistoryUnavailable" xml:space="preserve"><value>سابقه تصمیم در دسترس نیست: {0}</value></data>
+  <data name="Results_SelectReviewItem" xml:space="preserve"><value>یک مورد بازبینی مهندسی با نقشه فعال معتبر انتخاب کنید.</value></data>
+  <data name="Results_ReviewPersistenceUnavailable" xml:space="preserve"><value>ذخیره تصمیم بازبینی ممکن نیست، چون زمینه بسته بازبینی موجود نیست.</value></data>
+  <data name="Results_ActiveDrawingMismatch" xml:space="preserve"><value>نقشه فعال AutoCAD دیگر با نقشه بررسی‌شده توسط ES_PLOTQA یکسان نیست. همان نقشه را فعال کنید یا ES_PLOTQA را دوباره اجرا کنید.</value></data>
+  <data name="Results_CapturedDrawingMismatch" xml:space="preserve"><value>نقشه فعال با نقشه ثبت‌شده در بسته بازبینی مطابقت ندارد.</value></data>
+  <data name="Results_ReviewPackageChanged" xml:space="preserve"><value>بسته بازبینی پس از اجرای ES_PLOTQA تغییر کرده است؛ پیش از ثبت تصمیم، ES_PLOTQA را دوباره اجرا کنید.</value></data>
+  <data name="Results_ReviewerStateRequired" xml:space="preserve"><value>نام بازبین و یک وضعیت معتبر بازبینی انسانی الزامی است.</value></data>
+  <data name="Results_ConfirmReviewBody" xml:space="preserve"><value>قانون: {0}&#xA;بازبینی انسانی: {1}&#xA;بازبین: {2}&#xA;&#xA;این کار یک تصمیم بازبینی انسانی تغییرناپذیر ثبت می‌کند.&#xA;این تصمیم هیچ قانون مهندسی را تأیید یا فعال نمی‌کند.</value></data>
+  <data name="Results_ConfirmReviewTitle" xml:space="preserve"><value>تأیید ثبت تصمیم بازبینی</value></data>
+  <data name="Results_ReviewDbmodChanged" xml:space="preserve"><value>گردش کار تصمیم بازبینی مقدار DBMOD را تغییر داد؛ هیچ ذخیره‌ای روی نقشه انجام نشد.</value></data>
+  <data name="Results_ReviewDecisionSaved" xml:space="preserve"><value>تصمیم بازبینی انسانی تغییرناپذیر ذخیره شد: {0}</value></data>
+  <data name="Results_ReviewDecisionNotSaved" xml:space="preserve"><value>تصمیم بازبینی ذخیره نشد: {0}</value></data>
+  <data name="Results_OutputFolderUnavailable" xml:space="preserve"><value>پوشه خروجی در دسترس نیست: {0}</value></data>
+  <data name="Results_OutputFolderOpenFailed" xml:space="preserve"><value>باز کردن پوشه خروجی ممکن نشد: {0}</value></data>
+  <data name="Results_NoValidSourceHandle" xml:space="preserve"><value>برای این یافته، Handle معتبر منبع وجود ندارد.</value></data>
+  <data name="Results_InvalidSourceHandle" xml:space="preserve"><value>Handle منبع این یافته نامعتبر است.</value></data>
+  <data name="Results_ZoomRequested" xml:space="preserve"><value>درخواست بزرگ‌نمایی روی شاهد با Handle {0} از طریق ZOOM Object اتوکد ارسال شد.</value></data>
+  <data name="Results_EvidenceResolveFailed" xml:space="preserve"><value>بازیابی شاهد ممکن نشد: {0}</value></data>
+
+  <data name="Results_SeverityInfo" xml:space="preserve"><value>اطلاعات</value></data>
+  <data name="Results_SeverityWarning" xml:space="preserve"><value>هشدار</value></data>
+  <data name="Results_SeverityError" xml:space="preserve"><value>خطا</value></data>
+  <data name="Results_HumanReviewAccepted" xml:space="preserve"><value>تأیید بازبینی</value></data>
+  <data name="Results_HumanReviewRejected" xml:space="preserve"><value>رد بازبینی</value></data>
+  <data name="Results_HumanReviewNeedsClarification" xml:space="preserve"><value>نیازمند توضیح بیشتر</value></data>
+  <data name="Results_Finding_EQ001" xml:space="preserve"><value>برای این تجهیز در لیست تجهیزات شاهد وجود دارد، اما در نقشه شاهد DrawingTag پیدا نشده است.</value></data>
+  <data name="Results_Finding_EQ002" xml:space="preserve"><value>برای این تجهیز در نقشه شاهد DrawingTag وجود دارد، اما در لیست تجهیزات شاهدی پیدا نشده است.</value></data>
+  <data name="Results_Finding_EQ003" xml:space="preserve"><value>برای این تجهیز چند شاهد DrawingTag در نقشه وجود دارد.</value></data>
+  <data name="Results_Finding_EQ004" xml:space="preserve"><value>این تجهیز در چند ردیف مجزای لیست تجهیزات ارجاع شده است.</value></data>
+  <data name="Results_Finding_EQ005" xml:space="preserve"><value>مقادیر این تجهیز در ردیف‌های مختلف لیست تجهیزات با یکدیگر تعارض دارند.</value></data>
+  <data name="Results_Finding_IDX001" xml:space="preserve"><value>ارتباط این موجودیت به‌صورت قطعی قابل تعیین نیست.</value></data>
+  <data name="Results_Finding_IDX002" xml:space="preserve"><value>برای ارتباط این موجودیت چند گزینه قطعیِ هم‌ارزش وجود دارد.</value></data>
+  <data name="Results_Finding_STR001" xml:space="preserve"><value>برای این سازه چند شاهد منبع ثبت شده است.</value></data>
+  <data name="Results_Finding_PPCOORD001" xml:space="preserve"><value>جانمایی تجهیز ناقص است، زیرا یک یا چند مؤلفه مختصات قابل تعیین نیست.</value></data>
+  <data name="Results_Finding_PPCOORD002" xml:space="preserve"><value>شواهد مختصات جانمایی تجهیز مبهم است.</value></data>
+  <data name="Results_Finding_PPCOORD003" xml:space="preserve"><value>برای این تجهیز چند جانمایی کاملِ متعارض در پلات‌پلن وجود دارد.</value></data>
+  <data name="Results_Finding_PPGEO001" xml:space="preserve"><value>برای برچسب هندسی پلات‌پلن، ارتباط هندسی پشتیبانی‌شده و حل‌شده‌ای طبق قواعد M2.1 پیدا نشد.</value></data>
+  <data name="Results_Finding_PPGEO002" xml:space="preserve"><value>شواهد ارتباط هندسی پشتیبانی‌شده برای برچسب پلات‌پلن مبهم است.</value></data>
+  <data name="Results_Finding_PPSPAT001" xml:space="preserve"><value>برای یادداشت صریح مختصات در پلات‌پلن، تطابق هندسی محلیِ پشتیبانی‌شده و حل‌شده‌ای پیدا نشد.</value></data>
+  <data name="Results_Finding_PPSPAT002" xml:space="preserve"><value>برای یادداشت صریح مختصات در پلات‌پلن، چند تطابق هندسی محلی محتمل وجود دارد.</value></data>
+  <data name="Results_Finding_XDOC001" xml:space="preserve"><value>برای تجهیز موجود در رجیستر خارجی، شاهد DrawingTag متناظر در نقشه پیدا نشد.</value></data>
+  <data name="Results_Finding_XDOC002" xml:space="preserve"><value>برای تجهیز موجود در نقشه، شاهد متناظر در رجیستر خارجی تجهیزات پیدا نشد.</value></data>
+  <data name="Results_Finding_XDOC003" xml:space="preserve"><value>مشخصات تجهیز در رجیستر خارجی با شواهد Equipment List نقشه مطابقت ندارد.</value></data>
+  <data name="Results_Finding_REF001" xml:space="preserve"><value>نقشه دارای {0} مرجع خارجی حل‌نشده است؛ انطباق مهندسی فقط بر اساس هندسه فایل میزبان قابل تأیید نیست.</value></data>
+  <data name="Results_Finding_DistanceRoad" xml:space="preserve"><value>فاصله جانمایی تجهیز تا هندسه جاده کمتر از حداقل مجاز است.</value></data>
+  <data name="Results_Finding_DistanceFence" xml:space="preserve"><value>فاصله جانمایی تجهیز تا حصار امنیتی کمتر از حداقل مجاز است.</value></data>
+  <data name="Results_Finding_DistanceUnitBoundary" xml:space="preserve"><value>فاصله جانمایی تجهیز تا مرز واحد کمتر از حداقل مجاز است.</value></data>
+  <data name="Results_Finding_DistanceBoundary" xml:space="preserve"><value>فاصله جانمایی تجهیز تا مرز کمتر از حداقل مجاز است.</value></data>
+
+  <data name="Results_Finding_EQ003_Detail" xml:space="preserve"><value>این تجهیز {0} بار در نقشه شناسایی شده است؛ هندل‌های منبع: {1}</value></data>
+  <data name="Results_Finding_PlacementCoordinateDetail" xml:space="preserve"><value>هندل نمونه نقشه: {0}؛ مختصات شرقی: {1}؛ مختصات شمالی: {2}</value></data>
+  <data name="Results_CoordMissing" xml:space="preserve"><value>حل‌نشده</value></data>
+  <data name="Results_CoordResolved" xml:space="preserve"><value>حل‌شده</value></data>
+  <data name="Results_CoordResolvedValue" xml:space="preserve"><value>حل‌شده؛ مقدار {0}؛ هندل منبع {1}</value></data>
+  <data name="Results_CoordAmbiguous" xml:space="preserve"><value>مبهم؛ {0} گزینه</value></data>
 </root>

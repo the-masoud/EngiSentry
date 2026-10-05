@@ -139,16 +139,36 @@ namespace EngiSentry.PlotPlan
         {
             if (resolutions == null || resolutions.Count == 0) return;
             var trusted = new Dictionary<string, EquipmentPlacementResolution>(StringComparer.Ordinal);
+            var trustedOccurrences = new Dictionary<string, EquipmentPlacementResolution>(StringComparer.Ordinal);
             foreach (EquipmentPlacementResolution resolution in resolutions)
             {
                 if (resolution == null || string.IsNullOrWhiteSpace(resolution.EquipmentEntityId)) continue;
                 if (!IsResolutionUnitValid(resolution, drawing)) continue;
+                if (string.Equals(resolution.Source, EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint, StringComparison.Ordinal)
+                    && !string.IsNullOrWhiteSpace(resolution.OccurrenceId))
+                {
+                    if (!trustedOccurrences.TryGetValue(resolution.OccurrenceId, out EquipmentPlacementResolution? existingOccurrence)
+                        || resolution.ResponseTimestampUtc >= existingOccurrence.ResponseTimestampUtc)
+                        trustedOccurrences[resolution.OccurrenceId] = resolution;
+                    continue;
+                }
                 if (!trusted.TryGetValue(resolution.EquipmentEntityId, out EquipmentPlacementResolution? existing) || resolution.ResponseTimestampUtc >= existing.ResponseTimestampUtc) trusted[resolution.EquipmentEntityId] = resolution;
             }
-            if (trusted.Count == 0) return;
+            if (trusted.Count == 0 && trustedOccurrences.Count == 0) return;
             foreach (EquipmentPlacement placement in placements)
             {
                 if (placement.PlacementStatus == "Complete") continue;
+                if (trustedOccurrences.TryGetValue(placement.PlacementId, out EquipmentPlacementResolution? occurrenceResolution)
+                    && string.Equals(placement.TagSourceHandle, occurrenceResolution.OccurrenceSourceHandle, StringComparison.Ordinal))
+                {
+                    placement.Easting = EngineerAssociation("E", occurrenceResolution);
+                    placement.Northing = EngineerAssociation("N", occurrenceResolution);
+                    placement.PlacementStatus = "Complete";
+                    placement.ResolutionState = PlacementResolutionState.Resolved;
+                    placement.ResolutionReason = "Engineer confirmed this exact drawing occurrence point";
+                    placement.EngineerResolution = EngineerResolution(occurrenceResolution);
+                    continue;
+                }
                 // EPR-1 is keyed by canonical equipment identity, not occurrence. It cannot
                 // safely assign one reviewed point to multiple drawing occurrences.
                 if (placements.Count(x => x.EquipmentEntityId == placement.EquipmentEntityId) != 1) continue;
@@ -156,22 +176,19 @@ namespace EngiSentry.PlotPlan
                 placement.Easting = EngineerAssociation("E", resolution);
                 placement.Northing = EngineerAssociation("N", resolution);
                 placement.PlacementStatus = "Complete";
-                placement.EngineerResolution = new EquipmentPlacementEngineerResolution
-                {
-                    ResolutionId = resolution.ResolutionId,
-                    RecordId = resolution.RecordId,
-                    Source = resolution.Source,
-                    SourceHandle = resolution.SourceHandle,
-                    SourceLayer = resolution.SourceLayer,
-                    ReviewerDisplayName = resolution.ReviewerDisplayName,
-                    ReviewerRole = resolution.ReviewerRole,
-                    ResponseTimestampUtc = resolution.ResponseTimestampUtc,
-                    ProposalId = resolution.ProposalId,
-                    ProposalFingerprint = resolution.ProposalFingerprint,
-                    DispositionRecordId = resolution.DispositionRecordId
-                };
+                placement.EngineerResolution = EngineerResolution(resolution);
             }
         }
+
+        private static EquipmentPlacementEngineerResolution EngineerResolution(EquipmentPlacementResolution resolution) => new EquipmentPlacementEngineerResolution
+        {
+            ResolutionId = resolution.ResolutionId, RecordId = resolution.RecordId, Source = resolution.Source,
+            SourceHandle = resolution.SourceHandle, SourceLayer = resolution.SourceLayer,
+            ReviewerDisplayName = resolution.ReviewerDisplayName, ReviewerRole = resolution.ReviewerRole,
+            ResponseTimestampUtc = resolution.ResponseTimestampUtc, ProposalId = resolution.ProposalId,
+            ProposalFingerprint = resolution.ProposalFingerprint, DispositionRecordId = resolution.DispositionRecordId,
+            OccurrenceId = resolution.OccurrenceId, OccurrenceSourceHandle = resolution.OccurrenceSourceHandle
+        };
 
         // An authoritative project coordinate package is the project's own statement of where each
         // equipment occurrence sits. It is applied only after every deterministic and engineer-derived

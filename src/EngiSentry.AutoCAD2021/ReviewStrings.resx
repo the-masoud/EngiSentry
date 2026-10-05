@@ -686,4 +686,131 @@
   <data name="Question_placement_units_confirmed" xml:space="preserve">
     <value>Drawing units confirmed for this coordinate</value>
   </data>
+
+  <data name="Results_WindowTitle" xml:space="preserve"><value>EngiSentry Results</value></data>
+  <data name="Results_DrawingPrefix" xml:space="preserve"><value>Drawing:</value></data>
+  <data name="Results_None" xml:space="preserve"><value>&lt;none&gt;</value></data>
+  <data name="Results_ArtifactPrefix" xml:space="preserve"><value>QA artifact:</value></data>
+  <data name="Results_PlotPlanQaTitle" xml:space="preserve"><value>Plot Plan QA</value></data>
+  <data name="Results_PlotPlanQaCompleted" xml:space="preserve"><value>Plot-plan QA evaluation completed</value></data>
+  <data name="Results_PlotPlanQaSummary" xml:space="preserve"><value>Placements: {0} | Incomplete: {1} | Geometry gaps: {2} | Spatial gaps: {3}</value></data>
+  <data name="Results_CrossQaTitle" xml:space="preserve"><value>Cross-Document QA</value></data>
+  <data name="Results_CrossQaCompleted" xml:space="preserve"><value>External register comparison completed</value></data>
+  <data name="Results_CrossQaSource" xml:space="preserve"><value>External register: {0} | SHA256: {1}</value></data>
+  <data name="Results_MetricRules" xml:space="preserve"><value>Rules</value></data>
+  <data name="Results_MetricFindings" xml:space="preserve"><value>Findings</value></data>
+  <data name="Results_MetricWarnings" xml:space="preserve"><value>Warnings</value></data>
+  <data name="Results_MetricErrors" xml:space="preserve"><value>Errors</value></data>
+  <data name="Results_MetricSourceRows" xml:space="preserve"><value>Source rows</value></data>
+  <data name="Results_MetricExpandedIdentities" xml:space="preserve"><value>Expanded identities</value></data>
+  <data name="Results_SectionDetails" xml:space="preserve"><value>DETAILS</value></data>
+  <data name="Results_SectionFindings" xml:space="preserve"><value>FINDINGS</value></data>
+  <data name="Results_SectionChanges" xml:space="preserve"><value>CHANGES</value></data>
+  <data name="Results_SectionDistanceCriteria" xml:space="preserve"><value>PROJECT DISTANCE CRITERIA</value></data>
+  <data name="Results_SectionEngineeringReview" xml:space="preserve"><value>ENGINEERING REVIEW</value></data>
+  <data name="Results_ButtonOpenOutputFolder" xml:space="preserve"><value>Open Output Folder</value></data>
+  <data name="Results_ButtonZoomToEvidence" xml:space="preserve"><value>Zoom To Evidence</value></data>
+  <data name="Results_ButtonSaveReviewDecision" xml:space="preserve"><value>Save Review Decision</value></data>
+  <data name="Results_ReviewReviewer" xml:space="preserve"><value>Reviewer</value></data>
+  <data name="Results_ReviewHumanReview" xml:space="preserve"><value>Human Review</value></data>
+  <data name="Results_ReviewComment" xml:space="preserve"><value>Comment</value></data>
+  <data name="Results_ColumnSeverity" xml:space="preserve"><value>Severity</value></data>
+  <data name="Results_ColumnRule" xml:space="preserve"><value>Rule</value></data>
+  <data name="Results_ColumnTagSubject" xml:space="preserve"><value>Tag / Subject</value></data>
+  <data name="Results_ColumnMessage" xml:space="preserve"><value>Message</value></data>
+  <data name="Results_ColumnChange" xml:space="preserve"><value>Change</value></data>
+  <data name="Results_ColumnEquipmentTag" xml:space="preserve"><value>Equipment Tag</value></data>
+  <data name="Results_ColumnDetails" xml:space="preserve"><value>Details</value></data>
+  <data name="Results_ColumnResult" xml:space="preserve"><value>Result</value></data>
+  <data name="Results_ColumnMetric" xml:space="preserve"><value>Metric</value></data>
+  <data name="Results_ColumnValue" xml:space="preserve"><value>Value</value></data>
+  <data name="Results_ColumnCheck" xml:space="preserve"><value>Check</value></data>
+  <data name="Results_ColumnMinimum" xml:space="preserve"><value>Minimum</value></data>
+  <data name="Results_ColumnObserved" xml:space="preserve"><value>Observed</value></data>
+  <data name="Results_ColumnStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="Results_ColumnInterpretation" xml:space="preserve"><value>Interpretation</value></data>
+  <data name="Results_ColumnDecision" xml:space="preserve"><value>Decision</value></data>
+  <data name="Results_ColumnEnforcement" xml:space="preserve"><value>Enforcement</value></data>
+  <data name="Results_ColumnAuthorityEvidence" xml:space="preserve"><value>Authority evidence</value></data>
+  <data name="Results_DistanceEquipmentRoad" xml:space="preserve"><value>Equipment → Road</value></data>
+  <data name="Results_DistanceEquipmentFence" xml:space="preserve"><value>Equipment → Plant / Security Fence</value></data>
+  <data name="Results_DistanceEquipmentUnitBoundary" xml:space="preserve"><value>Equipment → Unit Boundary</value></data>
+  <data name="Results_NotResolved" xml:space="preserve"><value>&lt;not resolved&gt;</value></data>
+  <data name="Results_ResolvedSuffix" xml:space="preserve"><value>resolved</value></data>
+  <data name="Results_DistanceNoEvidence" xml:space="preserve"><value>No resolved evidence is available for this check.</value></data>
+  <data name="Results_DistanceRequirementMet" xml:space="preserve"><value>Requirement met based on available evidence.</value></data>
+  <data name="Results_DistanceBelowMinimum" xml:space="preserve"><value>Observed evidence is below the configured project minimum.</value></data>
+  <data name="Results_DistanceProjectCriterionOnly" xml:space="preserve"><value>Project criterion only — no approved standards-governance basis is active.</value></data>
+  <data name="Results_DistanceEngineeringReviewRequired" xml:space="preserve"><value>Engineering review required.</value></data>
+  <data name="Results_DistanceSourceQuarantined" xml:space="preserve"><value>Source quarantined — not auto-enforced.</value></data>
+  <data name="Results_DistanceGovernanceStatePrefix" xml:space="preserve"><value>Governance state: </value></data>
+
+  <data name="Results_ExistingHumanReviewNone" xml:space="preserve"><value>Existing human review: &lt;none&gt;</value></data>
+  <data name="Results_EvidenceNone" xml:space="preserve"><value>Evidence: none</value></data>
+  <data name="Results_HistoryNone" xml:space="preserve"><value>History: none</value></data>
+  <data name="Results_ReviewerNone" xml:space="preserve"><value>Reviewer: &lt;none&gt;</value></data>
+  <data name="Results_ReviewerDecisionNone" xml:space="preserve"><value>Reviewer: &lt;none&gt; | Decision time: &lt;none&gt;</value></data>
+  <data name="Results_DecisionPersistenceUnavailable" xml:space="preserve"><value>Decision persistence unavailable: review package context is missing.</value></data>
+  <data name="Results_NoPriorHumanReview" xml:space="preserve"><value>No prior human review decision.</value></data>
+  <data name="Results_ExistingHumanReview" xml:space="preserve"><value>Existing human review: {0}</value></data>
+  <data name="Results_EvidenceState" xml:space="preserve"><value>Evidence: {0}</value></data>
+  <data name="Results_HistoryState" xml:space="preserve"><value>History: {0}</value></data>
+  <data name="Results_ReviewerDecisionTime" xml:space="preserve"><value>Reviewer: {0} | Decision time: {1}</value></data>
+  <data name="Results_DecisionCurrent" xml:space="preserve"><value>Existing decision is current.</value></data>
+  <data name="Results_DecisionStale" xml:space="preserve"><value>Existing decision is stale: {0}</value></data>
+  <data name="Results_DecisionHistoryUnavailable" xml:space="preserve"><value>Decision history unavailable: {0}</value></data>
+  <data name="Results_SelectReviewItem" xml:space="preserve"><value>Select an engineering review item with a valid active document.</value></data>
+  <data name="Results_ReviewPersistenceUnavailable" xml:space="preserve"><value>Review decision persistence is unavailable because the review package context is missing.</value></data>
+  <data name="Results_ActiveDrawingMismatch" xml:space="preserve"><value>The active AutoCAD document no longer matches the drawing reviewed by ES_PLOTQA. Reactivate that drawing or rerun ES_PLOTQA.</value></data>
+  <data name="Results_CapturedDrawingMismatch" xml:space="preserve"><value>The active document does not match the captured review package drawing.</value></data>
+  <data name="Results_ReviewPackageChanged" xml:space="preserve"><value>Review package changed since ES_PLOTQA; rerun ES_PLOTQA before recording a decision.</value></data>
+  <data name="Results_ReviewerStateRequired" xml:space="preserve"><value>Reviewer and a valid human review state are required.</value></data>
+  <data name="Results_ConfirmReviewBody" xml:space="preserve"><value>Rule: {0}&#xA;Human Review: {1}&#xA;Reviewer: {2}&#xA;&#xA;This records an immutable human review decision.&#xA;It does not approve or activate an engineering rule.</value></data>
+  <data name="Results_ConfirmReviewTitle" xml:space="preserve"><value>Confirm Review Decision</value></data>
+  <data name="Results_ReviewDbmodChanged" xml:space="preserve"><value>Review decision workflow changed DBMOD; no drawing save was performed.</value></data>
+  <data name="Results_ReviewDecisionSaved" xml:space="preserve"><value>Immutable human review decision saved: {0}</value></data>
+  <data name="Results_ReviewDecisionNotSaved" xml:space="preserve"><value>Review decision was not saved: {0}</value></data>
+  <data name="Results_OutputFolderUnavailable" xml:space="preserve"><value>Output folder is not available: {0}</value></data>
+  <data name="Results_OutputFolderOpenFailed" xml:space="preserve"><value>Could not open output folder: {0}</value></data>
+  <data name="Results_NoValidSourceHandle" xml:space="preserve"><value>No valid source handle is available for this finding.</value></data>
+  <data name="Results_InvalidSourceHandle" xml:space="preserve"><value>The finding source handle is invalid.</value></data>
+  <data name="Results_ZoomRequested" xml:space="preserve"><value>Zoom requested for evidence handle {0} using AutoCAD ZOOM Object.</value></data>
+  <data name="Results_EvidenceResolveFailed" xml:space="preserve"><value>Evidence could not be resolved: {0}</value></data>
+
+  <data name="Results_SeverityInfo" xml:space="preserve"><value>Info</value></data>
+  <data name="Results_SeverityWarning" xml:space="preserve"><value>Warning</value></data>
+  <data name="Results_SeverityError" xml:space="preserve"><value>Error</value></data>
+  <data name="Results_HumanReviewAccepted" xml:space="preserve"><value>REVIEW_ACCEPTED</value></data>
+  <data name="Results_HumanReviewRejected" xml:space="preserve"><value>REVIEW_REJECTED</value></data>
+  <data name="Results_HumanReviewNeedsClarification" xml:space="preserve"><value>NEEDS_CLARIFICATION</value></data>
+  <data name="Results_Finding_EQ001" xml:space="preserve"><value>Equipment identity has Equipment List evidence but no DrawingTag evidence.</value></data>
+  <data name="Results_Finding_EQ002" xml:space="preserve"><value>Equipment identity has DrawingTag evidence but no Equipment List evidence.</value></data>
+  <data name="Results_Finding_EQ003" xml:space="preserve"><value>Equipment identity has multiple DrawingTag evidence occurrences.</value></data>
+  <data name="Results_Finding_EQ004" xml:space="preserve"><value>Equipment identity is referenced by multiple distinct Equipment List source rows.</value></data>
+  <data name="Results_Finding_EQ005" xml:space="preserve"><value>Equipment identity has conflicting values across Equipment List source rows.</value></data>
+  <data name="Results_Finding_IDX001" xml:space="preserve"><value>Entity link could not be resolved deterministically.</value></data>
+  <data name="Results_Finding_IDX002" xml:space="preserve"><value>Entity link has multiple deterministic candidates.</value></data>
+  <data name="Results_Finding_STR001" xml:space="preserve"><value>Structure identity has multiple source evidence occurrences.</value></data>
+  <data name="Results_Finding_PPCOORD001" xml:space="preserve"><value>Equipment placement is incomplete because one or more coordinates could not be resolved.</value></data>
+  <data name="Results_Finding_PPCOORD002" xml:space="preserve"><value>Equipment placement has ambiguous coordinate evidence.</value></data>
+  <data name="Results_Finding_PPCOORD003" xml:space="preserve"><value>Equipment identity has conflicting complete plot-plan coordinate placements.</value></data>
+  <data name="Results_Finding_PPGEO001" xml:space="preserve"><value>Plot geometry label has no resolved supported geometry association under the M2.1 association rules.</value></data>
+  <data name="Results_Finding_PPGEO002" xml:space="preserve"><value>Plot geometry label has ambiguous supported geometry association evidence.</value></data>
+  <data name="Results_Finding_PPSPAT001" xml:space="preserve"><value>Explicit Plot Plan coordinate annotation has no resolved supported local geometry match.</value></data>
+  <data name="Results_Finding_PPSPAT002" xml:space="preserve"><value>Explicit Plot Plan coordinate annotation has multiple plausible supported geometry matches.</value></data>
+  <data name="Results_Finding_XDOC001" xml:space="preserve"><value>External Equipment Register identity has no matching DrawingTag evidence.</value></data>
+  <data name="Results_Finding_XDOC002" xml:space="preserve"><value>Drawing equipment identity has no matching External Equipment Register evidence.</value></data>
+  <data name="Results_Finding_XDOC003" xml:space="preserve"><value>External Equipment Register attributes do not match the drawing Equipment List evidence.</value></data>
+  <data name="Results_Finding_REF001" xml:space="preserve"><value>Drawing has {0} unresolved external reference(s); engineering compliance cannot be certified from host geometry alone.</value></data>
+  <data name="Results_Finding_DistanceRoad" xml:space="preserve"><value>Equipment placement is closer to Road geometry than the permitted minimum distance.</value></data>
+  <data name="Results_Finding_DistanceFence" xml:space="preserve"><value>Equipment placement is closer to Security Fence geometry than the permitted minimum distance.</value></data>
+  <data name="Results_Finding_DistanceUnitBoundary" xml:space="preserve"><value>Equipment placement is closer to Unit Boundary geometry than the permitted minimum distance.</value></data>
+  <data name="Results_Finding_DistanceBoundary" xml:space="preserve"><value>Equipment placement is closer to Boundary geometry than the permitted minimum distance.</value></data>
+
+  <data name="Results_Finding_EQ003_Detail" xml:space="preserve"><value>This equipment was identified {0} times in the drawing. Source handles: {1}</value></data>
+  <data name="Results_Finding_PlacementCoordinateDetail" xml:space="preserve"><value>Drawing occurrence handle: {0}; Easting: {1}; Northing: {2}</value></data>
+  <data name="Results_CoordMissing" xml:space="preserve"><value>unresolved</value></data>
+  <data name="Results_CoordResolved" xml:space="preserve"><value>resolved</value></data>
+  <data name="Results_CoordResolvedValue" xml:space="preserve"><value>resolved; value {0}; source handle {1}</value></data>
+  <data name="Results_CoordAmbiguous" xml:space="preserve"><value>ambiguous; {0} candidates</value></data>
 </root>

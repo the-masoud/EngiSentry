@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Linq;
 using EngiSentry.Contracts;
 
 namespace EngiSentry.Standards
@@ -23,14 +24,17 @@ namespace EngiSentry.Standards
         public static string ComputeResolutionId(EquipmentPlacementResolutionRecord record)
         {
             if (record == null) throw new ArgumentNullException(nameof(record));
-            return HexSha256(string.Join("\n", new[]
+            var parts = new[]
             {
                 record.DrawingSha256 ?? string.Empty,
                 record.EquipmentEntityId ?? string.Empty,
                 CanonicalDecimal(record.Easting),
                 CanonicalDecimal(record.Northing),
                 record.InsertionUnits ?? string.Empty
-            }));
+            }.ToList();
+            if (string.Equals(record.Source, EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint, StringComparison.Ordinal))
+                parts.Add(record.OccurrenceId ?? string.Empty);
+            return HexSha256(string.Join("\n", parts));
         }
 
         public static string ComputeRecordId(EquipmentPlacementResolutionRecord record)

@@ -28,8 +28,10 @@ namespace EngiSentry.Contracts
         public const string FreeSpace = "FREE_SPACE";
         /// <summary>The engineer explicitly approved the generated proposal's proposed point.</summary>
         public const string ProposalApproval = "PROPOSAL_APPROVAL";
+        /// <summary>An engineer-selected WCS point bound to one exact drawing occurrence.</summary>
+        public const string EngineerSelectedDwgPoint = "ENGINEER_SELECTED_DWG_POINT";
 
-        public static readonly IReadOnlyList<string> All = new[] { EntityPick, FreeSpace, ProposalApproval };
+        public static readonly IReadOnlyList<string> All = new[] { EntityPick, FreeSpace, ProposalApproval, EngineerSelectedDwgPoint };
     }
 
     public static class EquipmentPlacementResolutionStates
@@ -79,6 +81,10 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 27, EmitDefaultValue = false)] public string? ProposalFingerprint { get; set; }
         [DataMember(Order = 28, EmitDefaultValue = false)] public string? DispositionRecordId { get; set; }
         [DataMember(Order = 29, EmitDefaultValue = false)] public string? SelectedPlacementFingerprint { get; set; }
+        /// <summary>Exact placement occurrence bound by the manual point source.</summary>
+        [DataMember(Order = 30, EmitDefaultValue = false)] public string? OccurrenceId { get; set; }
+        /// <summary>Tag source handle captured with the exact occurrence binding.</summary>
+        [DataMember(Order = 31, EmitDefaultValue = false)] public string? OccurrenceSourceHandle { get; set; }
     }
 
     /// <summary>
@@ -105,6 +111,8 @@ namespace EngiSentry.Contracts
         public string? ProposalFingerprint { get; set; }
         public string? DispositionRecordId { get; set; }
         public string? SelectedPlacementFingerprint { get; set; }
+        public string? OccurrenceId { get; set; }
+        public string? OccurrenceSourceHandle { get; set; }
     }
 
     /// <summary>Provenance carried on a placement that was made Complete by an explicit engineer pick.</summary>
@@ -122,5 +130,7 @@ namespace EngiSentry.Contracts
         [DataMember(Order = 9, EmitDefaultValue = false)] public string? ProposalId { get; set; }
         [DataMember(Order = 10, EmitDefaultValue = false)] public string? ProposalFingerprint { get; set; }
         [DataMember(Order = 11, EmitDefaultValue = false)] public string? DispositionRecordId { get; set; }
+        [DataMember(Order = 12, EmitDefaultValue = false)] public string? OccurrenceId { get; set; }
+        [DataMember(Order = 13, EmitDefaultValue = false)] public string? OccurrenceSourceHandle { get; set; }
     }
 }

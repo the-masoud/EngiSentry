@@ -20,7 +20,7 @@ namespace EngiSentry.Standards
             ProjectEngineerReviewRequest request, ProjectEngineerReviewResponse response, DateTime recordedTimestampUtc)
             => Build(drawingName, drawingSha256, equipmentEntityId, normalizedTag, easting, northing, insertionUnits, source,
                 sourceHandle, sourceLayer, pickedPointX, pickedPointY, pickedPointZ, request, response, recordedTimestampUtc,
-                null, null, null, null);
+                null, null, null, null, null, null);
 
         public static EquipmentPlacementResolutionRecord Build(
             string drawingName,
@@ -42,7 +42,9 @@ namespace EngiSentry.Standards
             string? proposalId = null,
             string? proposalFingerprint = null,
             string? dispositionRecordId = null,
-            string? selectedPlacementFingerprint = null)
+            string? selectedPlacementFingerprint = null,
+            string? occurrenceId = null,
+            string? occurrenceSourceHandle = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (response == null) throw new ArgumentNullException(nameof(response));
@@ -85,7 +87,9 @@ namespace EngiSentry.Standards
                 ProposalId = proposalId,
                 ProposalFingerprint = proposalFingerprint,
                 DispositionRecordId = dispositionRecordId,
-                SelectedPlacementFingerprint = selectedPlacementFingerprint
+                SelectedPlacementFingerprint = selectedPlacementFingerprint,
+                OccurrenceId = string.IsNullOrWhiteSpace(occurrenceId) ? null : occurrenceId,
+                OccurrenceSourceHandle = string.IsNullOrWhiteSpace(occurrenceSourceHandle) ? null : occurrenceSourceHandle
             };
             record.ResolutionId = EquipmentPlacementResolutionIdentity.ComputeResolutionId(record);
             record.RecordId = EquipmentPlacementResolutionIdentity.ComputeRecordId(record);

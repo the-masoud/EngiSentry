@@ -134,12 +134,15 @@ namespace EngiSentry.Standards
         {
             if (string.IsNullOrWhiteSpace(drawingSha256) || !EquipmentPlacementResolutionValidator.IsSha256(drawingSha256)) return Array.Empty<EquipmentPlacementResolution>();
             if (string.IsNullOrWhiteSpace(insertionUnits)) return Array.Empty<EquipmentPlacementResolution>();
-            return LoadAll()
+            var records = LoadAll()
                 .Where(x => string.Equals(x.State, EquipmentPlacementResolutionStates.Active, StringComparison.Ordinal)
                     && string.Equals(x.DrawingSha256, drawingSha256, StringComparison.Ordinal)
                     && string.Equals(x.InsertionUnits, insertionUnits, StringComparison.Ordinal))
                 .Where(IsReviewBindingValid)
-                .GroupBy(x => x.EquipmentEntityId, StringComparer.Ordinal)
+                .ToList();
+            return records
+                .GroupBy(x => string.Equals(x.Source, EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint, StringComparison.Ordinal)
+                    ? "OCC:" + (x.OccurrenceId ?? string.Empty) : "ENTITY:" + x.EquipmentEntityId, StringComparer.Ordinal)
                 .Select(g => g.OrderByDescending(x => x.ResponseTimestampUtc).ThenByDescending(x => x.RecordId, StringComparer.Ordinal).First())
                 .OrderBy(x => x.EquipmentEntityId, StringComparer.Ordinal)
                 .Select(Project)
@@ -165,6 +168,8 @@ namespace EngiSentry.Standards
             ProposalFingerprint = record.ProposalFingerprint,
             DispositionRecordId = record.DispositionRecordId,
             SelectedPlacementFingerprint = record.SelectedPlacementFingerprint
+            ,OccurrenceId = record.OccurrenceId
+            ,OccurrenceSourceHandle = record.OccurrenceSourceHandle
         };
     }
 }

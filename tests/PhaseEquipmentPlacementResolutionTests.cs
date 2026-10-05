@@ -47,6 +47,7 @@ namespace EngiSentry.Tests
                 AppendOnlyTests(reviewService, resolutionService);
                 TrustGatingTests(reviewService, resolutionService);
                 PlotPlanGatingTests(reviewService, resolutionService);
+                ManualOccurrenceBindingTests(reviewService, resolutionService);
                 ControlTests(reviewService, resolutionService, reviewRoot);
                 AuthoritySeparationTests();
 
@@ -64,6 +65,51 @@ namespace EngiSentry.Tests
         }
 
         // ---- identity -------------------------------------------------------------------------
+
+        private static void ManualOccurrenceBindingTests(ProjectEngineerReviewService reviewService, EquipmentPlacementResolutionService resolutionService)
+        {
+            const string entityId = "equipment:MANUAL-01";
+            const string tag = "MANUAL-01";
+            const string firstHandle = "MANUAL-TAG-A";
+            const string secondHandle = "MANUAL-TAG-B";
+            EquipmentPlacementResolutionRecord record = PersistConfirmation(reviewService, "MANUAL-OCCURRENCE-CASE", entityId, tag,
+                4321m, 8765m, Units, EquipmentPlacementResolutionSources.FreeSpace, null, null,
+                "TEST-ONLY Manual Reviewer", Utc(2026, 9, 25, 17, 0, 0), DrawingSha);
+            record.Source = EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint;
+            record.SourceHandle = firstHandle;
+            record.SourceLayer = "EQ-TAG";
+            record.OccurrenceId = "placement:" + entityId + ":" + firstHandle;
+            record.OccurrenceSourceHandle = firstHandle;
+            record.ResolutionId = EquipmentPlacementResolutionIdentity.ComputeResolutionId(record);
+            record.RecordId = EquipmentPlacementResolutionIdentity.ComputeRecordId(record);
+            resolutionService.Save(record);
+            IReadOnlyList<EquipmentPlacementResolution> trusted = resolutionService.ResolveTrustedForDrawing(DrawingSha, Units);
+            EquipmentPlacementResolution manual = trusted.Single(x => x.Source == EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint);
+            Assert(manual.OccurrenceId == record.OccurrenceId && manual.OccurrenceSourceHandle == firstHandle, "Manual persistence must retain the exact occurrence binding.");
+
+            var model = new EngineeringDrawingModel { Drawing = new SemanticDrawing { InsertionUnits = Units } };
+            model.EquipmentTags.Add(new EquipmentTag { NormalizedTag = tag, SourceHandle = firstHandle, SourceLayer = "EQ-TAG" });
+            model.EquipmentTags.Add(new EquipmentTag { NormalizedTag = tag, SourceHandle = secondHandle, SourceLayer = "EQ-TAG" });
+            var snapshot = new DrawingSnapshot();
+            snapshot.TextEntities.Add(new TextSnapshot { Text = tag, Handle = firstHandle, Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 10, PositionY = 10 });
+            snapshot.TextEntities.Add(new TextSnapshot { Text = tag, Handle = secondHandle, Layer = "EQ-TAG", SpaceKind = "Model", Height = 1, PositionX = 20, PositionY = 20 });
+            PlotPlanModel plan = PlotPlanBuilder.Build(EntityIndexer.Build(model), model, snapshot, null, trusted);
+            EquipmentPlacement first = plan.EquipmentPlacements.Single(x => x.TagSourceHandle == firstHandle);
+            EquipmentPlacement second = plan.EquipmentPlacements.Single(x => x.TagSourceHandle == secondHandle);
+            Assert(first.PlacementStatus == "Complete" && first.EngineerResolution?.Source == EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint, "The exact manual occurrence must become governed Complete.");
+            Assert(second.PlacementStatus != "Complete", "A duplicate occurrence must not inherit another occurrence's manual point.");
+
+            var manualProvider = new ManualStubPickProvider(new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.FreeSpace, PointX = 7777, PointY = 8888, PointZ = 0 });
+            PlotPlanModel manualPlan = PlotPlanBuilder.Build(EntityIndexer.Build(model), model, snapshot);
+            var manualControl = new EquipmentPlacementResolutionControl(manualPlan, DrawingName, DrawingSha, Units, reviewService, resolutionService, manualProvider);
+            Assert(manualControl.UnresolvedCount == 2, "The manual surface must expose both unresolved occurrences independently.");
+            Button(manualControl, "Select Manual Point").PerformClick();
+            Assert(manualControl.CurrentPick != null && manualControl.CurrentPick.PointX == 7777, "Manual point selection must capture a preview point.");
+            Button(manualControl, "Clear Selection").PerformClick();
+            Assert(manualControl.CurrentPick == null, "Manual cancel must clear the preview without persistence.");
+            manualControl.Dispose();
+
+        }
 
         private static void IdentityTests()
         {
@@ -426,15 +472,14 @@ namespace EngiSentry.Tests
             Assert(freeControl.CurrentPick != null && freeControl.CurrentPick.Handle == null, "A free-space pick must carry no source handle.");
             freeControl.Dispose();
 
-            // Two unresolved occurrences of one equipment identity present as a single case, and a
-            // saved resolution clears the whole identity from the queue.
+            // Each unresolved occurrence is an independently reviewable case.
             var duplicatePlan = new PlotPlanModel();
             duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97B", "P-97B", "placement:equipment:P-97B:A"));
             duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97B", "P-97B", "placement:equipment:P-97B:B"));
             duplicatePlan.EquipmentPlacements.Add(QueuePlacement("equipment:P-97C", "P-97C", "placement:equipment:P-97C:A"));
             var duplicatePick = new EquipmentPlacementPick { Source = EquipmentPlacementResolutionSources.EntityPick, PointX = 5000, PointY = 6000, PointZ = 0, Handle = "H97B", Layer = "EQ-TAG" };
             var duplicateControl = new EquipmentPlacementResolutionControl(duplicatePlan, DrawingName, DrawingSha, Units, reviewService, resolutionService, new StubPickProvider(duplicatePick));
-            Assert(duplicateControl.UnresolvedCount == 2, "Two identities (one carrying two occurrences) must present as two cases. Actual: " + duplicateControl.UnresolvedCount);
+            Assert(duplicateControl.UnresolvedCount == 3, "Each unresolved occurrence must present as its own case. Actual: " + duplicateControl.UnresolvedCount);
             Button(duplicateControl, "Pick Equipment").PerformClick();
             Box(duplicateControl, "ReviewerDisplayName").Text = "TEST-ONLY Reviewer";
             Box(duplicateControl, "ReviewerRole").Text = "TEST-ONLY";
@@ -445,7 +490,7 @@ namespace EngiSentry.Tests
             }
             Combo(duplicateControl, "Classification").SelectedIndex = 1;
             Button(duplicateControl, "Record Decision").PerformClick();
-            Assert(duplicateControl.UnresolvedCount == 1, "Saving a resolution must remove the whole equipment identity from the queue. Actual: " + duplicateControl.UnresolvedCount);
+            Assert(duplicateControl.UnresolvedCount == 1, "The legacy identity pick must remove the whole equipment identity from the queue. Actual: " + duplicateControl.UnresolvedCount);
             duplicateControl.Dispose();
         }
 
@@ -661,6 +706,15 @@ namespace EngiSentry.Tests
             internal StubPickProvider(EquipmentPlacementPick pick) { this.pick = pick; }
             public EquipmentPlacementPick PickEntity() => pick;
             public EquipmentPlacementPick PickFreeSpace() => pick;
+        }
+
+        private sealed class ManualStubPickProvider : IEquipmentPlacementPickProvider, IEngineerManualPointPickProvider
+        {
+            private readonly EquipmentPlacementPick pick;
+            internal ManualStubPickProvider(EquipmentPlacementPick pick) { this.pick = pick; }
+            public EquipmentPlacementPick PickEntity() => pick;
+            public EquipmentPlacementPick PickFreeSpace() => pick;
+            public EquipmentPlacementPick PickManualPoint() => pick;
         }
     }
 }

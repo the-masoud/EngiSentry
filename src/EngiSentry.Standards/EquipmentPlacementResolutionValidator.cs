@@ -41,6 +41,12 @@ namespace EngiSentry.Standards
                 if (!string.IsNullOrWhiteSpace(record.SourceHandle)) throw new EquipmentPlacementResolutionValidationException("a free-space pick must not carry a source handle");
                 if (!string.IsNullOrWhiteSpace(record.SourceLayer)) throw new EquipmentPlacementResolutionValidationException("a free-space pick must not carry a source layer");
             }
+            else if (string.Equals(record.Source, EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint, StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(record.OccurrenceId)) throw new EquipmentPlacementResolutionValidationException("a manual DWG point requires an exact occurrence id");
+                if (string.IsNullOrWhiteSpace(record.OccurrenceSourceHandle)) throw new EquipmentPlacementResolutionValidationException("a manual DWG point requires the occurrence source handle");
+                if (!string.Equals(record.SourceHandle, record.OccurrenceSourceHandle, StringComparison.Ordinal)) throw new EquipmentPlacementResolutionValidationException("a manual DWG point source handle must bind to the occurrence tag handle");
+            }
             else if (!string.IsNullOrWhiteSpace(record.SourceHandle) || !string.IsNullOrWhiteSpace(record.SourceLayer))
                 throw new EquipmentPlacementResolutionValidationException("an approved proposal must not claim a direct entity pick");
             if (string.IsNullOrWhiteSpace(record.ReviewedCaseId)) throw new EquipmentPlacementResolutionValidationException("ReviewedCaseId is required");

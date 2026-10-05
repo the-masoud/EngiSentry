@@ -74,6 +74,7 @@ namespace EngiSentry.AutoCAD2021
         private Button pickEntity;
         private Button pickFreeSpace;
         private Button clearPick;
+        private Button manualPoint;
         private TextBox reviewerName;
         private TextBox reviewerRole;
         private ComboBox classification;
@@ -109,6 +110,7 @@ namespace EngiSentry.AutoCAD2021
         private EquipmentPlacementPick pick;
         private bool loading;
         private bool technicalExpanded;
+        private bool manualPointCaptured;
         private string lastResolutionId;
         private string lastDispositionId;
 
@@ -146,13 +148,18 @@ namespace EngiSentry.AutoCAD2021
                 && string.Equals(x.SourceDrawingSha256, drawingSha256, StringComparison.Ordinal)
                 && string.Equals(x.ProposalFingerprint, PlacementProposalFingerprint.Compute(x), StringComparison.Ordinal))
                 .OrderBy(x => x.ProposalId, StringComparer.Ordinal).ToList();
-            // Candidate cases keep exact occurrence identity; legacy pick cases keep their
-            // established one-representative-per-equipment queue semantics.
-            var candidateItems = plotPlan.EquipmentPlacements.Where(x => x.DrawingCandidate != null || x.CandidateDecision != null)
+            // Every unresolved occurrence is presented independently. Candidate review remains
+            // occurrence keyed, and a rejected candidate may proceed through the manual point
+            // path without collapsing a duplicate tag occurrence.
+            var candidateItems = plotPlan.EquipmentPlacements.Where(x => x.DrawingCandidate != null
+                    && x.ResolutionState == PlacementResolutionState.ReviewRequired)
                 .OrderBy(x => x.NormalizedTag, StringComparer.Ordinal).ThenBy(x => x.PlacementId, StringComparer.Ordinal).ToList();
-            var candidateEntities = new HashSet<string>(candidateItems.Select(x => x.EquipmentEntityId), StringComparer.Ordinal);
-            unresolved = candidateItems.Concat(EquipmentPlacementResolutionQueue.Build(plotPlan.EquipmentPlacements
-                .Where(x => !candidateEntities.Contains(x.EquipmentEntityId)))).ToList();
+            var candidateIds = new HashSet<string>(candidateItems.Select(x => x.PlacementId), StringComparer.Ordinal);
+            unresolved = candidateItems.Concat(plotPlan.EquipmentPlacements
+                .Where(x => x.ResolutionState == PlacementResolutionState.Unresolved
+                    && !string.Equals(x.PlacementStatus, "Complete", StringComparison.Ordinal)
+                    && !candidateIds.Contains(x.PlacementId))
+                .OrderBy(x => x.NormalizedTag, StringComparer.Ordinal).ThenBy(x => x.PlacementId, StringComparer.Ordinal)).ToList();
             Dock = DockStyle.Fill;
             CreateControls();
             BuildLayout();
@@ -176,6 +183,7 @@ namespace EngiSentry.AutoCAD2021
             pickEntity = new Button();
             pickFreeSpace = new Button();
             clearPick = new Button();
+            manualPoint = new Button();
             reviewerName = new TextBox();
             reviewerRole = new TextBox();
             classification = new ComboBox();
@@ -491,8 +499,18 @@ namespace EngiSentry.AutoCAD2021
             ReviewStyle.StyleButton(clearPick, false);
             pickEntity.Click += (s, e) => DoPick(true);
             pickFreeSpace.Click += (s, e) => DoPick(false);
-            clearPick.Click += (s, e) => { pick = null; UpdatePickInfo(); UpdateSummary(); UpdateTechnicalDetails(); UpdateSaveState(); ShowMessage(ReviewStrings.Get("Placement_StatusPickCleared"), false); };
+            clearPick.Click += (s, e) => { pick = null; manualPointCaptured = false; UpdatePickInfo(); UpdateSummary(); UpdateTechnicalDetails(); UpdateSaveState(); ShowMessage(ReviewStrings.Get("Placement_StatusPickCleared"), false); };
             pickButtons.Controls.Add(pickEntity); pickButtons.Controls.Add(pickFreeSpace); pickButtons.Controls.Add(clearPick);
+            if (pickProvider is IEngineerManualPointPickProvider)
+            {
+                manualPoint.Text = "Select Manual Point";
+                manualPoint.AccessibleName = "ManualPoint";
+                manualPoint.Width = Scale(180); manualPoint.Height = Scale(ButtonHeightBase);
+                manualPoint.Margin = new Padding(8, 0, 0, 0);
+                manualPoint.Click += (s, e) => DoManualPointPick();
+                ReviewStyle.StyleButton(manualPoint, false);
+                pickButtons.Controls.Add(manualPoint);
+            }
             grid.Controls.Add(pickButtons, 0, 1);
 
             card.Body.Controls.Add(grid);
@@ -915,6 +933,7 @@ namespace EngiSentry.AutoCAD2021
             acceptCandidate.Visible = candidate;
             rejectCandidate.Visible = candidate;
             pick = null;
+            manualPointCaptured = false;
             proposalDisposition.SelectedIndex = 0;
             proposalDisposition.Visible = currentProposal != null;
             if (dispositionField != null) dispositionField.Visible = currentProposal != null;
@@ -1075,11 +1094,28 @@ namespace EngiSentry.AutoCAD2021
                 return;
             }
             pick = result;
+            manualPointCaptured = false;
             UpdatePickInfo();
             UpdateSummary();
             UpdateTechnicalDetails();
             UpdateSaveState();
             ShowMessage(ReviewStrings.Get("Placement_StatusPickCaptured"), false);
+        }
+
+        private void DoManualPointPick()
+        {
+            if (current == null || current.ResolutionState != PlacementResolutionState.Unresolved)
+            { ShowMessage("Select one exact UNRESOLVED occurrence first.", true); return; }
+            EquipmentPlacementPick result;
+            try { result = ((IEngineerManualPointPickProvider)pickProvider).PickManualPoint(); }
+            catch (Exception exception) { ShowMessage(ReviewStrings.Format("Placement_ErrorPickFailed", exception.Message), true); return; }
+            if (result == null) { ShowMessage(ReviewStrings.Get("Placement_ErrorPickCancelled"), true); return; }
+            if (EquipmentPlacementPickFormatting.ToStoredDecimal(result.PointX) == null || EquipmentPlacementPickFormatting.ToStoredDecimal(result.PointY) == null)
+            { ShowMessage(ReviewStrings.Get("Placement_ErrorPickRange"), true); return; }
+            pick = result;
+            manualPointCaptured = true;
+            UpdatePickInfo(); UpdateSummary(); UpdateTechnicalDetails(); UpdateSaveState();
+            ShowMessage("Manual point preview captured. Confirm with Record Decision or cancel with Clear Selection.", false);
         }
 
         private void UpdateSaveState()
@@ -1194,11 +1230,19 @@ namespace EngiSentry.AutoCAD2021
             try
             {
                 reviewService.SaveResponse(request, response);
+                bool manualOccurrence = manualPointCaptured
+                    && current.ResolutionState == PlacementResolutionState.Unresolved
+                    && !string.IsNullOrWhiteSpace(target.PlacementId)
+                    && !string.IsNullOrWhiteSpace(target.TagSourceHandle);
+                string source = manualOccurrence ? EquipmentPlacementResolutionSources.EngineerSelectedDwgPoint : pick.Source;
+                string? sourceHandle = manualOccurrence ? target.TagSourceHandle : pick.Handle;
+                string? sourceLayer = manualOccurrence ? target.TagSourceLayer : pick.Layer;
                 EquipmentPlacementResolutionRecord record = EquipmentPlacementResolutionBuilder.Build(
                     drawingName, drawingSha256, target.EquipmentEntityId, target.NormalizedTag,
                     easting.Value, northing.Value, insertionUnits,
-                    pick.Source, pick.Handle, pick.Layer, pick.PointX, pick.PointY, pick.PointZ,
-                    request, response, DateTime.UtcNow);
+                    source, sourceHandle, sourceLayer, pick.PointX, pick.PointY, pick.PointZ,
+                    request, response, DateTime.UtcNow, null, null, null, null,
+                    manualOccurrence ? target.PlacementId : null, manualOccurrence ? target.TagSourceHandle : null);
                 resolutionService.Save(record);
                 lastResolutionId = record.ResolutionId;
             }
@@ -1208,9 +1252,12 @@ namespace EngiSentry.AutoCAD2021
                 return;
             }
 
-            // A saved resolution resolves the whole equipment identity, so every queue entry for
-            // that identity leaves the queue — not just the one that was displayed.
-            EquipmentPlacementResolutionQueue.RemoveForEntity(unresolved, target.EquipmentEntityId);
+            // Legacy identity picks retain their established queue behavior. The manual point path
+            // removes only the exact occurrence that was displayed.
+            if (manualPointCaptured)
+                unresolved.Remove(target);
+            else
+                EquipmentPlacementResolutionQueue.RemoveForEntity(unresolved, target.EquipmentEntityId);
             RefreshPlacements();
             UpdateTechnicalDetails();
             ShowMessage(ReviewStrings.Format("Placement_StatusResolutionSaved", target.NormalizedTag), false);
@@ -1368,6 +1415,8 @@ namespace EngiSentry.AutoCAD2021
                 new ProjectEngineerReviewEvidenceReference { Kind = "ConfirmationTimestamp", Label = "Confirmation timestamp (UTC)", Value = responseTimestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) },
                 new ProjectEngineerReviewEvidenceReference { Kind = "EquipmentEntityId", Label = "Equipment identity", Value = target.EquipmentEntityId },
                 new ProjectEngineerReviewEvidenceReference { Kind = "EquipmentTag", Label = "Equipment tag", Value = target.NormalizedTag },
+                new ProjectEngineerReviewEvidenceReference { Kind = "OccurrenceId", Label = "Exact drawing occurrence", Value = target.PlacementId },
+                new ProjectEngineerReviewEvidenceReference { Kind = "OccurrenceSourceHandle", Label = "Tag source handle", Value = target.TagSourceHandle },
                 new ProjectEngineerReviewEvidenceReference { Kind = "PickSource", Label = "Pick source", Value = captured.Source },
                 new ProjectEngineerReviewEvidenceReference { Kind = "PickedPoint", Label = "Picked WCS point", Value = EquipmentPlacementPickFormatting.Format(captured.PointX) + ", " + EquipmentPlacementPickFormatting.Format(captured.PointY) + ", " + EquipmentPlacementPickFormatting.Format(captured.PointZ) },
                 new ProjectEngineerReviewEvidenceReference { Kind = "Easting", Label = "Stored easting", Value = EquipmentPlacementResolutionIdentity.CanonicalDecimal(easting) },
@@ -1381,7 +1430,7 @@ namespace EngiSentry.AutoCAD2021
                 ProjectEngineerReviewService.WorkflowSourceEquipmentPlacement,
                 drawingName,
                 drawingSha256,
-                "EQUIP-" + target.EquipmentEntityId,
+                "EQUIP-OCCURRENCE-" + target.PlacementId,
                 "Engineer-assisted placement resolution for " + target.NormalizedTag + " (" + target.EquipmentEntityId + ").",
                 evidence,
                 "UNRESOLVED_EQUIPMENT_PLACEMENT",

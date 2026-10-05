@@ -32,6 +32,12 @@ namespace EngiSentry.AutoCAD2021
         EquipmentPlacementPick? PickFreeSpace();
     }
 
+    /// <summary>Optional explicit point path for one exact unresolved drawing occurrence.</summary>
+    internal interface IEngineerManualPointPickProvider
+    {
+        EquipmentPlacementPick? PickManualPoint();
+    }
+
     /// <summary>
     /// AutoCAD editor-backed pick provider. Cancelled, invalid, or out-of-scope picks return null so
     /// the caller writes nothing. Only read-only editor prompts are issued; the drawing database is
@@ -43,7 +49,7 @@ namespace EngiSentry.AutoCAD2021
     /// - a pick is accepted only from the true Model tab, so paper space and model space reached
     ///   through a layout viewport are rejected before anything is stored.
     /// </summary>
-    internal sealed class EditorEquipmentPlacementPickProvider : IEquipmentPlacementPickProvider
+    internal sealed class EditorEquipmentPlacementPickProvider : IEquipmentPlacementPickProvider, IEngineerManualPointPickProvider
     {
         private readonly Document document;
 
@@ -81,11 +87,13 @@ namespace EngiSentry.AutoCAD2021
             if (!IsTrueModelTab()) return null;
             EquipmentPlacementUcsTransform? ucsToWcs = TryGetUcsToWcs();
             if (ucsToWcs == null) return null;
-            PromptPointOptions options = new PromptPointOptions("\nPick the equipment free-space location (press Esc to cancel): ") { AllowNone = false };
+            PromptPointOptions options = new PromptPointOptions("\nPick equipment reference point: ") { AllowNone = false };
             PromptPointResult result = document.Editor.GetPoint(options);
             if (result.Status != PromptStatus.OK) return null;
             return EquipmentPlacementPickRules.CreateFreeSpacePick(FromPoint3d(result.Value), ucsToWcs, true);
         }
+
+        public EquipmentPlacementPick? PickManualPoint() => PickFreeSpace();
 
         /// <summary>
         /// True only on the true Model tab. A layout (paper space) and model space reached through a
